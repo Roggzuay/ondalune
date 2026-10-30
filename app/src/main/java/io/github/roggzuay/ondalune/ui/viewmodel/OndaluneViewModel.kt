@@ -76,6 +76,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.pow
@@ -825,6 +826,24 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         audioEngine.onTrackEnded = {
             handleTrackFinished()
         }
+        // Gapless and crossfade: the engine lines up whatever plays next and moves on by itself.
+        audioEngine.nextTrackProvider = { upcomingTrack(extendQueue = true)?.let { it to activeServer() } }
+        audioEngine.onTrackAdvanced = { track ->
+            startPlayback(track, startEngine = false)
+            extendQueueWithSuggestionsIfEnding()
+        }
+        viewModelScope.launch {
+            combine(_playbackQueue, _currentTrack, _repeatOneEnabled, _sleepTimerState) { _, _, _, _ ->
+                upcomingTrack(extendQueue = false)?.id
+            }.distinctUntilChanged().collect { audioEngine.expectNextTrack(it) }
+        }
+        viewModelScope.launch {
+            _customizationSettings.collect { s ->
+                audioEngine.crossfadeMs = s.crossfadeSeconds * 1000
+                audioEngine.gaplessEnabled = s.gaplessPlayback
+                audioEngine.replayGainMode = s.replayGainMode
+            }
+        }
         OndaluneMediaBridge.onCommand = { action ->
             viewModelScope.launch {
                 when (action) {
@@ -1189,6 +1208,95 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun setShowServerOnboarding(show: Boolean) {
         _showServerOnboarding.value = show
+    }
+
+    /** The first library sync, shown on the onboarding screen until it reaches 100%. */
+    data class OnboardingSync(val found: Int, val total: Int?, val phase: Phase, val error: String? = null) {
+        enum class Phase { CONNECTING, SYNCING, DONE, FAILED }
+
+        /** 0..1, or null while the size of the library is unknown. */
+        val fraction: Float?
+            get() = when {
+                phase == Phase.DONE -> 1f
+                total == null || total <= 0 -> null
+                else -> (found.toFloat() / total).coerceIn(0f, 0.99f)
+            }
+    }
+
+    private val _onboardingSync = MutableStateFlow<OnboardingSync?>(null)
+    val onboardingSync: StateFlow<OnboardingSync?> = _onboardingSync.asStateFlow()
+
+    /**
+     * Connects the first server and keeps onboarding open while the library syncs, counting songs
+     * up toward the server's library size; at 100% onboarding closes into Home. A failed
+     * connection returns to the form with the reason.
+     */
+    fun connectServerDuringOnboarding(
+        name: String,
+        baseUrl: String,
+        username: String,
+        passwordOrToken: String,
+        useTokenAuth: Boolean
+    ) {
+        if (_onboardingSync.value?.phase == OnboardingSync.Phase.CONNECTING ||
+            _onboardingSync.value?.phase == OnboardingSync.Phase.SYNCING
+        ) return
+        viewModelScope.launch {
+            _onboardingSync.value = OnboardingSync(0, null, OnboardingSync.Phase.CONNECTING)
+            _isSyncing.value = true
+            val current = activeServer()
+            val config = SubsonicServerConfig(
+                name = name.trim().ifBlank { "OpenSubsonic Server" },
+                baseUrl = baseUrl.trim(),
+                username = username.trim(),
+                passwordOrToken = passwordOrToken,
+                useTokenAuth = useTokenAuth,
+                transcodeFormat = current.transcodeFormat,
+                maxBitRate = current.maxBitRate,
+                isDemoServer = false,
+                isActive = true
+            )
+            OndaluneMediaBridge.clearRemoteArtworkCache()
+            val total = async { repository.client.fetchLibrarySongCount(config) }
+            // Pages arrive in bursts; count up toward each new total smoothly.
+            val found = java.util.concurrent.atomic.AtomicInteger(0)
+            var shown = 0
+            val counter = launch {
+                while (true) {
+                    val target = found.get()
+                    if (shown < target) shown += ((target - shown + 7) / 8).coerceAtLeast(1)
+                    if (target > 0) {
+                        _onboardingSync.value = OnboardingSync(shown, total.takeIf { it.isCompleted }?.getCompleted(), OnboardingSync.Phase.SYNCING)
+                    }
+                    delay(32L)
+                }
+            }
+            val (saved, diag) = repository.saveAndActivateServer(config) { n -> found.set(n) }
+            _activeServerId.value = saved.id
+            _pingDiagnostic.value = diag
+            if (!diag.success) {
+                counter.cancel()
+                total.cancel()
+                _isSyncing.value = false
+                _onboardingSync.value = OnboardingSync(0, null, OnboardingSync.Phase.FAILED, diag.statusMessage)
+                return@launch
+            }
+            val synced = tracks.value.count { it.serverId == saved.id }.coerceAtLeast(found.get())
+            found.set(synced)
+            withTimeoutOrNull(1500L) { while (shown < synced) delay(32L) }
+            counter.cancel()
+            markFullSync(saved)
+            refreshHomeShelves(saved)
+            _isSyncing.value = false
+            _onboardingSync.value = OnboardingSync(synced, synced, OnboardingSync.Phase.DONE)
+            delay(900L) // let 100% land before zooming in
+            completeServerOnboarding()
+            _statusBanner.value = "Synced $synced songs from ${saved.name}"
+        }
+    }
+
+    fun dismissOnboardingSyncError() {
+        if (_onboardingSync.value?.phase == OnboardingSync.Phase.FAILED) _onboardingSync.value = null
     }
 
     fun completeServerOnboarding() {
@@ -2037,11 +2145,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         extendQueueWithSuggestionsIfEnding()
     }
 
-    private fun startPlayback(track: SubsonicTrack) {
+    /** Makes [track] current; [startEngine] false when the engine already moved on to it by itself. */
+    private fun startPlayback(track: SubsonicTrack, startEngine: Boolean = true) {
         _currentTrack.value = track
         prefs.edit().putString("last_played_track_id", track.id).apply()
         val server = activeServer()
-        audioEngine.playTrack(track, server, _equalizerPreset.value)
+        if (startEngine) audioEngine.playTrack(track, server, _equalizerPreset.value)
         loadLyricsForTrack(track)
         if (_customizationSettings.value.autoScrobble) {
             viewModelScope.launch {
@@ -2219,6 +2328,24 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .distinctBy { it.first.albumId to it.first.title }
             .take(count)
             .map { it.first }
+    }
+
+    /**
+     * The song that plays after the current one, using the same rules as [handleTrackFinished]:
+     * null when the sleep timer stops at the end of this song, the same song on repeat-one,
+     * otherwise the next in the queue (wrapping round). [extendQueue] first adds suggestions when
+     * the queue is about to run out, as skipping would.
+     */
+    private fun upcomingTrack(extendQueue: Boolean): SubsonicTrack? {
+        val current = _currentTrack.value ?: return null
+        val sleep = _sleepTimerState.value
+        if (sleep.isActive && (sleep.stopAtEndOfCurrentTrack || sleep.waitingForTrackEnd)) return null
+        if (_repeatOneEnabled.value) return current
+        if (extendQueue) extendQueueWithSuggestionsIfEnding()
+        val queue = _playbackQueue.value.ifEmpty { tracks.value }
+        if (queue.isEmpty()) return null
+        val idx = queue.indexOfFirst { it.id == current.id }
+        return queue.getOrNull(idx + 1) ?: queue.first()
     }
 
     private fun handleTrackFinished() {

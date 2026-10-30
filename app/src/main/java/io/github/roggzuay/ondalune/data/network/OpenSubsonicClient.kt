@@ -458,8 +458,23 @@ class OpenSubsonicClient {
             paletteSeedHex = palette.first,
             accentHex = palette.second,
             playCount = s.optInt("playCount", 0),
-            userRating = s.optInt("userRating", if (s.has("starred")) 5 else 4)
+            userRating = s.optInt("userRating", if (s.has("starred")) 5 else 4),
+            rgTrackGain = s.optJSONObject("replayGain").optFloatOrNull("trackGain"),
+            rgAlbumGain = s.optJSONObject("replayGain").optFloatOrNull("albumGain"),
+            rgTrackPeak = s.optJSONObject("replayGain").optFloatOrNull("trackPeak"),
+            rgAlbumPeak = s.optJSONObject("replayGain").optFloatOrNull("albumPeak")
         )
+    }
+
+    private fun JSONObject?.optFloatOrNull(key: String): Float? =
+        this?.takeIf { it.has(key) }?.optDouble(key)?.takeIf { !it.isNaN() }?.toFloat()
+
+    /** Songs in the server's library (`getScanStatus` count), or null if the server doesn't say. */
+    suspend fun fetchLibrarySongCount(server: SubsonicServerConfig): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            getResponse(server, "getScanStatus", emptyMap())?.optJSONObject("scanStatus")
+                ?.optInt("count", 0)?.takeIf { it > 0 }
+        }.getOrNull()
     }
 
     /** GET [endpoint] and return its `subsonic-response`, or null on HTTP/API failure. */

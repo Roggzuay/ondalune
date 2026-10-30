@@ -51,6 +51,11 @@ damping. Five-band EQ presets sit alongside it.
 <img src="docs/screenshots/reverb.png" width="220" alt="Live studio reverb controls" />
 </p>
 
+### 🔁 Seamless transitions
+- **Gapless playback**: the next song is decoded ahead of time and starts on the very next sample, so live albums and DJ mixes flow without a click or a pause.
+- **Crossfade** (up to 12 s): songs blend with an equal-power fade. Tracks that follow each other on the same album stay gapless instead.
+- **ReplayGain**: track or album levelling from your files' ReplayGain tags. It never boosts a song into clipping, and it applies before the crossfade, so fades stay even.
+
 ### 🌙 Your Mix
 Home opens on **Your Mix**: a big, playful hero where covers from your own library float in
 morphing shapes. Tap play and the shapes shatter, the button swells to fill the screen, and you

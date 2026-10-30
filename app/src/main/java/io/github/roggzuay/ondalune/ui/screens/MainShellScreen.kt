@@ -39,6 +39,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -219,6 +220,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isUserServerOpen by viewModel.isUserServerSheetOpen.collectAsStateWithLifecycle()
     val isAppIconSettingsOpen by viewModel.isAppIconSettingsOpen.collectAsStateWithLifecycle()
     val showServerOnboarding by viewModel.showServerOnboarding.collectAsStateWithLifecycle()
+    val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
+    val homeZoom by animateFloatAsState(
+        targetValue = if (showServerOnboarding) 0.9f else 1f,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "onboardingHomeZoom"
+    )
     val isCutoutSyncActive by viewModel.isCutoutSyncActive.collectAsStateWithLifecycle()
 
     val nowPlayingTab by viewModel.nowPlayingTab.collectAsStateWithLifecycle()
@@ -408,6 +415,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 val isExpandedScreen = maxWidth >= 640.dp
 
                 Scaffold(
+                    modifier = Modifier.graphicsLayer { scaleX = homeZoom; scaleY = homeZoom },
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     containerColor = MaterialTheme.colorScheme.background,
                     topBar = {
@@ -1099,28 +1107,29 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 }
 
                 // Application Introduction / Server Details Onboarding Modal
+                // Leaving onboarding zooms in: the screen grows towards you and fades while Home
+                // scales up into place behind it.
                 AnimatedVisibility(
                     visible = showServerOnboarding,
                     enter = fadeIn() + scaleIn(initialScale = 0.96f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.96f)
+                    exit = fadeOut(tween(520, easing = FastOutSlowInEasing)) +
+                        scaleOut(targetScale = 1.18f, animationSpec = tween(620, easing = FastOutSlowInEasing))
                 ) {
                     ServerOnboardingIntroModal(
                         activeServer = activeServer,
                         onConnectServer = { name, url, user, pass, tokenAuth ->
-                            viewModel.testAndSaveServer(
+                            viewModel.connectServerDuringOnboarding(
                                 name = name,
                                 baseUrl = url,
                                 username = user,
                                 passwordOrToken = pass,
-                                useTokenAuth = tokenAuth,
-                                transcodeFormat = activeServer.transcodeFormat,
-                                maxBitRate = activeServer.maxBitRate
+                                useTokenAuth = tokenAuth
                             )
-                            viewModel.completeServerOnboarding()
                         },
                         onContinueWithDemo = {
                             viewModel.completeServerOnboarding()
-                        }
+                        },
+                        syncState = onboardingSync
                     )
                 }
 
