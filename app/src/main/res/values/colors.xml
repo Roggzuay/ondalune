@@ -9,5 +9,5 @@
     <color name="white">#FFFFFFFF</color>
     <color name="ic_launcher_background">#FF13131A</color>
     <!-- Matches the intro overlay's dark surface so splash -> intro reads as one shot -->
-    <color name="splash_background">#FF15152B</color>
+    <color name="splash_background">#FF0B0B0C</color>
 </resources>
