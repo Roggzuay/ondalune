@@ -1685,12 +1685,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV(palette.primaryArgb, hsv)
         val target = when {
-            s.themeMode == AppThemeMode.LIGHT -> AppIconVariant.CREAM
-            hsv[1] < 0.18f -> AppIconVariant.NIGHT
-            else -> listOf(
-                AppIconVariant.DUSK to 15f, AppIconVariant.MOSS to 120f, AppIconVariant.TIDE to 210f,
-                AppIconVariant.AMETHYST to 290f
-            ).minBy { (_, hue) -> minOf(kotlin.math.abs(hsv[0] - hue), 360f - kotlin.math.abs(hsv[0] - hue)) }.first
+            s.themeMode == AppThemeMode.LIGHT -> AppIconVariant.PAPER
+            hsv[1] < 0.18f -> AppIconVariant.GRAPHITE
+            else -> AppIconVariant.MOONLIGHT
         }
         if (target != s.appIconVariant) {
             updateCustomization { it.copy(appIconVariant = target) }

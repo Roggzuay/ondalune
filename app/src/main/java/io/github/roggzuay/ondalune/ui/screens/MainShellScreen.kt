@@ -1157,7 +1157,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
 /**
  * Launch intro, played once per cold start and always to the end (~2 s): the icon tile springs
- * in while its night sky slides into place, the moon and note pop onto it, rings ripple out,
+ * in while its background slides into place, the moon and waveform pop onto it, rings ripple out,
  * the wordmark rises letter by letter, then everything lifts away. It starts on the splash
  * colour so the system splash dissolves straight into it.
  */
@@ -1204,7 +1204,7 @@ fun OndaluneAnimatedLaunchIntroOverlay(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = 1f - exit.value }
-            .background(Color(0xFF15152B))
+            .background(Color(0xFF0B0B0C))
             .testTag("ondalune_launch_intro_overlay"),
         contentAlignment = Alignment.Center
     ) {
@@ -1267,7 +1267,7 @@ fun OndaluneAnimatedLaunchIntroOverlay(
                             fontWeight = FontWeight.Medium,
                             letterSpacing = 3.sp
                         ),
-                        color = Color(0xFFF9C9A8),
+                        color = Color(0xFFEDEDF0),
                         modifier = Modifier.graphicsLayer {
                             alpha = local
                             translationY = (1f - local) * 14.dp.toPx()

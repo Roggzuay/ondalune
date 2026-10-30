@@ -605,9 +605,8 @@ enum class AppIconPreviewFrameShape(val label: String) {
 }
 
 /**
- * Launcher icons: a crescent moon and a note setting into the waves. "Scenes" variants are the
- * full night-sea picture in different colourways; "Minimal" ones keep only the moon and note on
- * a flat tile.
+ * Launcher icons: a crescent moon cradling a waveform. Moonlight is the shaded main icon; the
+ * "Minimal" ones are flat two-tone tiles for light, grey and dark home screens.
  * Every variant ships a monochrome layer, so Android 13+ themed icons work with any of them.
  */
 enum class AppIconVariant(
@@ -618,18 +617,16 @@ enum class AppIconVariant(
     val aliasClassName: String,
     val isMinimal: Boolean = false
 ) {
-    DUSK("Dusk", "Dusk", "Peach moon over a wine-red sea", "#F28C64", "io.github.roggzuay.ondalune.LauncherAliasDusk"),
-    TIDE("Tide", "Tide", "Silver moon over a deep blue sea", "#5FB6E8", "io.github.roggzuay.ondalune.LauncherAliasTide"),
-    AMETHYST("Amethyst", "Amethyst", "Lilac moon over violet waves", "#C46BDB", "io.github.roggzuay.ondalune.LauncherAliasAmethyst"),
-    MOSS("Moss", "Moss", "Pale-lime moon over green waves", "#A8D86E", "io.github.roggzuay.ondalune.LauncherAliasMoss"),
-    CREAM("Cream", "Cream", "Navy moon and note on cream", "#1C1D33", "io.github.roggzuay.ondalune.LauncherAliasCream", isMinimal = true),
-    NIGHT("Night", "Night", "Sand moon and note on charcoal", "#D9BC94", "io.github.roggzuay.ondalune.LauncherAliasNight", isMinimal = true),
-    PEACH("Peach", "Peach", "Wine moon and note on peach", "#F6B48E", "io.github.roggzuay.ondalune.LauncherAliasPeach", isMinimal = true),
-    WINE("Wine", "Wine", "Coral moon and note on wine", "#EE7262", "io.github.roggzuay.ondalune.LauncherAliasWine", isMinimal = true)
+    // Launcher alias names are permanent: renaming one drops the icon from home screens on
+    // update. Moonlight keeps 1.0.0's default alias name for that reason.
+    MOONLIGHT("Moonlight", "Moonlight", "White moon and waveform on black", "#E8E8EC", "io.github.roggzuay.ondalune.LauncherAliasDusk"),
+    PAPER("Paper", "Paper", "Black moon and waveform on white", "#0E0E10", "io.github.roggzuay.ondalune.LauncherAliasPaper", isMinimal = true),
+    SLATE("Slate", "Slate", "Charcoal moon and waveform on grey", "#2A2B2F", "io.github.roggzuay.ondalune.LauncherAliasSlate", isMinimal = true),
+    GRAPHITE("Graphite", "Graphite", "Grey moon and waveform on graphite", "#A3A4A9", "io.github.roggzuay.ondalune.LauncherAliasGraphite", isMinimal = true)
 }
 
 data class PlayerCustomizationSettings(
-    val appIconVariant: AppIconVariant = AppIconVariant.DUSK,
+    val appIconVariant: AppIconVariant = AppIconVariant.MOONLIGHT,
     /** Re-pick the launcher icon whose colour is closest to the theme whenever the theme changes. */
     val iconFollowsTheme: Boolean = false,
     val dockStyle: DockStyle = DockStyle.FLOATING,

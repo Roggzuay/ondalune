@@ -819,6 +819,14 @@ fun computeArtistMonogram(name: String): String {
  */
 object AppIconLauncherManager {
     /**
+     * Launcher aliases from 1.0.0's icon set. They stay in the manifest (showing the current
+     * default icon) so a home-screen shortcut or a chosen icon from 1.0.0 keeps working after an
+     * update, and are switched off the next time an icon is picked.
+     */
+    private val LegacyAliases = listOf("Tide", "Amethyst", "Moss", "Cream", "Night", "Peach", "Wine")
+        .map { "io.github.roggzuay.ondalune.LauncherAlias$it" }
+
+    /**
      * Dynamically updates the Android launcher icon at runtime using `<activity-alias>` components
      * and [PackageManager.setComponentEnabledSetting] with [PackageManager.DONT_KILL_APP].
      */
@@ -836,6 +844,13 @@ object AppIconLauncherManager {
                 pm.setComponentEnabledSetting(
                     component,
                     targetState,
+                    PackageManager.DONT_KILL_APP
+                )
+            }
+            LegacyAliases.forEach { alias ->
+                pm.setComponentEnabledSetting(
+                    ComponentName(pkg, alias),
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP
                 )
             }
@@ -865,7 +880,7 @@ object AppIconLauncherManager {
      */
     fun getActiveAliasVariant(
         context: Context,
-        fallback: AppIconVariant = AppIconVariant.DUSK
+        fallback: AppIconVariant = AppIconVariant.MOONLIGHT
     ): AppIconVariant {
         return AppIconVariant.entries.firstOrNull { isAliasEnabled(context, it) } ?: fallback
     }
@@ -888,14 +903,10 @@ fun appIconFrameShape(frameShape: AppIconPreviewFrameShape): Shape = when (frame
 
 /** Background and foreground layers of an icon variant's adaptive icon. */
 fun appIconLayers(variant: AppIconVariant): Pair<Int, Int> = when (variant) {
-    AppIconVariant.DUSK -> R.drawable.ic_launcher_bg_dusk to R.drawable.ic_launcher_fg_dusk
-    AppIconVariant.TIDE -> R.drawable.ic_launcher_bg_tide to R.drawable.ic_launcher_fg_tide
-    AppIconVariant.AMETHYST -> R.drawable.ic_launcher_bg_amethyst to R.drawable.ic_launcher_fg_amethyst
-    AppIconVariant.MOSS -> R.drawable.ic_launcher_bg_moss to R.drawable.ic_launcher_fg_moss
-    AppIconVariant.CREAM -> R.drawable.ic_launcher_bg_cream to R.drawable.ic_launcher_fg_cream
-    AppIconVariant.NIGHT -> R.drawable.ic_launcher_bg_night to R.drawable.ic_launcher_fg_night
-    AppIconVariant.PEACH -> R.drawable.ic_launcher_bg_peach to R.drawable.ic_launcher_fg_peach
-    AppIconVariant.WINE -> R.drawable.ic_launcher_bg_wine to R.drawable.ic_launcher_fg_wine
+    AppIconVariant.MOONLIGHT -> R.drawable.ic_launcher_bg_moonlight to R.drawable.ic_launcher_fg_moonlight
+    AppIconVariant.PAPER -> R.drawable.ic_launcher_bg_paper to R.drawable.ic_launcher_fg_paper
+    AppIconVariant.SLATE -> R.drawable.ic_launcher_bg_slate to R.drawable.ic_launcher_fg_slate
+    AppIconVariant.GRAPHITE -> R.drawable.ic_launcher_bg_graphite to R.drawable.ic_launcher_fg_graphite
 }
 
 /**
@@ -907,7 +918,7 @@ fun appIconLayers(variant: AppIconVariant): Pair<Int, Int> = when (variant) {
 fun OndaluneBrandEmblem(
     modifier: Modifier = Modifier,
     size: Dp = 64.dp,
-    variant: AppIconVariant = AppIconVariant.DUSK,
+    variant: AppIconVariant = AppIconVariant.MOONLIGHT,
     frameShape: AppIconPreviewFrameShape = AppIconPreviewFrameShape.SQUIRCLE,
     foregroundScale: Float = 1f,
     foregroundAlpha: Float = 1f,
