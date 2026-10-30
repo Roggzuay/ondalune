@@ -19,6 +19,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.os.Build
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
+import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
 import io.github.roggzuay.ondalune.data.model.ReverbProcessingMode
 import io.github.roggzuay.ondalune.data.model.ReverbState
@@ -31,7 +32,10 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.min
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -136,6 +140,48 @@ class OndaluneAudioEngine(
     val realtimeProcessedFrames: StateFlow<Long> = _realtimeProcessedFrames.asStateFlow()
 
     var onTrackEnded: (() -> Unit)? = null
+
+    // ---- Transitions: gapless hand-over, crossfade and ReplayGain ------------------------------
+
+    /** Crossfade length between songs; 0 = none. */
+    @Volatile
+    var crossfadeMs: Int = 0
+
+    /** Start the next song on the very next sample instead of after a pause. */
+    @Volatile
+    var gaplessEnabled: Boolean = true
+
+    @Volatile
+    var replayGainMode: ReplayGainMode = ReplayGainMode.OFF
+
+    /** The song and server to line up after the current one; called on the main thread. */
+    var nextTrackProvider: (() -> Pair<SubsonicTrack, SubsonicServerConfig>?)? = null
+
+    /** The pipeline moved on to [SubsonicTrack] by itself (gapless or crossfade); main thread. */
+    var onTrackAdvanced: ((SubsonicTrack) -> Unit)? = null
+
+    @Volatile
+    private var expectedNextId: String? = null
+
+    @Volatile
+    private var expectationKnown = false
+
+    /** A next song that can't share the current output (e.g. other sample rate); not retried. */
+    @Volatile
+    private var unpreparableNextId: String? = null
+
+    private val preparedNext = AtomicReference<QueuedSource?>(null)
+    private var prepareJob: Job? = null
+    private val pipelineSession = AtomicInteger(0)
+
+    /**
+     * Tells the engine which song should follow the current one ([trackId] null = nothing, e.g. the
+     * sleep timer stops at the end). A lined-up song that no longer matches is dropped.
+     */
+    fun expectNextTrack(trackId: String?) {
+        expectedNextId = trackId
+        expectationKnown = true
+    }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -248,31 +294,17 @@ class OndaluneAudioEngine(
             requestSystemAudioFocus()
 
             try {
-                val offlineFile = withContext(Dispatchers.IO) {
-                    findOfflineTrackFile(server.id, track.id)
-                }
-                _isPlayingOfflineFile.value = offlineFile != null
-
-                val localOrStreamSource: String = when {
-                    offlineFile != null -> offlineFile.absolutePath
-                    server.isDemoServer -> withContext(Dispatchers.Default) {
-                        ensureDryMasterTrackWav(track).absolutePath
-                    }
-                    else -> subsonicClient.buildStreamUrl(server, track.id)
-                }
-
-                val isWavSource = localOrStreamSource.endsWith(".wav", ignoreCase = true) &&
-                    File(localOrStreamSource).exists()
-
-                if (isWavSource) {
-                    startRealtimeWavPcmPipeline(File(localOrStreamSource))
+                val (sourcePath, offline) = resolveSourcePath(track, server)
+                _isPlayingOfflineFile.value = offline
+                // Real-time PCM DSP pipeline first; MediaPlayer + hardware session effects if the
+                // container can't be decoded to raw PCM.
+                val source = withContext(Dispatchers.IO) { openPcmSource(sourcePath) }
+                if (source != null) {
+                    startPcmPipeline(
+                        QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
+                    )
                 } else {
-                    // Attempt real-time MediaExtractor + MediaCodec PCM DSP pipeline first;
-                    // fallback to MediaPlayer + hardware session effects if remote container blocks extractor
-                    val startedCodecDsp = startRealtimeCodecPcmPipeline(localOrStreamSource)
-                    if (!startedCodecDsp) {
-                        startMediaPlayerFallback(localOrStreamSource, eqPreset)
-                    }
+                    startMediaPlayerFallback(sourcePath, eqPreset)
                 }
             } catch (e: Exception) {
                 _isBuffering.value = false
@@ -283,136 +315,135 @@ class OndaluneAudioEngine(
         }
     }
 
+    /** Where [track] plays from (downloaded file, the demo's dry WAV master, or the server stream) and whether it's offline. */
+    private suspend fun resolveSourcePath(track: SubsonicTrack, server: SubsonicServerConfig): Pair<String, Boolean> {
+        val offlineFile = withContext(Dispatchers.IO) { findOfflineTrackFile(server.id, track.id) }
+        val path = when {
+            offlineFile != null -> offlineFile.absolutePath
+            server.isDemoServer -> withContext(Dispatchers.Default) { ensureDryMasterTrackWav(track).absolutePath }
+            else -> subsonicClient.buildStreamUrl(server, track.id)
+        }
+        return path to (offlineFile != null)
+    }
+
+    /** Opens [path] for the PCM pipeline, or null if only MediaPlayer can play it. */
+    private fun openPcmSource(path: String): PcmSource? =
+        if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
+            runCatching { WavPcmSource(File(path)) }.getOrNull()
+        } else {
+            CodecPcmSource.open(path)
+        }
+
     /**
-     * Real-time WAV -> float DSP (5-band EQ + Freeverb/Schroeder stereo reverb) -> [AudioTrack]
-     * streaming pipeline. Changing reverb, EQ, speed, or pitch modifies the live PCM stream
-     * immediately without regenerating the WAV file or restarting playback.
+     * Real-time PCM pipeline: decoded audio -> [TransitionMixer] (ReplayGain, gapless hand-over,
+     * crossfade) -> [processRealtimePcm16StereoChunk] (EQ + Freeverb/Schroeder reverb + volume) ->
+     * [AudioTrack]. Changing reverb, EQ, speed or pitch modifies the live stream immediately. Near
+     * the end of a song the next one is opened in the background so it can follow without a gap.
      */
-    private fun startRealtimeWavPcmPipeline(wavFile: File) {
+    private fun startPcmPipeline(first: QueuedSource) {
         isPcmPipelineActive.set(true)
         isPcmPaused.set(false)
         pendingSeekMs.set(-1L)
         updateReverbProcessingModeForPcmPath()
+        val session = pipelineSession.get()
 
         pcmStreamingJob = scope.launch(Dispatchers.IO) {
+            val mixer = TransitionMixer(first)
+            val sampleRate = first.source.sampleRate
             var trackOut: AudioTrack? = null
             try {
-                RandomAccessFile(wavFile, "r").use { raf ->
-                    if (raf.length() <= 44L) {
-                        throw IllegalStateException("WAV source too short")
+                first.durationMs().takeIf { it > 1000L }?.let { _durationMs.value = it }
+
+                val minBuf = AudioTrack.getMinBufferSize(
+                    sampleRate,
+                    AudioFormat.CHANNEL_OUT_STEREO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                ).coerceAtLeast(8192)
+
+                trackOut = runCatching {
+                    AudioTrack.Builder()
+                        .setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .build()
+                        )
+                        .setAudioFormat(
+                            AudioFormat.Builder()
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(sampleRate)
+                                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                                .build()
+                        )
+                        .setBufferSizeInBytes(minBuf * 2)
+                        .setTransferMode(AudioTrack.MODE_STREAM)
+                        .build()
+                }.getOrNull()
+
+                audioTrack = trackOut
+                trackOut?.let { at ->
+                    applySpeedAndPitchToAudioTrack(at, _playbackSpeed.value, _playbackPitch.value)
+                    runCatching { at.play() }
+                }
+
+                _isBuffering.value = false
+                _isPlaying.value = true
+
+                val chunkFrames = 1024
+                val buffer = ShortArray(chunkFrames * 2)
+                val result = TransitionMixer.Result()
+
+                while (isActive && isPcmPipelineActive.get()) {
+                    val seekReqMs = pendingSeekMs.getAndSet(-1L)
+                    if (seekReqMs >= 0L) {
+                        mixer.current.source.seekTo(seekReqMs)
+                        mixer.cancelFade()
+                        reverbDspProcessor.clearDelayLines()
                     }
-                    raf.seek(22)
-                    val channels = java.lang.Short.reverseBytes(raf.readShort()).toInt().coerceIn(1, 2)
-                    val sampleRate = Integer.reverseBytes(raf.readInt()).coerceIn(8000, 96000)
-                    val dataBytes = (raf.length() - 44L).coerceAtLeast(0L)
-                    val bytesPerFrame = channels * 2
-                    val totalFrames = (dataBytes / bytesPerFrame).coerceAtLeast(1L)
-                    val computedDurationMs = (totalFrames * 1000L) / sampleRate.toLong()
-                    if (computedDurationMs > 1000L) {
-                        _durationMs.value = computedDurationMs
+
+                    if (isPcmPaused.get()) {
+                        delay(24L)
+                        continue
                     }
 
-                    val minBuf = AudioTrack.getMinBufferSize(
-                        sampleRate,
-                        AudioFormat.CHANNEL_OUT_STEREO,
-                        AudioFormat.ENCODING_PCM_16BIT
-                    ).coerceAtLeast(4096)
+                    syncUpcoming(mixer, session)
+                    mixer.current.gain = replayGainLinear(mixer.current.track, replayGainMode)
+                    mixer.next?.let { it.gain = replayGainLinear(it.track, replayGainMode) }
+                    mixer.gapless = gaplessEnabled
+                    mixer.crossfadeFrames = crossfadeFramesBetween(mixer.current, mixer.next)
 
-                    trackOut = runCatching {
-                        AudioTrack.Builder()
-                            .setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                    .build()
-                            )
-                            .setAudioFormat(
-                                AudioFormat.Builder()
-                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                    .setSampleRate(sampleRate)
-                                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                                    .build()
-                            )
-                            .setBufferSizeInBytes(minBuf * 2)
-                            .setTransferMode(AudioTrack.MODE_STREAM)
-                            .build()
-                    }.getOrNull()
-
-                    audioTrack = trackOut
-                    trackOut?.let { at ->
-                        applySpeedAndPitchToAudioTrack(at, _playbackSpeed.value, _playbackPitch.value)
-                        runCatching { at.play() }
-                    }
-
-                    _isBuffering.value = false
-                    _isPlaying.value = true
-
-                    val chunkFrames = 1024
-                    val rawByteBuf = ByteArray(chunkFrames * bytesPerFrame)
-                    val stereoShortBuf = ShortArray(chunkFrames * 2)
-                    var currentFrame = 0L
-
-                    raf.seek(44L)
-
-                    while (isActive && isPcmPipelineActive.get()) {
-                        val seekReqMs = pendingSeekMs.getAndSet(-1L)
-                        if (seekReqMs >= 0L) {
-                            currentFrame = ((seekReqMs * sampleRate) / 1000L).coerceIn(0L, totalFrames)
-                            val byteOffset = 44L + (currentFrame * bytesPerFrame)
-                            raf.seek(byteOffset)
-                            reverbDspProcessor.clearDelayLines()
-                        }
-
-                        if (isPcmPaused.get()) {
-                            delay(24L)
-                            continue
-                        }
-
-                        val bytesRead = raf.read(rawByteBuf)
-                        if (bytesRead <= 0) {
-                            _isPlaying.value = false
-                            _positionMs.value = _durationMs.value
-                            withContext(Dispatchers.Main) {
-                                onTrackEnded?.invoke()
-                            }
-                            break
-                        }
-
-                        val framesRead = bytesRead / bytesPerFrame
-                        val bb = ByteBuffer.wrap(rawByteBuf, 0, framesRead * bytesPerFrame)
-                            .order(ByteOrder.LITTLE_ENDIAN)
-
-                        if (channels == 2) {
-                            for (i in 0 until framesRead * 2) {
-                                stereoShortBuf[i] = bb.short
-                            }
-                        } else {
-                            for (i in 0 until framesRead) {
-                                val mono = bb.short
-                                stereoShortBuf[i * 2] = mono
-                                stereoShortBuf[i * 2 + 1] = mono
-                            }
-                        }
-
+                    mixer.render(buffer, chunkFrames, result)
+                    if (result.frames > 0) {
                         // Real-time stereo PCM DSP (EQ + Freeverb/Schroeder Reverb + Volume)
                         processRealtimePcm16StereoChunk(
-                            pcm16Stereo = stereoShortBuf,
-                            frameCount = framesRead,
+                            pcm16Stereo = buffer,
+                            frameCount = result.frames,
                             eqPreset = currentEqPreset
                         )
-
-                        val written = trackOut?.write(stereoShortBuf, 0, framesRead * 2) ?: 0
-                        currentFrame += framesRead
-                        val nextPosMs = (currentFrame * 1000L) / sampleRate.toLong()
-                        _positionMs.value = nextPosMs.coerceAtMost(_durationMs.value)
-
+                        val written = trackOut?.write(buffer, 0, result.frames * 2) ?: 0
                         // In local JVM unit tests where AudioTrack.write returns immediately without blocking:
                         if (written <= 0) {
-                            val frameDurationMs = ((framesRead * 1000L) / sampleRate.toLong())
-                                .coerceAtLeast(8L)
+                            val frameDurationMs = ((result.frames * 1000L) / sampleRate.toLong()).coerceAtLeast(8L)
                             val scaledDelay = (frameDurationMs / _playbackSpeed.value.coerceAtLeast(0.5f)).toLong()
                             delay(scaledDelay.coerceAtLeast(4L))
                         }
+                    }
+
+                    if (result.advanced) {
+                        val now = mixer.current
+                        _durationMs.value = now.durationMs().takeIf { it > 1000L } ?: (now.track.durationSec * 1000L)
+                        _isPlayingOfflineFile.value = findOfflineTrackFile(now.track.serverId, now.track.id) != null
+                        withContext(Dispatchers.Main) { onTrackAdvanced?.invoke(now.track) }
+                    }
+                    _positionMs.value = mixer.current.positionMs().coerceIn(0L, _durationMs.value)
+
+                    if (result.ended) {
+                        _isPlaying.value = false
+                        _positionMs.value = _durationMs.value
+                        withContext(Dispatchers.Main) {
+                            onTrackEnded?.invoke()
+                        }
+                        break
                     }
                 }
             } catch (e: Exception) {
@@ -427,206 +458,65 @@ class OndaluneAudioEngine(
                 if (audioTrack === trackOut) {
                     audioTrack = null
                 }
+                mixer.current.source.release()
+                mixer.next?.source?.release()
             }
         }
     }
 
     /**
-     * Real-time [MediaExtractor] + [MediaCodec] -> [processRealtimePcm16StereoChunk] -> [AudioTrack]
-     * pipeline for compressed audio files and streams (FLAC, OPUS, MP3, AAC, OGG).
+     * Keeps the next song lined up: opens it in the background once the current one is within the
+     * crossfade plus [PrepareLeadMs] of its end, hands it to the mixer, and drops it if the queue
+     * changed meanwhile. Runs on the audio thread, so mixer sources are only released here or by it.
      */
-    private suspend fun startRealtimeCodecPcmPipeline(dataSourcePath: String): Boolean =
-        withContext(Dispatchers.IO) {
-            val extractor = MediaExtractor()
-            try {
-                extractor.setDataSource(dataSourcePath)
-                var audioTrackIndex = -1
-                var format: MediaFormat? = null
-                for (i in 0 until extractor.trackCount) {
-                    val f = extractor.getTrackFormat(i)
-                    val mime = f.getString(MediaFormat.KEY_MIME).orEmpty()
-                    if (mime.startsWith("audio/")) {
-                        audioTrackIndex = i
-                        format = f
-                        break
-                    }
-                }
-                if (audioTrackIndex < 0 || format == null) {
-                    extractor.release()
-                    return@withContext false
-                }
-
-                extractor.selectTrack(audioTrackIndex)
-                val mime = format.getString(MediaFormat.KEY_MIME) ?: return@withContext false
-                val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
-                    format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                } else {
-                    44100
-                }
-                val channels = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
-                    format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceIn(1, 2)
-                } else {
-                    2
-                }
-                if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                    val durUs = format.getLong(MediaFormat.KEY_DURATION)
-                    if (durUs > 1_000_000L) {
-                        _durationMs.value = durUs / 1000L
-                    }
-                }
-
-                val codec = MediaCodec.createDecoderByType(mime)
-                codec.configure(format, null, null, 0)
-                codec.start()
-
-                isPcmPipelineActive.set(true)
-                isPcmPaused.set(false)
-                pendingSeekMs.set(-1L)
-                updateReverbProcessingModeForPcmPath()
-
-                pcmStreamingJob = scope.launch(Dispatchers.IO) {
-                    var trackOut: AudioTrack? = null
-                    try {
-                        val minBuf = AudioTrack.getMinBufferSize(
-                            sampleRate,
-                            AudioFormat.CHANNEL_OUT_STEREO,
-                            AudioFormat.ENCODING_PCM_16BIT
-                        ).coerceAtLeast(8192)
-
-                        trackOut = runCatching {
-                            AudioTrack.Builder()
-                                .setAudioAttributes(
-                                    AudioAttributes.Builder()
-                                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                        .build()
-                                )
-                                .setAudioFormat(
-                                    AudioFormat.Builder()
-                                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                        .setSampleRate(sampleRate)
-                                        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                                        .build()
-                                )
-                                .setBufferSizeInBytes(minBuf * 2)
-                                .setTransferMode(AudioTrack.MODE_STREAM)
-                                .build()
-                        }.getOrNull()
-
-                        audioTrack = trackOut
-                        trackOut?.let { at ->
-                            applySpeedAndPitchToAudioTrack(at, _playbackSpeed.value, _playbackPitch.value)
-                            runCatching { at.play() }
-                        }
-
-                        _isBuffering.value = false
-                        _isPlaying.value = true
-
-                        val bufferInfo = MediaCodec.BufferInfo()
-                        var inputEOS = false
-                        var outputEOS = false
-                        var stereoScratch = ShortArray(4096)
-
-                        while (isActive && isPcmPipelineActive.get() && !outputEOS) {
-                            val seekReqMs = pendingSeekMs.getAndSet(-1L)
-                            if (seekReqMs >= 0L) {
-                                extractor.seekTo(seekReqMs * 1000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                                codec.flush()
-                                inputEOS = false
-                                reverbDspProcessor.clearDelayLines()
-                            }
-
-                            if (isPcmPaused.get()) {
-                                delay(24L)
-                                continue
-                            }
-
-                            if (!inputEOS) {
-                                val inIndex = codec.dequeueInputBuffer(10_000L)
-                                if (inIndex >= 0) {
-                                    val inBuf = codec.getInputBuffer(inIndex)
-                                    if (inBuf != null) {
-                                        val sampleSize = extractor.readSampleData(inBuf, 0)
-                                        if (sampleSize < 0) {
-                                            codec.queueInputBuffer(
-                                                inIndex,
-                                                0,
-                                                0,
-                                                0L,
-                                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                                            )
-                                            inputEOS = true
-                                        } else {
-                                            val ptsUs = extractor.sampleTime
-                                            codec.queueInputBuffer(inIndex, 0, sampleSize, ptsUs, 0)
-                                            extractor.advance()
-                                        }
-                                    }
-                                }
-                            }
-
-                            val outIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000L)
-                            if (outIndex >= 0) {
-                                val outBuf = codec.getOutputBuffer(outIndex)
-                                if (outBuf != null && bufferInfo.size > 0) {
-                                    outBuf.position(bufferInfo.offset)
-                                    outBuf.limit(bufferInfo.offset + bufferInfo.size)
-                                    outBuf.order(ByteOrder.nativeOrder())
-
-                                    val totalShorts = bufferInfo.size / 2
-                                    val frameCount = if (channels == 2) totalShorts / 2 else totalShorts
-                                    if (stereoScratch.size < frameCount * 2) {
-                                        stereoScratch = ShortArray(frameCount * 2)
-                                    }
-                                    if (channels == 2) {
-                                        outBuf.asShortBuffer().get(stereoScratch, 0, frameCount * 2)
-                                    } else {
-                                        val shortView = outBuf.asShortBuffer()
-                                        for (i in 0 until frameCount) {
-                                            val s = shortView.get(i)
-                                            stereoScratch[i * 2] = s
-                                            stereoScratch[i * 2 + 1] = s
-                                        }
-                                    }
-
-                                    processRealtimePcm16StereoChunk(
-                                        pcm16Stereo = stereoScratch,
-                                        frameCount = frameCount,
-                                        eqPreset = currentEqPreset
-                                    )
-
-                                    trackOut?.write(stereoScratch, 0, frameCount * 2)
-                                    if (bufferInfo.presentationTimeUs > 0L) {
-                                        _positionMs.value = (bufferInfo.presentationTimeUs / 1000L)
-                                            .coerceAtMost(_durationMs.value)
-                                    }
-                                }
-                                codec.releaseOutputBuffer(outIndex, false)
-                                if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                                    outputEOS = true
-                                    _isPlaying.value = false
-                                    _positionMs.value = _durationMs.value
-                                    withContext(Dispatchers.Main) {
-                                        onTrackEnded?.invoke()
-                                    }
-                                }
-                            }
-                        }
-                    } finally {
-                        runCatching { trackOut?.stop() }
-                        runCatching { trackOut?.release() }
-                        if (audioTrack === trackOut) audioTrack = null
-                        runCatching { codec.stop() }
-                        runCatching { codec.release() }
-                        runCatching { extractor.release() }
-                    }
-                }
-                true
-            } catch (_: Throwable) {
-                runCatching { extractor.release() }
-                false
+    private fun syncUpcoming(mixer: TransitionMixer, session: Int) {
+        val expected = expectedNextId
+        if (expectationKnown && !mixer.isFading) {
+            mixer.next?.takeIf { it.track.id != expected }?.let {
+                it.source.release()
+                mixer.next = null
+            }
+            preparedNext.get()?.takeIf { it.track.id != expected }?.let {
+                if (preparedNext.compareAndSet(it, null)) it.source.release()
             }
         }
+        if (mixer.next == null) {
+            preparedNext.getAndSet(null)?.let { mixer.next = it }
+        }
+        if (!gaplessEnabled && crossfadeMs <= 0) return
+        if (mixer.next != null || preparedNext.get() != null || prepareJob?.isActive == true) return
+        if (expectationKnown && (expected == null || expected == unpreparableNextId)) return
+        val leadFrames = (crossfadeMs + PrepareLeadMs).toLong() * mixer.current.source.sampleRate / 1000L
+        if (mixer.current.remainingFrames > leadFrames) return
+        val sampleRate = mixer.current.source.sampleRate
+        prepareJob = scope.launch(Dispatchers.IO) { prepareNext(sampleRate, session) }
+    }
+
+    private suspend fun prepareNext(sampleRate: Int, session: Int) {
+        val (track, server) = withContext(Dispatchers.Main) { nextTrackProvider?.invoke() } ?: return
+        val source = runCatching { openPcmSource(resolveSourcePath(track, server).first) }.getOrNull()
+        if (source == null || source.sampleRate != sampleRate) {
+            // A different sample rate needs a new AudioTrack, so this one starts the usual way.
+            source?.release()
+            unpreparableNextId = track.id
+            return
+        }
+        val queued = QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
+        if (pipelineSession.get() != session || !preparedNext.compareAndSet(null, queued)) {
+            source.release()
+        }
+    }
+
+    /** Crossfade length in frames between [cur] and [next]; consecutive album tracks stay gapless. */
+    private fun crossfadeFramesBetween(cur: QueuedSource, next: QueuedSource?): Int {
+        if (next == null || crossfadeMs <= 0) return 0
+        val sameAlbumInOrder = cur.track.albumId.isNotBlank() && cur.track.albumId == next.track.albumId &&
+            next.track.trackNumber == cur.track.trackNumber + 1
+        if (gaplessEnabled && sameAlbumInOrder) return 0
+        val wanted = crossfadeMs.toLong() * cur.source.sampleRate / 1000L
+        // Never longer than half of either song.
+        return min(wanted, min(cur.durationFrames, next.durationFrames) / 2).toInt().coerceAtLeast(0)
+    }
 
     private fun startMediaPlayerFallback(
         dataSourcePath: String,
@@ -1032,6 +922,11 @@ class OndaluneAudioEngine(
     private fun releasePlayerInternal() {
         isPcmPipelineActive.set(false)
         isPcmPaused.set(false)
+        pipelineSession.incrementAndGet()
+        prepareJob?.cancel()
+        prepareJob = null
+        preparedNext.getAndSet(null)?.source?.release()
+        unpreparableNextId = null
         pcmStreamingJob?.cancel()
         pcmStreamingJob = null
         progressJob?.cancel()
@@ -1172,3 +1067,6 @@ class OndaluneAudioEngine(
         return outFile
     }
 }
+
+/** How long before a song ends (plus the crossfade) the next one is opened and buffered. */
+private const val PrepareLeadMs = 12_000

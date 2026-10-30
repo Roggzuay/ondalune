@@ -51,7 +51,12 @@ data class SubsonicTrack(
     val musicalKey: String = "F Minor",
     val syncedLyricsRaw: String = "",
     val playCount: Int = 0,
-    val userRating: Int = 4 // 0 = Unrated, 1..5 = Star Rating (/rest/setRating.view)
+    val userRating: Int = 4, // 0 = Unrated, 1..5 = Star Rating (/rest/setRating.view)
+    /** ReplayGain from the server (OpenSubsonic `replayGain`): gains in dB, peaks as linear 0..1+. */
+    val rgTrackGain: Float? = null,
+    val rgAlbumGain: Float? = null,
+    val rgTrackPeak: Float? = null,
+    val rgAlbumPeak: Float? = null
 ) {
     /**
      * Computes the personalized Smart Shuffle priority weight combining:
@@ -416,9 +421,9 @@ enum class WidgetThemeMode(val label: String) {
 }
 
 enum class ReplayGainMode(val label: String) {
-    OFF("Disabled (Bit-Perfect)"),
-    TRACK("Track Gain (-14 LUFS)"),
-    ALBUM("Album Gain (Preserve Dynamics)")
+    OFF("Off (play songs as mastered)"),
+    TRACK("Track gain (every song equally loud)"),
+    ALBUM("Album gain (keeps an album's dynamics)")
 }
 
 enum class DownloadSpeedLimit(val label: String, val mbpsValue: Int) {

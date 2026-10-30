@@ -16,6 +16,8 @@
 <li>Five-band EQ presets</li>
 </ul>
 
+<p><b>Seamless transitions</b>: gapless playback, an album-aware crossfade of up to 12 seconds, and ReplayGain (track or album) that never pushes a song into clipping.</p>
+
 <p><b>Your Mix</b>: a playful home hero with covers from your library in morphing shapes. Tap play and you land in the player with a fresh mix of favourites, most-played tracks and the music that sounds like them.</p>
 
 <p><b>Looks that follow the music</b></p>

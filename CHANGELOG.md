@@ -11,6 +11,7 @@ First public release.
   - Speed and pitch engine, with preserve-key, varispeed and independent semitone modes
   - Live studio reverb with presets and custom room controls
   - Five-band EQ presets
+- Gapless playback, album-aware crossfade (up to 12 s) and ReplayGain (track or album) with clipping protection
 - **Lyrics:** time-synced lyrics with tap-to-seek, plus a lyrics line on tall widgets
 - **Your Mix:** a home hero with an animated launch into the player
 - **Look:**
