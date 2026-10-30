@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 (2026-10-31)
+
+- New app icon: a white crescent moon cradling a waveform, on black. Choose Moonlight, Paper, Slate or Graphite in Settings → App icon; themed icons on Android 13+ use the new shape.
+- Splash screen and launch animation match the new icon.
+
 ## 1.0.0 (2026-10-31)
 
 First public release.

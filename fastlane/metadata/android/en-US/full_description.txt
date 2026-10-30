@@ -27,7 +27,7 @@
 <li>Six interface styles, separate fonts for headings and text, and artwork shapes</li>
 <li>Drag-to-reorder Home sections and four collection layouts</li>
 <li>Material You, light, dark and AMOLED themes</li>
-<li>Eight launcher icons with themed-icon support</li>
+<li>Four launcher icons with themed-icon support</li>
 </ul>
 
 <p><b>Everyday listening</b></p>

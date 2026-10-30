@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/icon.png" width="128" alt="Ondalune icon: a crescent moon and a music note setting into the waves" />
+<img src="docs/icon.png" width="128" alt="Ondalune icon: a white crescent moon cradling a waveform on black" />
 
 # Ondalune
 
@@ -80,7 +80,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Home layout editor**: drag sections into the order you like and hide the ones you don't use.
 - **Four layouts** for every collection: Compact, Rows, Tiles and Cards.
 - **Material You**, light, dark and pure-black AMOLED themes.
-- **Eight launcher icons**, including themed icons on Android 13 and newer.
+- **Four launcher icons** (Moonlight, Paper, Slate and Graphite), including themed icons on Android 13 and newer.
 
 <p align="center">
 <img src="docs/screenshots/themes.png" width="220" alt="Theme and font settings" />

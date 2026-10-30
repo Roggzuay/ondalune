@@ -107,9 +107,9 @@ class ExampleRobolectricTest {
     fun `player background animation styles app icon variants and expandable settings sections are defined`() {
         assertEquals(5, PlayerBackgroundAnimationStyle.entries.size)
         assertEquals(6, SettingsExpandableSection.entries.size)
-        assertEquals(8, io.github.roggzuay.ondalune.data.model.AppIconVariant.entries.size)
+        assertEquals(4, io.github.roggzuay.ondalune.data.model.AppIconVariant.entries.size)
         val defaultSettings = PlayerCustomizationSettings()
-        assertEquals(io.github.roggzuay.ondalune.data.model.AppIconVariant.DUSK, defaultSettings.appIconVariant)
+        assertEquals(io.github.roggzuay.ondalune.data.model.AppIconVariant.MOONLIGHT, defaultSettings.appIconVariant)
         assertEquals(PlayerBackgroundAnimationStyle.ARTWORK_GLOW, defaultSettings.playerBackgroundStyle)
         assertEquals(CuratedColorPalette.DEFAULT_EXPRESSIVE, defaultSettings.curatedPalette)
         assertEquals(CornerStylePreset.EXPRESSIVE_ROUNDED, defaultSettings.cornerStylePreset)

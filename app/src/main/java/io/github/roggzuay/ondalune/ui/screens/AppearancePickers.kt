@@ -322,7 +322,7 @@ fun AppIconSettingsScreen(
                     Switch(checked = iconFollowsTheme, onCheckedChange = onSetIconFollowsTheme, modifier = Modifier.testTag("icon_follow_theme"))
                 }
             }
-            listOf("Scenes" to AppIconVariant.entries.filter { !it.isMinimal }, "Minimal" to AppIconVariant.entries.filter { it.isMinimal })
+            listOf("Shaded" to AppIconVariant.entries.filter { !it.isMinimal }, "Minimal" to AppIconVariant.entries.filter { it.isMinimal })
                 .forEach { (group, variants) ->
                     item {
                         Text(group, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
