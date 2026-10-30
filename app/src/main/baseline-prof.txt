@@ -1,0 +1,3 @@
+# AOT-compile all app code on install so first frames and first scrolls are not interpreted.
+HSPLcom/example/**->**(**)**
+Lcom/example/**;

@@ -1,0 +1,41 @@
+<p>Ondalune streams your library from <b>Navidrome</b> or any <b>Subsonic/OpenSubsonic</b> server and plays it through a hand-tuned audio engine, with a player that takes its colours and motion from whatever is playing.</p>
+
+<p><b>Speed & pitch engine</b></p>
+<ul>
+<li>Playback speed from 0.80× to 2.00×</li>
+<li>Preserve key: time-stretch without changing pitch</li>
+<li>Analog varispeed: pitch follows speed, like tape or vinyl</li>
+<li>Independent tuning: up to ±12 semitones, with a one-tap 432 Hz shortcut</li>
+</ul>
+
+<p><b>Live studio reverb</b></p>
+<ul>
+<li>Real-time stereo reverb on the audio stream</li>
+<li>Room presets from Small Booth to Cathedral Arena, plus Dreamscape Wash for slowed + reverb</li>
+<li>Custom wet/dry, room size, decay and damping</li>
+<li>Five-band EQ presets</li>
+</ul>
+
+<p><b>Your Mix</b>: a playful home hero with covers from your library in morphing shapes. Tap play and you land in the player with a fresh mix of favourites, most-played tracks and the music that sounds like them.</p>
+
+<p><b>Looks that follow the music</b></p>
+<ul>
+<li>Colours read from the real cover, so black-and-white covers get a black-and-white theme</li>
+<li>Five animated player backgrounds</li>
+<li>Six interface styles, separate fonts for headings and text, and artwork shapes</li>
+<li>Drag-to-reorder Home sections and four collection layouts</li>
+<li>Material You, light, dark and AMOLED themes</li>
+<li>Eight launcher icons with themed-icon support</li>
+</ul>
+
+<p><b>Everyday listening</b></p>
+<ul>
+<li>Time-synced lyrics with tap-to-seek, also on big widgets</li>
+<li>Offline downloads stored privately in the app</li>
+<li>Swipe gestures and multi-select with Select all</li>
+<li>Smart shuffle and smart queue continuation</li>
+<li>Sleep timer and scrobbling</li>
+<li>Lock-screen playback, media notification and resizable widgets</li>
+</ul>
+
+<p><b>Private by design</b>: no ads, no analytics, no trackers and no account. Passwords are encrypted with Android's Keystore. Ondalune talks only to your servers, to Wikipedia for missing artist bios, and to Ko-fi if you tap the support button.</p>

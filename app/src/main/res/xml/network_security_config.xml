@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Self-hosted music servers often live on a home network without HTTPS (http://192.168.x.x,
+     http://nas.local), so plain HTTP stays allowed; the app warns about it when adding a server.
+     User-installed certificates are trusted so servers behind a private CA or a self-signed
+     certificate work once that certificate is installed on the device. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

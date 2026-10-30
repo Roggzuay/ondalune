@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/ondalune_player_widget"
+    android:minWidth="240dp"
+    android:minHeight="84dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="70dp"
+    android:previewLayout="@layout/ondalune_player_widget"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen|keyguard" />

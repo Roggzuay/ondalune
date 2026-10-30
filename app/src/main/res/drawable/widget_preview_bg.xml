@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stand-in card for the widget picker preview; replaced at runtime by the rendered card. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF221B2E" />
+    <corners android:radius="24dp" />
+</shape>
