@@ -55,7 +55,8 @@ class OndaluneRepository(
     }
 
     suspend fun saveAndActivateServer(
-        server: SubsonicServerConfig
+        server: SubsonicServerConfig,
+        onSyncProgress: (Int) -> Unit = {}
     ): Pair<SubsonicServerConfig, PingDiagnosticResult> {
         val diag = client.pingAndInspectServer(server)
         val updated = OndaluneCredentialSecurity.encryptServerConfig(
@@ -80,7 +81,7 @@ class OndaluneRepository(
         val finalServer = updated.copy(id = savedId)
 
         if (!finalServer.isDemoServer && diag.success) {
-            syncFullLibrary(finalServer)
+            syncFullLibrary(finalServer, onSyncProgress)
         }
         return finalServer to diag
     }

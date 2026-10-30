@@ -103,6 +103,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.ui.text.style.TextAlign
+import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -1636,11 +1640,11 @@ fun SettingsCustomizationScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Track Crossfade Duration",
+                                text = "Crossfade between songs",
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = if (settings.crossfadeSeconds == 0) "Off (Gapless)" else "${settings.crossfadeSeconds}s Smooth Overlap",
+                                text = if (settings.crossfadeSeconds == 0) "Off" else "${settings.crossfadeSeconds} s",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1651,11 +1655,16 @@ fun SettingsCustomizationScreen(
                             valueRange = 0f..12f,
                             steps = 5
                         )
+                        Text(
+                            text = "Each song fades into the next. Songs that follow each other on the same album play gaplessly instead.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     SettingsToggleRow(
-                        title = "Gapless Album Playback",
-                        subtitle = "Pre-buffer next OpenSubsonic stream for zero-latency track transitions",
+                        title = "Gapless playback",
+                        subtitle = "Buffers the next song so it starts on the very next beat, with no silence in between",
                         checked = settings.gaplessPlayback,
                         onCheckedChange = onSetGapless,
                         testTag = "toggle_gapless"
@@ -1694,9 +1703,14 @@ fun SettingsCustomizationScreen(
                     )
 
                     Text(
-                        text = "ReplayGain Loudness Mode",
+                        text = "ReplayGain (volume levelling)",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Uses the ReplayGain tags your server reads from your files. Songs without them play unchanged, and loud songs are never pushed into clipping.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     ReplayGainMode.entries.forEach { rg ->
                         val selected = settings.replayGainMode == rg
@@ -3925,8 +3939,10 @@ fun UserServerInfoModal(
 fun ServerOnboardingIntroModal(
     activeServer: SubsonicServerConfig,
     onConnectServer: (String, String, String, String, Boolean) -> Unit,
-    onContinueWithDemo: () -> Unit
+    onContinueWithDemo: () -> Unit,
+    syncState: OndaluneViewModel.OnboardingSync? = null
 ) {
+    val syncing = syncState != null && syncState.phase != OndaluneViewModel.OnboardingSync.Phase.FAILED
     var serverName by remember { mutableStateOf("") }
     var serverUrl by remember { mutableStateOf("https://") }
     var username by remember { mutableStateOf("") }
@@ -3967,7 +3983,11 @@ fun ServerOnboardingIntroModal(
                 }
             }
 
-            item {
+            if (syncing) item(key = "onboarding_sync") {
+                OnboardingSyncPanel(syncState!!, serverName.ifBlank { "your server" })
+            }
+
+            if (!syncing) item {
                 Surface(
                     shape = cornerShape(28.dp),
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -3977,6 +3997,14 @@ fun ServerOnboardingIntroModal(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        if (syncState?.phase == OndaluneViewModel.OnboardingSync.Phase.FAILED) {
+                            Text(
+                                text = "Couldn't connect: ${syncState.error.orEmpty().ifBlank { "check the address and your login" }}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.testTag("onboarding_connect_error")
+                            )
+                        }
                         Text(
                             text = "Enter Your OpenSubsonic Server Details",
                             style = MaterialTheme.typography.titleLarge
@@ -4094,7 +4122,7 @@ fun ServerOnboardingIntroModal(
                 }
             }
 
-            item {
+            if (!syncing) item {
                 SpringPressableSurface(
                     onClick = onContinueWithDemo,
                     color = MaterialTheme.colorScheme.primaryContainer,
@@ -4137,6 +4165,79 @@ fun ServerOnboardingIntroModal(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * First sync on the onboarding screen: a ring that fills with the share of the library already
+ * copied, the live song count, and a check at 100% just before onboarding zooms into Home.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun OnboardingSyncPanel(state: OndaluneViewModel.OnboardingSync, serverName: String) {
+    val phase = state.phase
+    val fraction = state.fraction
+    val animated by animateFloatAsState(fraction ?: 0f, animationSpec = tween(420), label = "onboardingSyncProgress")
+    Surface(
+        shape = cornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("onboarding_sync_panel")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(168.dp)) {
+                if (fraction == null) {
+                    CircularWavyProgressIndicator(modifier = Modifier.fillMaxSize())
+                } else {
+                    CircularWavyProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxSize())
+                }
+                if (phase == OndaluneViewModel.OnboardingSync.Phase.DONE) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = "Sync complete",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp)
+                    )
+                } else {
+                    Text(
+                        text = if (fraction != null) "${(animated * 100).roundToInt()}%" else "…",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Text(
+                text = when (phase) {
+                    OndaluneViewModel.OnboardingSync.Phase.CONNECTING -> "Connecting to $serverName"
+                    OndaluneViewModel.OnboardingSync.Phase.DONE -> "Your library is ready"
+                    else -> "Syncing your library"
+                },
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = when {
+                    phase == OndaluneViewModel.OnboardingSync.Phase.CONNECTING -> "Checking the server and your login"
+                    state.total != null -> "%,d of %,d songs".format(state.found, state.total)
+                    else -> "%,d songs so far".format(state.found)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("onboarding_sync_count")
+            )
+            if (phase != OndaluneViewModel.OnboardingSync.Phase.DONE) Text(
+                text = "Big libraries take a minute the first time. After this, only changes are synced.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

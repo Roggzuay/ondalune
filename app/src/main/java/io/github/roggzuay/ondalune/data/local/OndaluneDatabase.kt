@@ -275,7 +275,7 @@ interface OndaluneDao {
         SubsonicPlaylist::class,
         SubsonicDownloadEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -360,6 +360,17 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /** ReplayGain values from the server; nullable, filled on the next library sync. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (column in listOf("rgTrackGain", "rgAlbumGain", "rgTrackPeak", "rgAlbumPeak")) {
+                    if (!hasColumn(db, "subsonic_tracks", column)) {
+                        db.execSQL("ALTER TABLE subsonic_tracks ADD COLUMN $column REAL")
+                    }
+                }
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -367,7 +378,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }
