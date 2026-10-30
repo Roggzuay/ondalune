@@ -1,0 +1,33 @@
+name: Bug report
+description: Something isn't working as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ondalune version
+      description: Settings → About & licences
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and Android version
+      placeholder: e.g. Galaxy S23 Ultra, Android 16
+  - type: input
+    id: server
+    attributes:
+      label: Music server
+      placeholder: e.g. Navidrome 0.58, Gonic, Airsonic-Advanced
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+      description: Please remove server addresses and usernames from screenshots.

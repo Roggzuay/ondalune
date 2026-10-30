@@ -1,0 +1,1 @@
+Music player for Navidrome & Subsonic with speed/pitch, reverb and synced lyrics
