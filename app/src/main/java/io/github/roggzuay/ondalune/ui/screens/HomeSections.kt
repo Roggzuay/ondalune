@@ -44,6 +44,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -209,13 +210,20 @@ fun YourMixHero(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(540.dp)
             // Above the shelves below it, so the launch zoom swells over them rather than under.
             .zIndex(1f)
             .padding(horizontal = 20.dp)
             .testTag("home_your_mix")
     ) {
-        val w = maxWidth
+        // Phones stack the title over the collage. Wide screens (tablets, landscape, unfolded
+        // foldables) put the title and play button on the left and the collage, kept at phone
+        // size, beside it, so the shapes never stretch with the screen.
+        val fullWidth = maxWidth
+        val wide = fullWidth >= 600.dp
+        val w = if (wide) minOf(fullWidth * 0.58f, 470.dp) else fullWidth
+        val left = fullWidth - w
+        val rise = if (wide) 200.dp else 0.dp
+        Box(Modifier.fillMaxWidth().height(if (wide) 380.dp else 540.dp)) {
         Column(modifier = Modifier
             .padding(top = 8.dp)
             .graphicsLayer {
@@ -241,7 +249,7 @@ fun YourMixHero(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.width(w * 0.55f)
+                modifier = Modifier.width(if (wide) left - 24.dp else w * 0.55f)
             )
         }
 
@@ -254,23 +262,26 @@ fun YourMixHero(
             indication = null,
             onClick = start
         )
-        MixPiece(cover(1), CircleShape, 104.dp, w * 0.0f, 250.dp, phase, 1.4f, entrance.value, 1, collage, launchValue)
-        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, w * 0.14f, 300.dp, phase, 0f, entrance.value, 2, collage, launchValue,
+        MixPiece(cover(1), CircleShape, 104.dp, left + w * 0.0f, 250.dp - rise, phase, 1.4f, entrance.value, 1, collage, launchValue)
+        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, left + w * 0.14f, 300.dp - rise, phase, 0f, entrance.value, 2, collage, launchValue,
             height = 168.dp, rotation = -36f)
-        MixPiece(cover(4), CircleShape, 70.dp, w * 0.66f, 236.dp, phase, 2.2f, entrance.value, 3, collage, launchValue,
+        MixPiece(cover(4), CircleShape, 70.dp, left + w * 0.66f, 236.dp - rise, phase, 2.2f, entrance.value, 3, collage, launchValue,
             morph = remember { Morph(MaterialShapes.Cookie6Sided, MaterialShapes.Clover4Leaf) })
-        MixPiece(cover(2), CircleShape, 132.dp, w - 136.dp, 404.dp, phase, 3.1f, entrance.value, 4, collage, launchValue)
-        MixPiece(cover(3), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie9Sided) }, 96.dp, 4.dp, 420.dp,
+        MixPiece(cover(2), CircleShape, 132.dp, left + w - 136.dp, 404.dp - rise, phase, 3.1f, entrance.value, 4, collage, launchValue)
+        MixPiece(cover(3), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie9Sided) }, 96.dp, left + 4.dp, 420.dp - rise,
             phase, 4.4f, entrance.value, 5, collage, launchValue)
 
         MixPlayButton(
             onClick = start,
             launch = launchValue,
+            // Swell far enough to cover the whole screen, however wide it is.
+            maxZoom = maxOf(17f, fullWidth.value * 2.6f / 128f),
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 86.dp)
+                .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
+                .padding(top = if (wide) 200.dp else 86.dp)
                 .floating(phase, 0.6f, entrance.value, 0)
         )
+        }
     }
 }
 
@@ -377,10 +388,15 @@ private fun MixPiece(
                 model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(300).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    // Counter-rotate inside the tilted pill so the artwork stays upright.
-                    .graphicsLayer { rotationZ = -rotation; scaleX = if (rotation != 0f) 1.5f else 1f; scaleY = scaleX }
+                modifier = if (rotation != 0f) {
+                    // Upright artwork inside the tilted pill: a square as wide as the pill's
+                    // diagonal always covers it, whatever the pill's length.
+                    Modifier
+                        .requiredSize(kotlin.math.hypot(width.value, height.value).dp)
+                        .graphicsLayer { rotationZ = -rotation }
+                } else {
+                    Modifier.fillMaxSize()
+                }
             )
         }
     }
@@ -389,7 +405,7 @@ private fun MixPiece(
 /** Big round play button that squishes into a cookie while pressed. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, modifier: Modifier = Modifier) {
+private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, maxZoom: Float, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val progress by animateFloatAsState(
@@ -405,7 +421,7 @@ private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, modifier: Mo
             .graphicsLayer {
                 // On launch the button swells past the screen edges: the zoom into the player.
                 val t = launch()
-                val zoom = if (t <= 0.15f) 1f else 1f + ((t - 0.15f) / 0.85f).let { it * it } * 16f
+                val zoom = if (t <= 0.15f) 1f else 1f + ((t - 0.15f) / 0.85f).let { it * it } * (maxZoom - 1f)
                 val s = (1f - 0.06f * progress) * zoom
                 scaleX = s; scaleY = s
                 rotationZ = progress * 20f + t * 40f
