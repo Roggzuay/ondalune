@@ -1,0 +1,1 @@
+Your Mix launch is reworked: the artwork shapes and title rush away from the play button as it zooms into the player, instead of shattering. Smoother: playback starts and the player opens once the zoom covers the screen, so the animation no longer stutters.

@@ -162,6 +162,7 @@ import io.github.roggzuay.ondalune.ui.components.formatDurationSec
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
 import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
+import kotlinx.coroutines.Job
 
 /**
  * Home ("Listen Now") Screen with Pull-Down Quick Sync (popping a Material 3 Expressive morphing
@@ -185,7 +186,7 @@ fun ListenNowHomeScreen(
     onPlayTrack: (SubsonicTrack) -> Unit,
     onToggleStarTrack: (SubsonicTrack) -> Unit,
     onOpenSonicLab: () -> Unit,
-    onStartSmartShuffle: () -> Unit = {},
+    onStartSmartShuffle: (startAfter: Job?) -> Job? = { null },
     onOpenPlayerFromMix: () -> Unit = {},
     onPullProgressChange: (Float) -> Unit = {},
     onQuickSync: () -> Unit = {},
@@ -316,7 +317,7 @@ fun ListenNowHomeScreen(
                     YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onOpenPlayer = onOpenPlayerFromMix)
                 }
                 HomeSection.QUICK_ACTIONS -> item(key = "quick_actions") {
-                    HomeQuickActions(onOpenShelf = onOpenShelf, onShuffle = onStartSmartShuffle)
+                    HomeQuickActions(onOpenShelf = onOpenShelf, onShuffle = { onStartSmartShuffle(null) })
                 }
                 HomeSection.FEATURED -> if (featuredAlbum != null) item(key = "featured") {
                     FeaturedAlbumHeroCard(

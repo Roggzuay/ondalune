@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 (2026-10-31)
+
+- New Your Mix launch: as the play button zooms into the player, the artwork shapes and the title rush away from it and grow, instead of shattering.
+- Smoother launch: the mix starts playing and the player opens once the zoom covers the screen, so starting playback no longer stutters the animation. The shapes and title redraw from cached layers instead of being recut every frame.
+
 ## 1.0.2 (2026-10-31)
 
 - Your Mix on tablets, landscape screens and unfolded foldables: the title and play button sit on the left and the artwork collage stays at its intended size beside them, instead of stretching across the screen.
