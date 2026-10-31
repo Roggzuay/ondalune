@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 (2026-10-31)
+
+- Your Mix on tablets, landscape screens and unfolded foldables: the title and play button sit on the left and the artwork collage stays at its intended size beside them, instead of stretching across the screen.
+- The tilted artwork in Your Mix always fills its shape.
+- The launch animation from Your Mix covers wide screens completely.
+
 ## 1.0.1 (2026-10-31)
 
 - New app icon: a white crescent moon cradling a waveform, on black. Choose Moonlight, Paper, Slate or Graphite in Settings → App icon; themed icons on Android 13+ use the new shape.
