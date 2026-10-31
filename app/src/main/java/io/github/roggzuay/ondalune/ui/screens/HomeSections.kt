@@ -15,18 +15,14 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.runtime.derivedStateOf
+import kotlinx.coroutines.Job
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.unit.DpOffset
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
-import kotlin.math.cos
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -149,15 +145,15 @@ private fun mixArt(shelves: HomeShelves): MixArt {
  * "Your Mix": a big playful hero. Library artwork floats in a cluster of Material shapes and a
  * large play button morphs as it is pressed; tapping either plays a fresh smart mix.
  *
- * Starting the mix launches into the player: the artwork shapes shatter outwards while the play
- * button swells to fill the screen, then [onOpenPlayer] takes over. Coming back to Home, the shapes
- * pop back in.
+ * Starting the mix launches into the player: the play button swells to fill the screen while the
+ * artwork shapes and the title rush away from it and grow, as if the camera dived past them into
+ * the button. Then [onOpenPlayer] takes over. Coming back to Home, the shapes pop back in.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun YourMixHero(
     shelves: HomeShelves,
-    onPlay: () -> Unit,
+    onPlay: (startAfter: Job?) -> Job?,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -183,22 +179,33 @@ fun YourMixHero(
         if (launch.isRunning) return@start
         haptics?.performSubtleTick()
         if (reduced) {
-            onPlay()
+            onPlay(null)
             onOpenPlayer()
             return@start
         }
-        // The mix is built in the background while the shards fly; the player opens while the
-        // button is still swelling, so the two motions overlap into one zoom.
-        onPlay()
+        // The songs are picked in the background while the shapes fly, but playback only starts
+        // once the button covers the screen, and the player opens after it. Both are heavy
+        // main-thread work, so they land behind a still colour instead of stuttering the zoom.
+        val covered = Job()
+        val mix = onPlay(covered)
         scope.launch {
-            // Follows the animation rather than the clock, so a slow frame never opens the
-            // player before the button has grown.
-            snapshotFlow { launch.value }.first { it >= 0.7f }
+            try {
+                // Follows the animation rather than the clock, so a slow frame never starts the
+                // mix before the button has grown.
+                snapshotFlow { launch.value }.first { it >= 0.88f }
+            } finally {
+                // Never leave the mix waiting, even if Home goes away mid-zoom.
+                covered.complete()
+            }
+            mix?.join()
+            snapshotFlow { launch.value }.first { it >= 0.9f }
             onOpenPlayer()
         }
         scope.launch {
-            launch.animateTo(1f, tween(620, easing = FastOutSlowInEasing))
-            // Reset under the player, then let the shapes pop back in for when Home shows again.
+            launch.animateTo(1f, tween(560, easing = FastOutSlowInEasing))
+            // Stay covered until the mix is playing, then reset under the player and let the
+            // shapes pop back in for when Home shows again.
+            mix?.join()
             delay(600)
             launch.snapTo(0f)
             entrance.snapTo(0f)
@@ -206,6 +213,7 @@ fun YourMixHero(
         }
     }
     val launchValue = { launch.value }
+    val entranceValue = { entrance.value }
 
     BoxWithConstraints(
         modifier = modifier
@@ -223,17 +231,14 @@ fun YourMixHero(
         val w = if (wide) minOf(fullWidth * 0.58f, 470.dp) else fullWidth
         val left = fullWidth - w
         val rise = if (wide) 200.dp else 0.dp
+        // Centre of the play button: the point the launch zooms into.
+        val focus = if (wide) DpOffset(64.dp, 264.dp) else DpOffset(fullWidth - 64.dp, 150.dp)
         Box(Modifier.fillMaxWidth().height(if (wide) 380.dp else 540.dp)) {
         Column(modifier = Modifier
             .padding(top = 8.dp)
-            .graphicsLayer {
-                // The title rushes towards the viewer and fades as the hero zooms in.
-                val t = launchValue()
-                val s = 1f + t * 0.5f
-                scaleX = s; scaleY = s
-                alpha = 1f - (t * 1.8f).coerceAtMost(1f)
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
-            }
+            // Offscreen: the text is drawn once and the cached picture scales, instead of the
+            // glyphs being re-rendered at a new size every frame.
+            .flyOut(DpOffset(if (wide) 110.dp else fullWidth * 0.25f, 90.dp), focus, launchValue, CompositingStrategy.Offscreen)
         ) {
             Text(
                 text = "Your\nMix",
@@ -253,7 +258,7 @@ fun YourMixHero(
             )
         }
 
-        // The button is drawn last (below) so it swells over the shards.
+        // The button is drawn last (below) so it swells over the shapes.
 
         // The collage. Positions are fractions of the width so it composes the same on any phone.
         val cover = { i: Int -> art.covers.getOrNull(i % art.covers.size.coerceAtLeast(1)) }
@@ -262,87 +267,66 @@ fun YourMixHero(
             indication = null,
             onClick = start
         )
-        MixPiece(cover(1), CircleShape, 104.dp, left + w * 0.0f, 250.dp - rise, phase, 1.4f, entrance.value, 1, collage, launchValue)
-        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, left + w * 0.14f, 300.dp - rise, phase, 0f, entrance.value, 2, collage, launchValue,
+        MixPiece(cover(1), CircleShape, 104.dp, left + w * 0.0f, 250.dp - rise, phase, 1.4f, entranceValue, 1, collage, launchValue, focus)
+        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, left + w * 0.14f, 300.dp - rise, phase, 0f, entranceValue, 2, collage, launchValue, focus,
             height = 168.dp, rotation = -36f)
-        MixPiece(cover(4), CircleShape, 70.dp, left + w * 0.66f, 236.dp - rise, phase, 2.2f, entrance.value, 3, collage, launchValue,
+        MixPiece(cover(4), CircleShape, 70.dp, left + w * 0.66f, 236.dp - rise, phase, 2.2f, entranceValue, 3, collage, launchValue, focus,
             morph = remember { Morph(MaterialShapes.Cookie6Sided, MaterialShapes.Clover4Leaf) })
-        MixPiece(cover(2), CircleShape, 132.dp, left + w - 136.dp, 404.dp - rise, phase, 3.1f, entrance.value, 4, collage, launchValue)
+        MixPiece(cover(2), CircleShape, 132.dp, left + w - 136.dp, 404.dp - rise, phase, 3.1f, entranceValue, 4, collage, launchValue, focus)
         MixPiece(cover(3), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie9Sided) }, 96.dp, left + 4.dp, 420.dp - rise,
-            phase, 4.4f, entrance.value, 5, collage, launchValue)
+            phase, 4.4f, entranceValue, 5, collage, launchValue, focus)
 
         MixPlayButton(
             onClick = start,
             launch = launchValue,
             // Swell far enough to cover the whole screen, however wide it is.
-            maxZoom = maxOf(17f, fullWidth.value * 2.6f / 128f),
+            maxZoom = maxOf(17f, fullWidth.value * 3.2f / 128f),
             modifier = Modifier
                 .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
                 .padding(top = if (wide) 200.dp else 86.dp)
-                .floating(phase, 0.6f, entrance.value, 0)
+                .floating(phase, 0.6f, entranceValue, 0)
         )
         }
     }
 }
 
 /**
- * Breaks the drawn content into [ShardCount] jagged wedges around an off-centre point and flings
- * them outward as [progress] goes 0 → 1. The content is recorded once per frame into [layer] and
- * redrawn per shard, so the artwork is not loaded or laid out again.
+ * The launch zoom: as [launch] goes 0 → 1 the element rushes away from [focus] (the play button's
+ * centre) and grows, as if the camera dived past it. Elements on different sides of the button
+ * part in different directions. Read in the draw layer, so nothing recomposes or re-lays out.
  */
-private const val ShardCount = 7
-
-private fun Modifier.shatter(layer: androidx.compose.ui.graphics.layer.GraphicsLayer, seed: Int, progress: () -> Float): Modifier =
-    drawWithContent {
-        val t = progress()
-        if (t <= 0f) {
-            drawContent()
-            return@drawWithContent
-        }
-        layer.record { this@drawWithContent.drawContent() }
-        val random = kotlin.random.Random(seed)
-        val w = size.width
-        val h = size.height
-        val centre = Offset(w * (0.38f + random.nextFloat() * 0.24f), h * (0.38f + random.nextFloat() * 0.24f))
-        val reach = maxOf(w, h) * 1.5f
-        val angles = List(ShardCount) { i -> (i + random.nextFloat() * 0.6f) / ShardCount * 2f * PI.toFloat() }
-        val eased = t * t
-        layer.alpha = (1f - t * 1.25f).coerceIn(0f, 1f)
-        for (i in angles.indices) {
-            val a0 = angles[i]
-            val a1 = if (i == angles.lastIndex) angles[0] + 2f * PI.toFloat() else angles[i + 1]
-            val mid = (a0 + a1) / 2f
-            val shard = Path().apply {
-                moveTo(centre.x, centre.y)
-                lineTo(centre.x + cos(a0) * reach, centre.y + sin(a0) * reach)
-                lineTo(centre.x + cos(mid) * reach * 1.1f, centre.y + sin(mid) * reach * 1.1f)
-                lineTo(centre.x + cos(a1) * reach, centre.y + sin(a1) * reach)
-                close()
-            }
-            val distance = eased * (220.dp.toPx() + random.nextFloat() * 160.dp.toPx())
-            val spin = (random.nextFloat() - 0.5f) * 140f * eased
-            val pivot = Offset(centre.x + cos(mid) * w * 0.3f, centre.y + sin(mid) * h * 0.3f)
-            withTransform({
-                translate(cos(mid) * distance, sin(mid) * distance)
-                rotate(spin, pivot)
-                scale(1f - 0.35f * eased, 1f - 0.35f * eased, pivot)
-            }) {
-                clipPath(shard) { drawLayer(layer) }
-            }
-        }
-    }
+private fun Modifier.flyOut(
+    centre: DpOffset,
+    focus: DpOffset,
+    launch: () -> Float,
+    compositing: CompositingStrategy = CompositingStrategy.ModulateAlpha
+): Modifier = graphicsLayer {
+    val t = launch()
+    if (t <= 0f) return@graphicsLayer
+    val dx = (centre.x - focus.x).toPx()
+    val dy = (centre.y - focus.y).toPx()
+    val distance = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+    // Far elements travel further, and even the nearest one clears the button.
+    val push = t * (1.2f + 160.dp.toPx() / distance)
+    translationX = dx * push
+    translationY = dy * push
+    val s = 1f + 1.3f * t
+    scaleX = s; scaleY = s
+    alpha = 1f - ((t - 0.4f) / 0.45f).coerceIn(0f, 1f)
+    compositingStrategy = compositing
+}
 
 /** Gentle bob and sway driven by the shared [phase]; read in the draw layer, so no recomposition. */
 private fun Modifier.floating(
     phase: androidx.compose.runtime.State<Float>?,
     offset: Float,
-    entrance: Float,
+    entrance: () -> Float,
     order: Int
 ): Modifier = graphicsLayer {
     val p = phase?.value ?: 0f
     translationY = sin(p + offset) * 7.dp.toPx()
     rotationZ = sin(p * 0.5f + offset) * 3f
-    val local = ((entrance * 1.6f) - order * 0.12f).coerceIn(0f, 1f)
+    val local = ((entrance() * 1.6f) - order * 0.12f).coerceIn(0f, 1f)
     scaleX = 0.6f + 0.4f * local
     scaleY = 0.6f + 0.4f * local
     alpha = local
@@ -357,22 +341,22 @@ private fun MixPiece(
     y: Dp,
     phase: androidx.compose.runtime.State<Float>?,
     offset: Float,
-    entrance: Float,
+    entrance: () -> Float,
     order: Int,
     modifier: Modifier,
     launch: () -> Float,
+    focus: DpOffset,
     height: Dp = width,
     rotation: Float = 0f,
     morph: Morph? = null
 ) {
-    val shardLayer = rememberGraphicsLayer()
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
             .size(width, height)
+            .flyOut(DpOffset(x + width / 2, y + height / 2), focus, launch)
             .floating(phase, offset, entrance, order)
             .graphicsLayer { rotationZ += rotation }
-            .shatter(shardLayer, seed = order * 31) { launch() }
             .then(
                 // A morphing piece re-cuts its outline in the draw layer each frame (no recomposition).
                 if (morph != null) Modifier.graphicsLayer {
@@ -414,7 +398,10 @@ private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, maxZoom: Flo
         label = "mixPress"
     )
     val morph = remember { Morph(MaterialShapes.Circle, MaterialShapes.Cookie9Sided) }
-    val shape = if (progress == 0f) CircleShape else MorphShape(morph, progress)
+    // A morphed outline is a path clip, costly once the button has swelled to many times its
+    // size, so the launch always zooms the plain circle.
+    val launching by remember { derivedStateOf { launch() > 0f } }
+    val shape = if (progress == 0f || launching) CircleShape else MorphShape(morph, progress)
     Box(
         modifier = modifier
             .size(128.dp)

@@ -2205,13 +2205,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
      * "Your Mix": favourites, top and recent tracks as seeds, topped up with library songs that
      * share their genres, artists and era, then shuffled so every press sounds different.
      */
-    fun playYourMix() {
+    /**
+     * Plays a fresh smart mix. The songs are picked in the background straight away; when
+     * [startAfter] is given, playback waits for it, so the Your Mix hero can hold the start (heavy
+     * main-thread work) until its zoom covers the screen. Returns the job that finishes once the
+     * mix is playing, or null when there is nothing to play.
+     */
+    fun playYourMix(startAfter: Job? = null): Job? {
         val shelves = homeShelves.value
         val seeds = (shelves.favouriteTracks.take(25) + shelves.mostPlayed.take(25) + shelves.jumpBackIn.take(15))
             .distinctBy { it.id }
         val library = allServerTracks.value
-        if (library.isEmpty()) return
-        viewModelScope.launch {
+        if (library.isEmpty()) return null
+        return viewModelScope.launch {
             // Scoring the whole library is too slow for the main thread on big libraries; it
             // would stall the hero's launch animation.
             val picks = withContext(Dispatchers.Default) {
@@ -2223,6 +2229,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             if (picks.isEmpty()) return@launch
+            startAfter?.join()
             _shuffleMode.value = ShuffleMode.OFF
             _shuffleEnabled.value = false
             _playbackQueue.value = picks
