@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 (2026-11-01)
+
+- Album cards on Home and in the library open the album wherever you tap them; tapping the artist name under an album no longer jumps to the artist's page. Artist names link only from the full-screen player.
+- Back from a page opened from the player, "Go to artist/album" or the Top artists row returns to where you were (including the page and scroll position on Home), instead of leaving you on the Artists list.
+- Home keeps its scroll position while an album or artist page is open.
+- Playing from a playlist: the full-screen player shows "Playing from playlist" and its name; tap it to open the playlist. Tap the album name under the song title to open the album.
+
 ## 1.0.3 (2026-10-31)
 
 - New Your Mix launch: as the play button zooms into the player, the artwork shapes and the title rush away from it and grow, instead of shattering.

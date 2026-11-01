@@ -72,6 +72,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -243,6 +244,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val selectedGenreName by viewModel.selectedGenreDetail.collectAsStateWithLifecycle()
     val selectedFolderPath by viewModel.selectedFolderDetail.collectAsStateWithLifecycle()
     val openHomeShelf by viewModel.openHomeShelf.collectAsStateWithLifecycle()
+    val selectedPlaylistId by viewModel.selectedPlaylistDetailId.collectAsStateWithLifecycle()
+    val playingFromPlaylist by viewModel.playingFromPlaylist.collectAsStateWithLifecycle()
+    // Held here, outside the tab transitions, so Home keeps its scroll position while a page from
+    // it (or another tab) is open.
+    val homeListState = rememberLazyListState()
     val scrollToTopSignal by viewModel.scrollToTopSignal.collectAsStateWithLifecycle()
 
     val pingDiagnostic by viewModel.pingDiagnostic.collectAsStateWithLifecycle()
@@ -292,7 +298,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val anyModalOpen = isPlayerExpanded || isSonicLabOpen || isSpeedPitchOpen ||
         isSleepTimerOpen || isUserServerOpen || isAppIconSettingsOpen || showServerOnboarding
     val anySubDetailOpen = openHomeShelf != null || selectedAlbumId != null || selectedArtistId != null ||
-        selectedGenreName != null || selectedFolderPath != null
+        selectedGenreName != null || selectedFolderPath != null || selectedPlaylistId != null
 
     if (currentDestination != PrimaryDestination.HOME && !anyModalOpen && !anySubDetailOpen) {
         BackHandler {
@@ -521,7 +527,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         Column(modifier = Modifier.weight(1f)) {
                             val reducedMotion = LocalReducedMotion.current
                             AnimatedContent(
-                                targetState = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf),
+                                targetState = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf, selectedPlaylistId),
                                 contentKey = { it.route + "/" + it.detailKey },
                                 transitionSpec = {
                                     when {
@@ -546,6 +552,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 val selectedGenreName = nav.genreName
                                 val selectedFolderPath = nav.folderPath
                                 val openHomeShelf = nav.shelf
+                                val selectedPlaylistId = nav.playlistId
                                 if (searchQuery.isNotBlank() && destination != PrimaryDestination.SETTINGS) {
                                     SmartDynamicSearchScreen(
                                         searchQuery = searchQuery,
@@ -611,7 +618,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             scrollToTopSignal = scrollToTopSignal,
                                             openShelf = openHomeShelf,
                                             onOpenShelf = viewModel::openHomeShelf,
-                                            onPlayTrackFrom = { track, queue -> viewModel.playTrack(track, queue) }
+                                            onPlayTrackFrom = { track, queue -> viewModel.playTrack(track, queue) },
+                                            listState = homeListState
                                         )
                                     }
 
@@ -714,8 +722,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onPlayPlaylist = viewModel::playPlaylist,
                                             onCreatePlaylist = viewModel::createPlaylist,
                                             onDeletePlaylist = viewModel::deletePlaylist,
-                                            onPlayTrack = viewModel::playTrack,
                                             onToggleStarTrack = viewModel::toggleStarTrack,
+                                            selectedPlaylistId = selectedPlaylistId,
+                                            onOpenPlaylist = viewModel::openPlaylistDetail,
                                             viewMode = tabDisplayPreferences["PLAYLISTS"]?.viewMode ?: LibraryViewMode.LIST,
                                             onSetViewMode = { viewModel.setCategoryViewMode("PLAYLISTS", it) },
                                             scrollToTopSignal = scrollToTopSignal
@@ -913,6 +922,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
+                                playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
+                                onOpenPlaylist = viewModel::openPlaylistAnywhere,
                                 onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                 onPlayQueueTrack = { viewModel.playFromQueue(it) },
                                 onRemoveQueueTrack = viewModel::removeTrackFromQueue,
@@ -1318,15 +1329,17 @@ private data class ShellNavState(
     val artistId: String?,
     val genreName: String?,
     val folderPath: String?,
-    val shelf: HomeShelfKind?
+    val shelf: HomeShelfKind?,
+    val playlistId: String?
 ) {
     val route: String get() = destination.route
     val detailKey: String? get() = albumId?.let { "album:$it" } ?: artistId?.let { "artist:$it" }
-        ?: genreName?.let { "genre:$it" } ?: folderPath?.let { "folder:$it" } ?: shelf?.let { "shelf:${it.name}" }
+        ?: genreName?.let { "genre:$it" } ?: folderPath?.let { "folder:$it" } ?: playlistId?.let { "playlist:$it" }
+        ?: shelf?.let { "shelf:${it.name}" }
 
     /** Navigation depth inside the tab (shelf page, then a detail on top), for slide direction. */
     val depth: Int get() = (if (shelf != null) 1 else 0) +
-        (if (albumId != null || artistId != null || genreName != null || folderPath != null) 1 else 0)
+        (if (albumId != null || artistId != null || genreName != null || folderPath != null || playlistId != null) 1 else 0)
 }
 
 /** Material fade through: outgoing fades fast, incoming fades and settles up from 92% scale. */

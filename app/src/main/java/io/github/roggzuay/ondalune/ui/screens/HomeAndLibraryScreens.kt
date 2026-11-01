@@ -197,7 +197,9 @@ fun ListenNowHomeScreen(
     onPlayTrackFrom: (SubsonicTrack, List<SubsonicTrack>) -> Unit = { track, _ -> onPlayTrack(track) },
     homeSections: List<HomeSection> = emptyList(),
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
-    onResetHomeSections: () -> Unit = {}
+    onResetHomeSections: () -> Unit = {},
+    /** Pass a state held above the tab's content to come back to the same scroll position. */
+    listState: LazyListState = rememberLazyListState()
 ) {
     var showLayoutEditor by remember { mutableStateOf(false) }
     val sections = homeSections.ifEmpty { LocalStyleSpec.current.defaultHome }
@@ -250,7 +252,6 @@ fun ListenNowHomeScreen(
     }
 
     val featuredAlbum = albums.firstOrNull()
-    val listState = rememberLazyListState()
     ScrollToTopOnSignal(listState, scrollToTopSignal)
     val hapticManager = LocalHapticFeedbackManager.current
     var pullDistancePx by remember { mutableFloatStateOf(0f) }
@@ -436,15 +437,11 @@ fun FeaturedAlbumHeroCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val heroActions = LocalTrackActions.current
+                    // Plain text: artist names link only from the full-screen player.
                     Text(
                         text = album.artist,
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clip(cornerShape(6.dp))
-                            .clickable { heroActions?.openArtist(album.artistId, album.artist) }
-                            .testTag("album_artist_link")
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = "${album.genre} • ${album.year}",
@@ -702,14 +699,13 @@ fun AlbumExpressiveCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            val cardActions = LocalTrackActions.current
+            // Plain text: the whole card opens the album.
             Text(
                 text = album.artist,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable { cardActions?.openArtist(album.artistId, album.artist) }
+                overflow = TextOverflow.Ellipsis
             )
             if (!standard) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -725,8 +721,8 @@ fun AlbumExpressiveCard(
 
 /**
  * Track row used by every list. Swipe left = play next, swipe right = favourite, long-press =
- * options sheet (or toggle while multi-selecting). Artist and album names open their pages, and a
- * thin progress bar appears while the track downloads.
+ * options sheet (or toggle while multi-selecting). A thin progress bar appears while the track
+ * downloads.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1979,23 +1975,24 @@ fun PlaylistsCollectionScreen(
     tracks: List<SubsonicTrack>,
     currentTrackId: String?,
     isPlaying: Boolean,
-    onPlayPlaylist: (SubsonicPlaylist) -> Unit,
-    onPlayTrack: (SubsonicTrack, List<SubsonicTrack>) -> Unit,
+    /** Plays the playlist from the given track (its first when null). */
+    onPlayPlaylist: (SubsonicPlaylist, SubsonicTrack?) -> Unit,
     onToggleStarTrack: (SubsonicTrack) -> Unit,
     onCreatePlaylist: (String, String, List<String>) -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    selectedPlaylistId: String? = null,
+    onOpenPlaylist: (String?) -> Unit = {},
     viewMode: LibraryViewMode = LibraryViewMode.LIST,
     onSetViewMode: (LibraryViewMode) -> Unit = {},
     scrollToTopSignal: Int = 0
 ) {
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
-    var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<SubsonicPlaylist?>(null) }
     val trackMap = remember(tracks) { tracks.associateBy { it.id } }
 
     val selectedPlaylist = playlists.find { it.id == selectedPlaylistId }
     if (selectedPlaylist != null) {
-        BackHandler { selectedPlaylistId = null }
+        BackHandler { onOpenPlaylist(null) }
         val playlistTracks = selectedPlaylist.trackIds.mapNotNull { trackMap[it] }
         GenreOrFolderDetailSubScreen(
             title = selectedPlaylist.name,
@@ -2003,9 +2000,9 @@ fun PlaylistsCollectionScreen(
             tracks = playlistTracks,
             currentTrackId = currentTrackId,
             isPlaying = isPlaying,
-            onBack = { selectedPlaylistId = null },
-            onPlayAll = { onPlayPlaylist(selectedPlaylist) },
-            onPlayTrack = { trk -> onPlayTrack(trk, playlistTracks) },
+            onBack = { onOpenPlaylist(null) },
+            onPlayAll = { onPlayPlaylist(selectedPlaylist, null) },
+            onPlayTrack = { trk -> onPlayPlaylist(selectedPlaylist, trk) },
             onToggleStar = onToggleStarTrack
         )
         return
@@ -2047,7 +2044,7 @@ fun PlaylistsCollectionScreen(
             }
             collectionEntries(
                 playlists.distinctBy { it.id }.map { pl ->
-                    pl.toEntry(trackMap, onOpen = { selectedPlaylistId = pl.id }, onPlay = { onPlayPlaylist(pl) }, onDelete = { pendingDelete = pl })
+                    pl.toEntry(trackMap, onOpen = { onOpenPlaylist(pl.id) }, onPlay = { onPlayPlaylist(pl, null) }, onDelete = { pendingDelete = pl })
                 },
                 viewMode, columns
             )

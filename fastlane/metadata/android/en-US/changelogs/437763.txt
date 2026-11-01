@@ -1,0 +1,1 @@
+Album cards open the album wherever you tap them; artist names link only from the full-screen player. Back from a page opened from the player or Top artists returns to where you were, Home scroll position included. Playing from a playlist? The player says so; tap the name to open the playlist.
