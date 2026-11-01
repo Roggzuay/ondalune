@@ -647,6 +647,8 @@ data class PlayerCustomizationSettings(
     val showRemainingTime: Boolean = false,
     val showTechnicalFormatBadge: Boolean = true,
     val showPlayerStarButton: Boolean = true,
+    /** The mini player slides away while scrolling down a list and returns on a scroll up. */
+    val hideMiniPlayerOnScroll: Boolean = true,
     val showCodecBadgesInLists: Boolean = true,
     val showStarRatingsInLists: Boolean = true,
     val fallbackArtistToAlbumArt: Boolean = false,

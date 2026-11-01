@@ -1,0 +1,1 @@
+The mini player stays hidden until you play something, instead of showing a song that isn't playing (on a first launch, a demo song). On launch, Ondalune only brings back the song you last played. The mini player slides away as you scroll down and returns as soon as you scroll up; turn this off in Settings → Appearance.

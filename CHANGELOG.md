@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 (2026-11-01)
+
+- The mini player stays hidden until you play something. Before, it showed a song that wasn't playing, on a first launch even a song from the built-in demo library ("Rain on Shimokitazawa").
+- On launch, Ondalune only brings back the song you last played, ready to resume from headphones or the notification.
+- The mini player slides away as you scroll down a list and comes back as soon as you scroll up. Turn this off in Settings → Appearance → Hide mini player while scrolling.
+
 ## 1.0.4 (2026-11-01)
 
 - Album cards on Home and in the library open the album wherever you tap them; tapping the artist name under an album no longer jumps to the artist's page. Artist names link only from the full-screen player.

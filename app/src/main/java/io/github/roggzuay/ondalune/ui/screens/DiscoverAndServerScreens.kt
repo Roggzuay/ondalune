@@ -392,6 +392,7 @@ fun SettingsCustomizationScreen(
     onSetAppIconVariant: (AppIconVariant) -> Unit = {},
     onOpenAppIconSettings: () -> Unit = {},
     onSetDockStyle: (DockStyle) -> Unit,
+    onSetHideMiniPlayerOnScroll: (Boolean) -> Unit = {},
     onSetThemeMode: (AppThemeMode) -> Unit,
     onSetUseMaterialYou: (Boolean) -> Unit,
     onSetUnifiedMaterialYouColor: (Boolean) -> Unit = {},
@@ -1284,6 +1285,14 @@ fun SettingsCustomizationScreen(
                             }
                         }
                     }
+
+                    SettingsToggleRow(
+                        title = "Hide mini player while scrolling",
+                        subtitle = "Slides away as you scroll down a list and comes back as soon as you scroll up",
+                        checked = settings.hideMiniPlayerOnScroll,
+                        onCheckedChange = onSetHideMiniPlayerOnScroll,
+                        testTag = "toggle_hide_mini_player"
+                    )
 
                     Text(
                         text = "Theme Brightness Mode",
