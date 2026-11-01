@@ -648,6 +648,32 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val _selectedFolderDetail = MutableStateFlow<String?>(null)
     val selectedFolderDetail: StateFlow<String?> = _selectedFolderDetail.asStateFlow()
 
+    private val _selectedPlaylistDetailId = MutableStateFlow<String?>(null)
+    val selectedPlaylistDetailId: StateFlow<String?> = _selectedPlaylistDetailId.asStateFlow()
+
+    /** The playlist the queue was started from; the player names it and links to it. */
+    private val _queuePlaylistId = MutableStateFlow<String?>(null)
+    val playingFromPlaylist: StateFlow<SubsonicPlaylist?> = combine(_queuePlaylistId, playlists) { id, all ->
+        all.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * A page opened by a jump (the player's names, "Go to artist", the Top artists row), which can
+     * switch tabs, with the view it left. Back from that page restores the view instead of landing
+     * on the page's own tab.
+     */
+    private data class Jump(
+        val page: String,
+        val destination: PrimaryDestination,
+        val shelf: HomeShelfKind?,
+        val albumId: String?,
+        val artistId: String?,
+        val genre: String?,
+        val folder: String?,
+        val playlistId: String?
+    )
+    private val jumps = ArrayDeque<Jump>()
+
     private val _pingDiagnostic = MutableStateFlow<PingDiagnosticResult?>(null)
     val pingDiagnostic: StateFlow<PingDiagnosticResult?> = _pingDiagnostic.asStateFlow()
 
@@ -711,14 +737,17 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Tapping the tab you're on: first back out of any open page, then scroll to the top. */
     fun reselectDestination() {
         val detailOpen = _openHomeShelf.value != null || _selectedAlbumDetailId.value != null ||
-            _selectedArtistDetailId.value != null || _selectedGenreDetail.value != null || _selectedFolderDetail.value != null
+            _selectedArtistDetailId.value != null || _selectedGenreDetail.value != null || _selectedFolderDetail.value != null ||
+            _selectedPlaylistDetailId.value != null
         if (detailOpen) {
+            jumps.clear()
             _openHomeShelf.value = null
             _selectedAlbumDetailId.value = null
             _albumDetailOriginDestination.value = null
             _selectedArtistDetailId.value = null
             _selectedGenreDetail.value = null
             _selectedFolderDetail.value = null
+            _selectedPlaylistDetailId.value = null
         } else {
             _scrollToTopSignal.value++
         }
@@ -947,6 +976,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun selectDestination(destination: PrimaryDestination) {
+        jumps.clear()
+        showDestination(destination)
+    }
+
+    private fun showDestination(destination: PrimaryDestination) {
         _currentDestination.value = destination
         _openHomeShelf.value = null
         _selectedAlbumDetailId.value = null
@@ -954,6 +988,34 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         _selectedArtistDetailId.value = null
         _selectedGenreDetail.value = null
         _selectedFolderDetail.value = null
+        _selectedPlaylistDetailId.value = null
+    }
+
+    /** Collapses the player and runs [open], remembering the current view for Back from [page]. */
+    private fun jumpTo(page: String, open: () -> Unit) {
+        val from = Jump(
+            page, _currentDestination.value, _openHomeShelf.value, _selectedAlbumDetailId.value,
+            _selectedArtistDetailId.value, _selectedGenreDetail.value, _selectedFolderDetail.value,
+            _selectedPlaylistDetailId.value
+        )
+        _isPlayerExpanded.value = false
+        open()
+        jumps.addLast(from)
+    }
+
+    /** Back from [page]: if a jump opened it, restores the view the jump left and returns true. */
+    private fun returnFromJump(page: String): Boolean {
+        if (jumps.lastOrNull()?.page != page) return false
+        val from = jumps.removeLast()
+        _currentDestination.value = from.destination
+        _openHomeShelf.value = from.shelf
+        _selectedAlbumDetailId.value = from.albumId
+        _albumDetailOriginDestination.value = null
+        _selectedArtistDetailId.value = from.artistId
+        _selectedGenreDetail.value = from.genre
+        _selectedFolderDetail.value = from.folder
+        _selectedPlaylistDetailId.value = from.playlistId
+        return true
     }
 
     fun selectAlbumListType(type: AlbumListType) {
@@ -1005,6 +1067,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         val tabPref = getTabPreference(tab.name)
         _libraryViewMode.value = tabPref.viewMode
         _librarySortOption.value = tabPref.sortOption
+        jumps.clear()
         _selectedAlbumDetailId.value = null
         _albumDetailOriginDestination.value = null
         _selectedArtistDetailId.value = null
@@ -1132,6 +1195,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             }
             _selectedAlbumDetailId.value = albumId
         } else {
+            if (returnFromJump("album:${_selectedAlbumDetailId.value}")) return
             _selectedAlbumDetailId.value = null
             val origin = _albumDetailOriginDestination.value
             if (origin != null) {
@@ -1142,6 +1206,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun openArtistDetail(artistId: String?) {
+        if (artistId == null && returnFromJump("artist:${_selectedArtistDetailId.value}")) return
         _selectedArtistDetailId.value = artistId
         if (artistId != null) {
             val server = activeServer()
@@ -1162,16 +1227,29 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** From the player: collapse it and land on the playing track's artist page in Library. */
+    /** From the player: collapse it and land on the playing track's artist page in Artists. */
     fun openArtistFromTrack(track: SubsonicTrack) = openArtistByName(track.artistId, track.artist)
 
+    /** Opens the artist's page on the Artists tab; Back returns to where you were. */
     fun openArtistByName(artistId: String, name: String) {
         val artist = artists.value.find { artistId.isNotBlank() && it.id == artistId }
             ?: artists.value.find { it.name.equals(name, ignoreCase = true) }
             ?: return
-        _isPlayerExpanded.value = false
-        selectDestination(PrimaryDestination.ARTISTS)
-        openArtistDetail(artist.id)
+        jumpTo("artist:${artist.id}") {
+            showDestination(PrimaryDestination.ARTISTS)
+            openArtistDetail(artist.id)
+        }
+    }
+
+    fun openPlaylistDetail(playlistId: String?) {
+        if (playlistId == null && returnFromJump("playlist:${_selectedPlaylistDetailId.value}")) return
+        _selectedPlaylistDetailId.value = playlistId
+    }
+
+    /** Opens the playlist's page on the Playlists tab; Back returns to where you were. */
+    fun openPlaylistAnywhere(playlistId: String) = jumpTo("playlist:$playlistId") {
+        showDestination(PrimaryDestination.PLAYLISTS)
+        _selectedPlaylistDetailId.value = playlistId
     }
 
     fun openGenreDetail(genreName: String?) {
@@ -2128,6 +2206,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun playTrack(track: SubsonicTrack, queueContext: List<SubsonicTrack>? = null) {
+        _queuePlaylistId.value = null
         val newQueue = queueContext?.ifEmpty { null } ?: tracks.value.ifEmpty { listOf(track) }
         _playbackQueue.value = buildQueueForMode(track, newQueue, _shuffleMode.value)
         startPlayback(track)
@@ -2186,6 +2265,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             profile = profile
         )
         val lead = smartQueue.first()
+        _queuePlaylistId.value = null
         _playbackQueue.value = smartQueue
         _currentTrack.value = lead
         prefs.edit().putString("last_played_track_id", lead.id).apply()
@@ -2232,6 +2312,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             startAfter?.join()
             _shuffleMode.value = ShuffleMode.OFF
             _shuffleEnabled.value = false
+            _queuePlaylistId.value = null
             _playbackQueue.value = picks
             persistQueueTrackIds(picks)
             startPlayback(picks.first())
@@ -2239,11 +2320,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun playPlaylist(playlist: SubsonicPlaylist) {
+    /** Plays [playlist] from [startAt] (its first track when null). */
+    fun playPlaylist(playlist: SubsonicPlaylist, startAt: SubsonicTrack? = null) {
         val mapById = tracks.value.associateBy { it.id }
-        val plTracks = playlist.trackIds.mapNotNull { mapById[it] }.ifEmpty { tracks.value }
+        val own = playlist.trackIds.mapNotNull { mapById[it] }
+        val plTracks = own.ifEmpty { tracks.value }
         if (plTracks.isNotEmpty()) {
-            playTrack(plTracks.first(), plTracks)
+            playTrack(startAt ?: plTracks.first(), plTracks)
+            if (own.isNotEmpty()) _queuePlaylistId.value = playlist.id
         }
     }
 
@@ -2643,13 +2727,18 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Opens [albumId]'s page from anywhere (player, any list), staying on the current tab when it can show albums. */
+    /**
+     * Opens [albumId]'s page from anywhere (player, any list), staying on the current tab when it
+     * can show albums. Back returns to where you were. Does nothing for an album not in the library.
+     */
     fun openAlbumAnywhere(albumId: String) {
-        _isPlayerExpanded.value = false
-        if (_currentDestination.value !in setOf(PrimaryDestination.HOME, PrimaryDestination.LIBRARY, PrimaryDestination.FAVOURITES, PrimaryDestination.ARTISTS)) {
-            selectDestination(PrimaryDestination.LIBRARY)
+        if (albums.value.none { it.id == albumId }) return
+        jumpTo("album:$albumId") {
+            if (_currentDestination.value !in setOf(PrimaryDestination.HOME, PrimaryDestination.LIBRARY, PrimaryDestination.FAVOURITES, PrimaryDestination.ARTISTS)) {
+                showDestination(PrimaryDestination.LIBRARY)
+            }
+            openAlbumDetail(albumId)
         }
-        openAlbumDetail(albumId)
     }
 
     fun deletePlaylist(playlistId: String) {

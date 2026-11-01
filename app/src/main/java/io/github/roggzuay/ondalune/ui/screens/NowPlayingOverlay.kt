@@ -153,6 +153,7 @@ import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SleepTimerState
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
+import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
@@ -442,6 +443,9 @@ fun NowPlayingStudioOverlay(
     onOpenSpeedPitchSheet: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit = {},
+    /** The playlist the queue came from, while the current track is in it; named in the header. */
+    playingFromPlaylist: SubsonicPlaylist? = null,
+    onOpenPlaylist: (String) -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onPlayQueueTrack: (SubsonicTrack) -> Unit,
     lyricsResult: TrackLyricsResult = TrackLyricsResult(
@@ -586,8 +590,10 @@ fun NowPlayingStudioOverlay(
                     activeTab = activeTab,
                     eqPreset = eqPreset,
                     showTechnicalFormatBadge = showTechnicalFormatBadge,
+                    playingFromPlaylist = playingFromPlaylist,
                     onCollapse = onCollapse,
                     onSelectTab = onSelectTab,
+                    onOpenPlaylist = onOpenPlaylist,
                     onOpenSonicLab = onOpenSonicLab
                 )
 
@@ -817,8 +823,10 @@ private fun NowPlayingTopHeaderBar(
     activeTab: NowPlayingSheetTab,
     eqPreset: EqualizerPreset,
     showTechnicalFormatBadge: Boolean,
+    playingFromPlaylist: SubsonicPlaylist?,
     onCollapse: () -> Unit,
     onSelectTab: (NowPlayingSheetTab) -> Unit,
+    onOpenPlaylist: (String) -> Unit,
     onOpenSonicLab: () -> Unit
 ) {
     val codecLabel = if (server.transcodeFormat == "RAW" || server.maxBitRate == 0) {
@@ -888,6 +896,33 @@ private fun NowPlayingTopHeaderBar(
                         )
                     }
                 }
+            }
+        } else if (playingFromPlaylist != null) {
+            // Playing from a playlist: name it, and tapping it opens its page.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 60.dp)
+                    .clip(cornerShape(10.dp))
+                    .clickable { onOpenPlaylist(playingFromPlaylist.id) }
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .testTag("now_playing_playlist_link"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "PLAYING FROM PLAYLIST",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = playingFromPlaylist.name,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         } else {
             Column(
