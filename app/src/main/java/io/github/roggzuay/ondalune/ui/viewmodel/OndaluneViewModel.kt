@@ -477,7 +477,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val servers: StateFlow<List<SubsonicServerConfig>> = repository.serversFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _activeServerId = MutableStateFlow(1L)
+    // No server until ensureSeeded() says which is active. Starting on 1 (the demo server) loaded
+    // the demo library first, and the launch restore picked one of its songs.
+    private val _activeServerId = MutableStateFlow(-1L)
 
     val playlists: StateFlow<List<SubsonicPlaylist>> = _activeServerId
         .flatMapLatest { id -> repository.observePlaylistsForServer(id) }
@@ -905,17 +907,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             tracks.collect { list ->
-                if (list.isNotEmpty() && _currentTrack.value == null) {
+                if (_currentTrack.value == null) {
+                    // Only bring back the song you last played. With nothing to resume, nothing is
+                    // current and the mini player stays hidden until you play something.
                     val savedTrackId = prefs.getString("last_played_track_id", null)
-                    val first = if (_customizationSettings.value.resumePlaybackOnLaunch && !savedTrackId.isNullOrBlank()) {
-                        list.find { it.id == savedTrackId } ?: list.first()
-                    } else {
-                        list.first()
+                    val resumed = savedTrackId
+                        ?.takeIf { _customizationSettings.value.resumePlaybackOnLaunch }
+                        ?.let { id -> list.find { it.id == id } }
+                    if (resumed != null) {
+                        _currentTrack.value = resumed
+                        _playbackQueue.value = list
+                        loadLyricsForTrack(resumed)
                     }
-                    _currentTrack.value = first
-                    _playbackQueue.value = list
-                    loadLyricsForTrack(first)
-                } else if (_currentTrack.value != null) {
+                } else {
                     val updated = list.find { it.id == _currentTrack.value?.id }
                     if (updated != null) {
                         _currentTrack.value = updated
@@ -1799,6 +1803,10 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         updateCustomization { it.copy(showTechnicalFormatBadge = show) }
     }
 
+    fun setHideMiniPlayerOnScroll(hide: Boolean) {
+        updateCustomization { it.copy(hideMiniPlayerOnScroll = hide) }
+    }
+
     fun setShowPlayerStarButton(show: Boolean) {
         updateCustomization { it.copy(showPlayerStarButton = show) }
     }
@@ -2053,6 +2061,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             showRemainingTime = prefs.getBoolean("cfg_show_remaining_time", defaults.showRemainingTime),
             showTechnicalFormatBadge = prefs.getBoolean("cfg_show_tech_badge", defaults.showTechnicalFormatBadge),
             showPlayerStarButton = prefs.getBoolean("cfg_show_player_star", defaults.showPlayerStarButton),
+            hideMiniPlayerOnScroll = prefs.getBoolean("cfg_hide_mini_player_on_scroll", defaults.hideMiniPlayerOnScroll),
             showCodecBadgesInLists = prefs.getBoolean("cfg_show_codec_lists", defaults.showCodecBadgesInLists),
             showStarRatingsInLists = prefs.getBoolean("cfg_show_ratings_lists", defaults.showStarRatingsInLists),
             fallbackArtistToAlbumArt = prefs.getBoolean("cfg_fallback_artist_album", defaults.fallbackArtistToAlbumArt),
@@ -2103,6 +2112,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .putBoolean("cfg_show_remaining_time", s.showRemainingTime)
             .putBoolean("cfg_show_tech_badge", s.showTechnicalFormatBadge)
             .putBoolean("cfg_show_player_star", s.showPlayerStarButton)
+            .putBoolean("cfg_hide_mini_player_on_scroll", s.hideMiniPlayerOnScroll)
             .putBoolean("cfg_show_codec_lists", s.showCodecBadgesInLists)
             .putBoolean("cfg_show_ratings_lists", s.showStarRatingsInLists)
             .putBoolean("cfg_fallback_artist_album", s.fallbackArtistToAlbumArt)

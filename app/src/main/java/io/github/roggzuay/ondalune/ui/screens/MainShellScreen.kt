@@ -43,8 +43,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
@@ -106,11 +108,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -249,6 +255,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     // Held here, outside the tab transitions, so Home keeps its scroll position while a page from
     // it (or another tab) is open.
     val homeListState = rememberLazyListState()
+
+    // The mini player waits for the first song you play. A song restored from last time stays
+    // loaded (headphone and notification play resume it) but out of the way.
+    var playedThisSession by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(isPlaying, isBuffering) { if (isPlaying || isBuffering) playedThisSession = true }
+    val miniPlayerTrack = currentTrack?.takeIf { playedThisSession }
+
+    // Scrolling a list down slides the mini player away; the slightest scroll up brings it back.
+    var miniPlayerScrolledAway by remember { mutableStateOf(false) }
+    val miniPlayerScrollWatcher = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (consumed.y < -2f) miniPlayerScrolledAway = true
+                else if (consumed.y > 2f) miniPlayerScrolledAway = false
+                return Offset.Zero
+            }
+        }
+    }
+    // A new page or a new song shows it again.
+    LaunchedEffect(currentDestination, selectedAlbumId, selectedArtistId, selectedPlaylistId, openHomeShelf, currentTrack?.id) {
+        miniPlayerScrolledAway = false
+    }
     val scrollToTopSignal by viewModel.scrollToTopSignal.collectAsStateWithLifecycle()
 
     val pingDiagnostic by viewModel.pingDiagnostic.collectAsStateWithLifecycle()
@@ -461,8 +489,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     )
                                     .windowInsetsPadding(WindowInsets.navigationBars)
                             ) {
-                                val activeTrack = currentTrack
-                                if (activeTrack != null) {
+                                AnimatedVisibility(
+                                    visible = miniPlayerTrack != null &&
+                                        !(customizationSettings.hideMiniPlayerOnScroll && miniPlayerScrolledAway),
+                                    enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                                    exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                                ) {
+                                    val activeTrack = miniPlayerTrack ?: return@AnimatedVisibility
                                     PlaybackPosition(viewModel) { positionMs, durationMs ->
                                         FloatingExpressiveMiniPlayer(
                                             track = activeTrack,
@@ -524,7 +557,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             }
                         }
 
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.weight(1f).nestedScroll(miniPlayerScrollWatcher)) {
                             val reducedMotion = LocalReducedMotion.current
                             AnimatedContent(
                                 targetState = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf, selectedPlaylistId),
@@ -773,6 +806,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetAppIconVariant = viewModel::setAppIconVariant,
                                             onOpenAppIconSettings = { viewModel.setAppIconSettingsOpen(true) },
                                             onSetDockStyle = viewModel::setDockStyle,
+                                            onSetHideMiniPlayerOnScroll = viewModel::setHideMiniPlayerOnScroll,
                                             onSetThemeMode = viewModel::setThemeMode,
                                             onSetUseMaterialYou = viewModel::setUseMaterialYouDynamicColor,
                                             onSetHarmonizeArtwork = viewModel::setHarmonizePlayerWithArtwork,
@@ -828,10 +862,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 }
                             }
 
-                            if (isExpandedScreen && currentTrack != null) {
+                            if (isExpandedScreen && miniPlayerTrack != null) {
                                 PlaybackPosition(viewModel) { positionMs, durationMs ->
                                     FloatingExpressiveMiniPlayer(
-                                        track = currentTrack!!,
+                                        track = miniPlayerTrack,
                                         isPlaying = isPlaying,
                                         isBuffering = isBuffering,
                                         positionMs = positionMs,
