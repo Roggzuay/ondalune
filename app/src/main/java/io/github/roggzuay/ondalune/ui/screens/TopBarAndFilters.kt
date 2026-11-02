@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,8 +38,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
@@ -95,7 +96,8 @@ fun OndaluneTopBar(
     onQueryChange: (String) -> Unit,
     onOpenFilters: () -> Unit,
     onOpenSettings: () -> Unit,
-    onCancelDownload: (String) -> Unit,
+    failedDownloads: Int,
+    onOpenDownloads: () -> Unit,
     onDismissBanner: () -> Unit
 ) {
     var searchOpen by remember { mutableStateOf(searchQuery.isNotEmpty()) }
@@ -135,8 +137,8 @@ fun OndaluneTopBar(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (activeDownloads.isNotEmpty()) {
-                        DownloadsIndicator(activeDownloads, onCancelDownload)
+                    if (activeDownloads.isNotEmpty() || failedDownloads > 0) {
+                        DownloadsIndicator(activeDownloads, failedDownloads, onOpenDownloads)
                     }
                     IconButton(
                         onClick = { searchOpen = true },
@@ -254,63 +256,33 @@ private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onClose: (
     }
 }
 
-/** Ring showing overall progress of running downloads; tap for the per-track list. */
+/**
+ * Ring showing overall progress of running downloads, or a red download icon while some failed;
+ * tap for the Downloads sheet.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun DownloadsIndicator(downloads: List<SubsonicDownloadEntity>, onCancel: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val overall = downloads.sumOf { it.progressPercent } / (downloads.size * 100f)
-    Box {
-        IconButton(
-            onClick = { open = true },
-            shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.testTag("top_bar_downloads_indicator")
-        ) {
-            Box(contentAlignment = Alignment.Center) {
+private fun DownloadsIndicator(downloads: List<SubsonicDownloadEntity>, failed: Int, onOpen: () -> Unit) {
+    IconButton(
+        onClick = onOpen,
+        shapes = IconButtonDefaults.shapes(),
+        modifier = Modifier.testTag("top_bar_downloads_indicator")
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (downloads.isNotEmpty()) {
                 CircularProgressIndicator(
-                    progress = { overall },
+                    progress = { downloads.sumOf { it.progressPercent } / (downloads.size * 100f) },
                     modifier = Modifier.size(30.dp),
                     strokeWidth = 2.5.dp,
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 )
-                Icon(Icons.Filled.Download, contentDescription = "Downloads", modifier = Modifier.size(16.dp))
             }
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            Text(
-                text = "Downloading ${downloads.size} ${if (downloads.size == 1) "track" else "tracks"}",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            Icon(
+                Icons.Filled.Download,
+                contentDescription = if (downloads.isEmpty()) "$failed downloads failed" else "Downloads",
+                tint = if (downloads.isEmpty()) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                modifier = Modifier.size(if (downloads.isEmpty()) 22.dp else 16.dp)
             )
-            downloads.take(8).forEach { d ->
-                DropdownMenuItem(
-                    text = {
-                        Column(modifier = Modifier.width(220.dp)) {
-                            Text(d.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(6.dp))
-                            if (d.status == OfflineDownloadState.QUEUED.name) {
-                                Text("Waiting…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            } else {
-                                LinearProgressIndicator(progress = { d.progressPercent / 100f }, modifier = Modifier.fillMaxWidth())
-                            }
-                        }
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { onCancel(d.trackId) }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Cancel download", modifier = Modifier.size(18.dp))
-                        }
-                    },
-                    onClick = {}
-                )
-            }
-            if (downloads.size > 8) {
-                Text(
-                    text = "+${downloads.size - 8} more",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
         }
     }
 }
@@ -319,7 +291,7 @@ private fun DownloadsIndicator(downloads: List<SubsonicDownloadEntity>, onCancel
  * Bottom sheet behind the top bar's filter icon: library-wide filters, the active server with a
  * sync action, and shortcuts to switch server or open settings.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun LibraryFilterSheet(
     filters: LibraryFilters,
@@ -330,6 +302,7 @@ fun LibraryFilterSheet(
     onSync: () -> Unit,
     onSwitchServer: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDownloads: () -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -377,11 +350,16 @@ fun LibraryFilterSheet(
             }
 
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onSwitchServer, shapes = ButtonDefaults.shapes()) {
                     Icon(Icons.Filled.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Switch server")
+                }
+                TextButton(onClick = onOpenDownloads, shapes = ButtonDefaults.shapes(), modifier = Modifier.testTag("filter_sheet_downloads")) {
+                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Downloads")
                 }
                 TextButton(onClick = onOpenSettings, shapes = ButtonDefaults.shapes()) {
                     Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(18.dp))

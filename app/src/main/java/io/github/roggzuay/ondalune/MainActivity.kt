@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.roggzuay.ondalune.ui.screens.OndaluneLaunchIntroTracker
 import io.github.roggzuay.ondalune.ui.screens.OndaluneMainShell
 import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
 import kotlin.math.abs
@@ -115,10 +116,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Dissolve the system splash into the in-app intro instead of hard-cutting to it.
+        // Dissolve the system splash into the in-app intro, whose first frame draws the moon in
+        // the same place; the intro starts moving once the splash is gone.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash ->
-                splash.animate().alpha(0f).setDuration(240L).withEndAction { splash.remove() }.start()
+                splash.animate().alpha(0f).setDuration(160L).withEndAction {
+                    splash.remove()
+                    OndaluneLaunchIntroTracker.splashGone.value = true
+                }.start()
             }
         }
         enableEdgeToEdge()

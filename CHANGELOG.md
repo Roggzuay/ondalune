@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0 (2026-11-02)
+
+- **Downloads page:** see what's downloading, waiting, failed or saved, and cancel, retry or remove from one place. Open it from the filter button, the download ring in the top bar, or Settings → Sound & streaming.
+- **Downloads that recover:** a failed download is tried again on its own and waits for a connection, and downloads cut off by closing the app carry on the next time you open it.
+- **Download from the player:** download the playing song from the player; a tick shows once it's on your phone.
+- **Fresher shuffle:** favourites lead less often, songs you just heard move to the back, and the same artist doesn't play twice close together.
+- **Fixes & improvements:**
+  - Two songs no longer play at once when a song was slow to load and you picked another.
+  - The launch animation starts where the splash screen leaves the icon.
+  - The tab bar is as wide as the mini player.
+
 ## 1.2.1 (2026-11-02)
 
 - Bug fix.

@@ -41,6 +41,7 @@ import kotlin.math.exp
 import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -272,11 +273,15 @@ class OndaluneAudioEngine(
         }?.firstOrNull()
     }
 
+    /** Bumped by every [playTrack]; a load that finishes after a newer request is dropped. */
+    private val playRequest = AtomicInteger(0)
+
     fun playTrack(
         track: SubsonicTrack,
         server: SubsonicServerConfig,
         eqPreset: EqualizerPreset
     ) {
+        val request = playRequest.incrementAndGet()
         scope.launch {
             _isBuffering.value = true
             _audioSessionError.value = null
@@ -295,10 +300,16 @@ class OndaluneAudioEngine(
 
             try {
                 val (sourcePath, offline) = resolveSourcePath(track, server)
+                if (request != playRequest.get()) return@launch
                 _isPlayingOfflineFile.value = offline
                 // Real-time PCM DSP pipeline first; MediaPlayer + hardware session effects if the
                 // container can't be decoded to raw PCM.
                 val source = withContext(Dispatchers.IO) { openPcmSource(sourcePath) }
+                // A slow stream can finish opening after another song was picked: never start both.
+                if (request != playRequest.get()) {
+                    source?.release()
+                    return@launch
+                }
                 if (source != null) {
                     startPcmPipeline(
                         QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
@@ -307,6 +318,8 @@ class OndaluneAudioEngine(
                     startMediaPlayerFallback(sourcePath, eqPreset)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (request != playRequest.get()) return@launch
                 _isBuffering.value = false
                 _isPlaying.value = false
                 _reverbProcessingMode.value = ReverbProcessingMode.UNSUPPORTED_STREAM_ERROR
