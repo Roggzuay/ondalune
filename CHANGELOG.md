@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 (2026-11-02)
+
+- Bug fix.
+
 ## 1.2.0 (2026-11-02)
 
 - **Update notices:** when a new version is out, a quiet card on Home says so. Check any time in Settings → Updates, or turn the daily check off.

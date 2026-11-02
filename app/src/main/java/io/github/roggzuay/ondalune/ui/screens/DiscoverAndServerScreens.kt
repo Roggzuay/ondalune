@@ -88,7 +88,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -1786,49 +1785,6 @@ fun SettingsCustomizationScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    // Live Dynamic Widget Preview Card inside Settings
-                    Surface(
-                        shape = cornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                                shape = cornerShape(24.dp)
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.NotificationsActive,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (settings.unifiedMaterialYouColor) {
-                                        "MATERIAL YOU UNIFIED • MEDIA & WIDGET"
-                                    } else {
-                                        "DYNAMIC SONG PALETTE • MEDIA & WIDGET"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "Persistent Media Notification & 4×2 Home Widget",
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                            }
-                        }
-                    }
 
                     Text(
                         text = "Home Widget Layout Mode",
