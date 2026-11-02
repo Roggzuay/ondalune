@@ -15,6 +15,14 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
+import io.github.roggzuay.ondalune.ui.components.UpdateDialog
+import io.github.roggzuay.ondalune.data.network.LATEST_RELEASE_PAGE
+import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
+import io.github.roggzuay.ondalune.data.local.UpdateInstallState
+import io.github.roggzuay.ondalune.BuildConfig
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.ui.platform.LocalUriHandler
 import io.github.roggzuay.ondalune.ui.components.SelectionTopBar
 import io.github.roggzuay.ondalune.ui.components.LocalDownloads
 import io.github.roggzuay.ondalune.ui.components.LocalTrackSelection
@@ -230,6 +238,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val showServerOnboarding by viewModel.showServerOnboarding.collectAsStateWithLifecycle()
     val whatsNew by viewModel.whatsNew.collectAsStateWithLifecycle()
     val showSpeedResetHint by viewModel.showSpeedResetHint.collectAsStateWithLifecycle()
+    val availableUpdate by viewModel.availableUpdate.collectAsStateWithLifecycle()
+    val updateInstall by viewModel.updateInstall.collectAsStateWithLifecycle()
+    val updateCheckStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
+    var showUpdateNotes by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
         targetValue = if (showServerOnboarding) 0.9f else 1f,
@@ -652,6 +665,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             openShelf = openHomeShelf,
                                             onOpenShelf = viewModel::openHomeShelf,
                                             onPlayTrackFrom = { track, queue -> viewModel.playTrack(track, queue) },
+                                            availableUpdate = availableUpdate,
+                                            onViewUpdate = { showUpdateNotes = true },
+                                            onLaterUpdate = viewModel::dismissUpdate,
                                             listState = homeListState
                                         )
                                     }
@@ -843,6 +859,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetWidgetShowArtwork = viewModel::setWidgetShowArtwork,
                                             onSetWidgetShowFavoriteButton = viewModel::setWidgetShowFavoriteButton,
                                             onSetWidgetShowLyrics = viewModel::setWidgetShowLyrics,
+                                            onSetCheckForUpdates = viewModel::setCheckForUpdates,
+                                            availableUpdate = availableUpdate,
+                                            updateCheckStatus = updateCheckStatus,
+                                            onCheckForUpdatesNow = viewModel::checkForUpdatesNow,
+                                            onViewUpdate = { showUpdateNotes = true },
                                             onRestoreDefaults = viewModel::restoreDefaultCustomizationSettings,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
@@ -1161,6 +1182,30 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 whatsNew?.takeIf { !showServerOnboarding }?.let { notes ->
                     WhatsNewDialog(notes, onDismiss = viewModel::dismissWhatsNew)
                 }
+
+                availableUpdate?.takeIf { showUpdateNotes }?.let { update ->
+                    UpdateDialog(
+                        update,
+                        install = updateInstall,
+                        inAppInstall = BuildConfig.BUILD_TYPE == "release",
+                        onUpdate = viewModel::startUpdate,
+                        onAllowInstalls = { runCatching { context.startActivity(AppUpdateInstaller.allowInstallsIntent(context)) } },
+                        onInstall = { apk -> runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, apk)) } },
+                        onCancel = viewModel::cancelUpdate,
+                        onOpenReleasePage = {
+                            runCatching { uriHandler.openUri(LATEST_RELEASE_PAGE) }
+                            showUpdateNotes = false
+                        },
+                        onDismiss = { showUpdateNotes = false }
+                    )
+                }
+                // Downloaded and allowed: open Android's installer, which asks to confirm.
+                LaunchedEffect(updateInstall) {
+                    (updateInstall as? UpdateInstallState.Ready)?.let { ready ->
+                        runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, ready.apk)) }
+                    }
+                }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.resumeUpdateInstall() }
 
                 // Application Introduction / Server Details Onboarding Modal
                 // Leaving onboarding zooms in: the screen grows towards you and fades while Home

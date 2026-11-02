@@ -29,6 +29,8 @@ import io.github.roggzuay.ondalune.ui.components.CollectionEntry
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.IconButton
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
+import io.github.roggzuay.ondalune.ui.components.UpdateBanner
+import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.ui.components.LocalDownloads
 import io.github.roggzuay.ondalune.ui.components.LocalTrackSelection
 import io.github.roggzuay.ondalune.ui.components.SelectableTracks
@@ -202,6 +204,9 @@ fun ListenNowHomeScreen(
     homeSections: List<HomeSection> = emptyList(),
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
     onResetHomeSections: () -> Unit = {},
+    availableUpdate: AppUpdate? = null,
+    onViewUpdate: () -> Unit = {},
+    onLaterUpdate: () -> Unit = {},
     /** Pass a state held above the tab's content to come back to the same scroll position. */
     listState: LazyListState = rememberLazyListState()
 ) {
@@ -303,6 +308,18 @@ fun ListenNowHomeScreen(
         }
     }
 
+    // The banner can arrive after Home is drawn. A list keeps its first item in place when rows are
+    // inserted above it, which would hide the banner just off the top, so near the top show it
+    // instead. Only when it first arrives: coming back to Home keeps your scroll position.
+    var bannerVersion by remember { mutableStateOf(availableUpdate?.version) }
+    LaunchedEffect(availableUpdate?.version) {
+        val arrived = availableUpdate?.version
+        if (arrived != null && bannerVersion == null && listState.firstVisibleItemIndex <= 1) {
+            listState.requestScrollToItem(0)
+        }
+        bannerVersion = arrived
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -316,6 +333,14 @@ fun ListenNowHomeScreen(
             contentPadding = PaddingValues(bottom = 160.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+        if (availableUpdate != null) item(key = "update") {
+            UpdateBanner(
+                availableUpdate,
+                onView = onViewUpdate,
+                onLater = onLaterUpdate,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+        }
         sections.forEach { section ->
             when (section) {
                 HomeSection.YOUR_MIX -> item(key = "your_mix") {

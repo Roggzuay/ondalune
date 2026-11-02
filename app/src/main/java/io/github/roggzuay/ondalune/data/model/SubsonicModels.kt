@@ -661,6 +661,8 @@ data class PlayerCustomizationSettings(
     val widgetShowFavoriteButton: Boolean = true,
     /** Tall widgets show the current lyric lines between the track and the transport. */
     val widgetShowLyrics: Boolean = true,
+    /** Once a day, ask GitHub whether a newer release is out and say so on Home. */
+    val checkForUpdates: Boolean = true,
     val crossfadeSeconds: Int = 4,
     val gaplessPlayback: Boolean = true,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,

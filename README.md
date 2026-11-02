@@ -115,8 +115,8 @@ server offers them. You can add more than one server and switch between them.
 ## Privacy
 
 No ads, no analytics, no trackers, no account. Ondalune connects only to the servers you add
-(and image links they hand out), to Wikipedia for missing artist bios, and to Ko-fi if you tap
-the support button. See
+(and image links they hand out), to Wikipedia for missing artist bios, to GitHub once a day to
+check for updates (you can turn this off), and to Ko-fi if you tap the support button. See
 [PRIVACY.md](PRIVACY.md).
 
 ## Install
