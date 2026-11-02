@@ -1,0 +1,1 @@
+A Downloads page shows what's downloading, waiting, failed or saved; open it from the filter button. Failed downloads retry on their own, and unfinished ones carry on after you close the app. Download the playing song from the player. Shuffle is fresher, with fewer repeats of the same favourites. Fixes two songs playing at once.

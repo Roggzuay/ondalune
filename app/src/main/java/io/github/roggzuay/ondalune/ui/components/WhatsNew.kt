@@ -60,6 +60,13 @@ private val releaseNotes = mapOf(
         "Ondalune now tells you on Home when a new version is out",
         "Update from inside the app: the notes, download progress and install in one place",
         "Settings → Updates: check any time, or turn the daily check off"
+    ),
+    "1.3" to listOf(
+        "Downloads page: what's downloading, waiting, failed or saved. Open it from the filter button",
+        "Downloads retry on their own and carry on after you close the app",
+        "Download the playing song from the player; a tick shows it's on your phone",
+        "Fresher shuffle: fewer repeats of the same favourites",
+        "Fixes & improvements, including two songs playing at once"
     )
 )
 

@@ -447,6 +447,7 @@ fun SettingsCustomizationScreen(
     onPinHomeWidget: () -> Unit = {},
     offlineStorageSummary: io.github.roggzuay.ondalune.data.model.OfflineStorageSummary = io.github.roggzuay.ondalune.data.model.OfflineStorageSummary(),
     onClearOfflineDownloads: () -> Unit = {},
+    onManageDownloads: () -> Unit = {},
     onClearTempAudioCache: () -> Unit = {},
     onBack: () -> Unit = {},
     onActivateServer: (SubsonicServerConfig) -> Unit,
@@ -999,6 +1000,14 @@ fun SettingsCustomizationScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = onManageDownloads,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("settings_manage_downloads_button")
+                        ) {
+                            Text("Manage downloads", style = MaterialTheme.typography.labelMedium)
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)

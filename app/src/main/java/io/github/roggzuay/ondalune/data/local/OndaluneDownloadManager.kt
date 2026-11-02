@@ -1,6 +1,8 @@
 package io.github.roggzuay.ondalune.data.local
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.OfflineStorageSummary
@@ -137,8 +139,17 @@ class OndaluneDownloadManager(
 
         val job = scope.launch {
             // Visible as "queued" right away, so every row of an album shows its state immediately.
-            dao.upsertDownload(newEntity(server, track).copy(status = OfflineDownloadState.QUEUED.name))
-            transferSlots.withPermit { downloadTrackSuspending(server, track, speedLimit) }
+            val queued = newEntity(server, track).copy(status = OfflineDownloadState.QUEUED.name)
+            dao.upsertDownload(queued)
+            // A dropped connection or a server hiccup shouldn't fail the download: wait for a
+            // network, try again after a pause, and only report it failed after the last try.
+            for (attempt in 0..RETRY_DELAYS_MS.size) {
+                val lastTry = attempt == RETRY_DELAYS_MS.size
+                if (!server.isDemoServer) awaitNetwork { dao.upsertDownload(queued.copy(errorMessage = WAITING_FOR_NETWORK)) }
+                val result = transferSlots.withPermit { downloadTrackSuspending(server, track, speedLimit, lastTry) }
+                if (result.isCompleted || lastTry) break
+                delay(RETRY_DELAYS_MS[attempt])
+            }
             refreshStorageSummary(server.id)
         }
         activeJobs[key] = job
@@ -171,7 +182,9 @@ class OndaluneDownloadManager(
     suspend fun downloadTrackSuspending(
         server: SubsonicServerConfig,
         track: SubsonicTrack,
-        speedLimit: DownloadSpeedLimit = DownloadSpeedLimit.UNLIMITED
+        speedLimit: DownloadSpeedLimit = DownloadSpeedLimit.UNLIMITED,
+        /** False while retries remain: a failure then stays out of the notification's count. */
+        lastTry: Boolean = true
     ): SubsonicDownloadEntity = withContext(Dispatchers.IO) {
         val key = downloadKeyFor(server.id, track.id)
         val initialEntity = newEntity(server, track)
@@ -234,16 +247,19 @@ class OndaluneDownloadManager(
                 },
                 onFailure = { err ->
                     targetFile.delete()
+                    // Before the last try it goes back in the queue instead of showing as failed.
                     val failed = initialEntity.copy(
                         progressPercent = 0,
-                        status = OfflineDownloadState.FAILED.name,
-                        errorMessage = err.localizedMessage ?: "Download failed",
+                        status = if (lastTry) OfflineDownloadState.FAILED.name else OfflineDownloadState.QUEUED.name,
+                        errorMessage = if (lastTry) err.localizedMessage ?: "Download failed" else RETRYING,
                         updatedAtMs = System.currentTimeMillis()
                     )
                     dao.upsertDownload(failed)
-                    if (batch.remove(key) != null) batchFailed++
-                    notifyBatch(force = true)
-                    refreshStorageSummary(server.id)
+                    if (lastTry) {
+                        if (batch.remove(key) != null) batchFailed++
+                        notifyBatch(force = true)
+                        refreshStorageSummary(server.id)
+                    }
                     failed
                 }
             )
@@ -285,6 +301,23 @@ class OndaluneDownloadManager(
             updatedAtMs = System.currentTimeMillis()
         )
     }
+
+    /** Polls until Android reports a network that can reach the internet (or the LAN server). */
+    private suspend fun awaitNetwork(onWaiting: suspend () -> Unit) {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return
+        fun online() = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        if (online()) return
+        onWaiting()
+        while (!online()) delay(3_000)
+    }
+
+    /** Rows left waiting or mid-transfer by a previous run that ended (the app was closed). */
+    suspend fun interruptedDownloads(serverId: Long): List<SubsonicDownloadEntity> =
+        dao.getDownloadsForServerOnce(serverId).filter {
+            (it.stateEnum == OfflineDownloadState.QUEUED || it.stateEnum == OfflineDownloadState.DOWNLOADING) &&
+                activeJobs[it.downloadKey]?.isActive != true
+        }
 
     suspend fun cancelDownload(serverId: Long, trackId: String) = withContext(Dispatchers.IO) {
         val key = downloadKeyFor(serverId, trackId)
@@ -485,3 +518,12 @@ class OndaluneDownloadManager(
         onProgress(totalBytes, totalBytes)
     }
 }
+
+/** Pauses before the second, third and fourth try of a failed download. */
+private val RETRY_DELAYS_MS = longArrayOf(5_000, 20_000, 60_000)
+
+/** Shown under a download that failed and will be tried again. */
+const val RETRYING = "Couldn't download, trying again soon"
+
+/** Shown under a download that waits for the phone to get a connection. */
+const val WAITING_FOR_NETWORK = "Waiting for a connection"

@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
 import io.github.roggzuay.ondalune.ui.components.UpdateDialog
+import io.github.roggzuay.ondalune.ui.components.DownloadsSheet
 import io.github.roggzuay.ondalune.data.network.LATEST_RELEASE_PAGE
 import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
 import io.github.roggzuay.ondalune.data.local.UpdateInstallState
@@ -154,6 +155,9 @@ import io.github.roggzuay.ondalune.ui.viewmodel.PrimaryDestination
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
 import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,6 +171,9 @@ import kotlin.math.sin
 object OndaluneLaunchIntroTracker {
     @Volatile
     private var hasShownInProcess: Boolean = false
+
+    /** Set once the system splash (Android 12+) has faded; the intro holds its first frame until then. */
+    val splashGone = MutableStateFlow(android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S)
 
     fun shouldPlayIntroOnColdStart(reducedMotion: Boolean): Boolean {
         if (reducedMotion) {
@@ -338,6 +345,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             .forEach { downloadOrder[it.downloadKey] = downloadOrder.size }
         active.sortedBy { downloadOrder[it.downloadKey] }
     }
+    val failedDownloads = remember(downloadsMap) { downloadsMap.values.count { it.status == OfflineDownloadState.FAILED.name } }
+    var showDownloads by remember { mutableStateOf(false) }
 
     val anyModalOpen = isPlayerExpanded || isSonicLabOpen || isSpeedPitchOpen ||
         isSleepTimerOpen || isUserServerOpen || isAppIconSettingsOpen || showServerOnboarding
@@ -483,7 +492,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             onQueryChange = viewModel::updateSearchQuery,
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
-                            onCancelDownload = viewModel::cancelOfflineDownload,
+                            failedDownloads = failedDownloads,
+                            onOpenDownloads = { showDownloads = true },
                             onDismissBanner = viewModel::dismissBanner
                         )
                         }
@@ -874,6 +884,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSelectEqPreset = viewModel::selectEqualizerPreset,
                                             offlineStorageSummary = offlineStorageSummary,
                                             onClearOfflineDownloads = viewModel::clearAllOfflineDownloads,
+                                            onManageDownloads = { showDownloads = true },
                                             onClearTempAudioCache = viewModel::clearTemporaryAudioCache,
                                             onBack = { viewModel.selectDestination(PrimaryDestination.HOME) },
                                             onActivateServer = viewModel::activateExistingServer,
@@ -960,6 +971,14 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 lyricsResult = currentLyricsResult,
                                 reverbProcessingMode = reverbProcessingMode,
                                 isPlayingOfflineFile = isPlayingOfflineFile,
+                                download = remember(activeTrack.id, downloadsMap[activeTrack.id]) {
+                                    PlayerDownload(
+                                        state = downloadsMap[activeTrack.id],
+                                        onDownload = { viewModel.downloadTrackForOffline(activeTrack) },
+                                        onCancel = { viewModel.cancelOfflineDownload(activeTrack.id) },
+                                        onRemove = { viewModel.removeOfflineDownload(activeTrack.id) }
+                                    )
+                                },
                                 queue = playbackQueue,
                                 eqPreset = eqPreset,
                                 onCollapse = { viewModel.setPlayerExpanded(false) },
@@ -1120,6 +1139,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             filterSheetOpen = false
                             viewModel.selectDestination(PrimaryDestination.SETTINGS)
                         },
+                        onOpenDownloads = {
+                            filterSheetOpen = false
+                            showDownloads = true
+                        },
                         onDismiss = { filterSheetOpen = false }
                     )
                 }
@@ -1181,6 +1204,16 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 // First launch after a major/minor update (1.1, 2.0): what changed.
                 whatsNew?.takeIf { !showServerOnboarding }?.let { notes ->
                     WhatsNewDialog(notes, onDismiss = viewModel::dismissWhatsNew)
+                }
+
+                if (showDownloads) {
+                    DownloadsSheet(
+                        downloads = downloadsMap.values,
+                        onCancel = viewModel::cancelOfflineDownloads,
+                        onRetry = viewModel::retryOfflineDownloads,
+                        onRemove = viewModel::removeOfflineDownload,
+                        onDismiss = { showDownloads = false }
+                    )
                 }
 
                 availableUpdate?.takeIf { showUpdateNotes }?.let { update ->
@@ -1267,25 +1300,32 @@ fun OndaluneAnimatedLaunchIntroOverlay(
     variant: AppIconVariant,
     onFinished: () -> Unit
 ) {
-    val tile = remember { Animatable(0.55f) }
+    // The system splash leaves the moon at the centre of the screen, a little larger than the
+    // emblem draws it, so the intro starts there and then settles, rises and gains its tile.
+    val settle = remember { Animatable(0f) }
+    val rise = remember { Animatable(0f) }
     val waves = remember { Animatable(-1f) }
-    val note = remember { Animatable(0f) }
     val rings = remember { Animatable(0f) }
     val word = remember { Animatable(0f) }
     val exit = remember { Animatable(0f) }
     val accent = remember(variant) { parseHexColor(variant.accentHex) }
     val brandName = "Ondalune"
+    val restLift = 60.dp
 
     LaunchedEffect(Unit) {
         // Start the clock only once frames are actually being drawn, so a busy cold start
         // can't skip the opening of the animation.
         repeat(2) { withFrameNanos { } }
+        // The splash covers this overlay until it fades: start once it's gone, so its moon
+        // hands over to ours in place. Without a splash (opened from a notification) the
+        // listener never runs, hence the cap.
+        withTimeoutOrNull(1_200L) { OndaluneLaunchIntroTracker.splashGone.first { it } }
         coroutineScope {
-            launch { tile.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow)) }
+            launch { settle.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow)) }
             launch { waves.animateTo(0f, tween(900, easing = FastOutSlowInEasing)) }
             launch {
-                delay(260L)
-                note.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
+                delay(300L)
+                rise.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
             }
             launch {
                 delay(420L)
@@ -1301,7 +1341,7 @@ fun OndaluneAnimatedLaunchIntroOverlay(
         onFinished()
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = 1f - exit.value }
@@ -1309,13 +1349,14 @@ fun OndaluneAnimatedLaunchIntroOverlay(
             .testTag("ondalune_launch_intro_overlay"),
         contentAlignment = Alignment.Center
     ) {
+        val textTop = maxHeight / 2 - restLift + 64.dp + 22.dp
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cx = size.width * 0.5f
-            val cy = size.height * 0.44f
+            val cy = size.height * 0.5f - rise.value * restLift.toPx()
             val unit = minOf(size.width, size.height)
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(accent.copy(alpha = 0.32f * tile.value.coerceIn(0f, 1f)), Color.Transparent),
+                    listOf(accent.copy(alpha = 0.32f * settle.value.coerceIn(0f, 1f)), Color.Transparent),
                     center = Offset(cx, cy),
                     radius = unit * 0.7f
                 ),
@@ -1334,31 +1375,32 @@ fun OndaluneAnimatedLaunchIntroOverlay(
             }
         }
 
+        val exitLift = Modifier.graphicsLayer {
+            val lift = exit.value
+            translationY = -lift * 24.dp.toPx()
+            scaleX = 1f + lift * 0.06f
+            scaleY = scaleX
+        }
+        OndaluneBrandEmblem(
+            size = 128.dp,
+            variant = variant,
+            frameShape = AppIconPreviewFrameShape.SQUIRCLE,
+            backgroundShift = waves.value,
+            backgroundAlpha = settle.value.coerceIn(0f, 1f),
+            modifier = exitLift.graphicsLayer {
+                val scale = 1.12f - 0.12f * settle.value
+                scaleX = scale
+                scaleY = scale
+                translationY = -rise.value * restLift.toPx()
+            }
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .padding(bottom = 48.dp)
-                .graphicsLayer {
-                    val lift = exit.value
-                    translationY = -lift * 24.dp.toPx()
-                    scaleX = 1f + lift * 0.06f
-                    scaleY = scaleX
-                }
+                .align(Alignment.TopCenter)
+                .padding(top = textTop)
+                .then(exitLift)
         ) {
-            OndaluneBrandEmblem(
-                size = 128.dp,
-                variant = variant,
-                frameShape = AppIconPreviewFrameShape.SQUIRCLE,
-                foregroundScale = 0.4f + 0.6f * note.value,
-                foregroundAlpha = note.value.coerceIn(0f, 1f),
-                backgroundShift = waves.value,
-                modifier = Modifier.graphicsLayer {
-                    scaleX = tile.value
-                    scaleY = tile.value
-                    rotationZ = (1f - tile.value) * -18f
-                }
-            )
-            Spacer(modifier = Modifier.height(22.dp))
             Row {
                 brandName.forEachIndexed { i, ch ->
                     val local = (word.value * (brandName.length + 3) - i).coerceIn(0f, 1f)

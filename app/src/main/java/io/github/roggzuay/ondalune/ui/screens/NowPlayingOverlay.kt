@@ -33,6 +33,15 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.material3.LoadingIndicator
+import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
+import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.foundation.basicMarquee
@@ -120,6 +129,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -452,6 +462,7 @@ fun NowPlayingStudioOverlay(
     ),
     reverbProcessingMode: ReverbProcessingMode = ReverbProcessingMode.BYPASSED_DRY,
     isPlayingOfflineFile: Boolean = false,
+    download: PlayerDownload? = null,
     onRemoveQueueTrack: (String) -> Unit = {},
     onMoveQueueTrack: (Int, Int) -> Unit = { _, _ -> },
     reverbState: io.github.roggzuay.ondalune.data.model.ReverbState = io.github.roggzuay.ondalune.data.model.ReverbState(),
@@ -661,6 +672,7 @@ fun NowPlayingStudioOverlay(
                                 reverbState = reverbState,
                                 reverbProcessingMode = reverbProcessingMode,
                                 isPlayingOfflineFile = isPlayingOfflineFile,
+                                download = download,
                                 sleepTimerState = sleepTimerState,
                                 shuffleEnabled = shuffleEnabled,
                                 shuffleMode = shuffleMode,
@@ -743,6 +755,7 @@ fun NowPlayingStudioOverlay(
                         reverbState = reverbState,
                         reverbProcessingMode = reverbProcessingMode,
                         isPlayingOfflineFile = isPlayingOfflineFile,
+                                download = download,
                         sleepTimerState = sleepTimerState,
                         shuffleEnabled = shuffleEnabled,
                         shuffleMode = shuffleMode,
@@ -1156,6 +1169,7 @@ private fun NowPlayingControlsColumn(
     reverbState: io.github.roggzuay.ondalune.data.model.ReverbState,
     reverbProcessingMode: ReverbProcessingMode,
     isPlayingOfflineFile: Boolean,
+    download: PlayerDownload?,
     sleepTimerState: SleepTimerState,
     shuffleEnabled: Boolean,
     shuffleMode: ShuffleMode,
@@ -1269,6 +1283,18 @@ private fun NowPlayingControlsColumn(
                                 )
                             }
                             Spacer(modifier = Modifier.width(6.dp))
+                            val downloaded = isPlayingOfflineFile || download?.state?.isCompleted == true
+                            if (downloaded) {
+                                Icon(
+                                    imageVector = Icons.Filled.DownloadDone,
+                                    contentDescription = "Downloaded",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .testTag("now_playing_downloaded_mark")
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                            }
                             Text(
                                 text = buildString {
                                     append("${track.playCount} plays")
@@ -1278,12 +1304,12 @@ private fun NowPlayingControlsColumn(
                                     if (reverbState.isActivelyProcessing) {
                                         append(" • ${reverbProcessingMode.label}")
                                     }
-                                    if (isPlayingOfflineFile) {
-                                        append(" • Offline")
+                                    if (downloaded) {
+                                        append(" • Downloaded")
                                     }
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (shuffleMode == ShuffleMode.SMART || reverbState.isActivelyProcessing || isPlayingOfflineFile) {
+                                color = if (shuffleMode == ShuffleMode.SMART || reverbState.isActivelyProcessing || downloaded) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1453,6 +1479,8 @@ private fun NowPlayingControlsColumn(
                     modifier = Modifier.size(22.dp)
                 )
             }
+
+            download?.let { PlayerDownloadButton(it) }
 
             // Bottom Right: Sleep Timer Icon-Only Button
             Box(contentAlignment = Alignment.TopEnd) {
@@ -1958,3 +1986,66 @@ private fun UpNextPartialBottomSheet(
     }
 }
 
+/** The current song's download in the player: its row (null if never downloaded) and actions. */
+class PlayerDownload(
+    val state: SubsonicDownloadEntity?,
+    val onDownload: () -> Unit,
+    val onCancel: () -> Unit,
+    val onRemove: () -> Unit
+)
+
+/**
+ * Download, then a progress ring while it downloads (tap to cancel), then a filled tick once the
+ * song is on the phone; tapping the tick offers to remove it.
+ */
+@Composable
+private fun PlayerDownloadButton(download: PlayerDownload) {
+    val state = download.state?.stateEnum
+    val saved = download.state?.isCompleted == true
+    val transferring = state == OfflineDownloadState.DOWNLOADING || state == OfflineDownloadState.QUEUED
+    var offerRemove by remember { mutableStateOf(false) }
+    Box {
+        IconToggleButton(
+            checked = saved,
+            onCheckedChange = {
+                when {
+                    saved -> offerRemove = true
+                    transferring -> download.onCancel()
+                    else -> download.onDownload()
+                }
+            },
+            shapes = IconButtonDefaults.toggleableShapes(),
+            modifier = Modifier
+                .size(width = 64.dp, height = 52.dp)
+                .testTag("now_playing_download")
+        ) {
+            when {
+                transferring -> Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        progress = { (download.state?.progressPercent ?: 0) / 100f },
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Icon(Icons.Filled.Clear, contentDescription = "Cancel download", modifier = Modifier.size(12.dp))
+                }
+                saved -> Icon(Icons.Filled.DownloadDone, contentDescription = "Downloaded", modifier = Modifier.size(22.dp))
+                else -> Icon(
+                    Icons.Filled.Download,
+                    contentDescription = if (state == OfflineDownloadState.FAILED) "Download failed, try again" else "Download",
+                    tint = if (state == OfflineDownloadState.FAILED) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        DropdownMenu(expanded = offerRemove, onDismissRequest = { offerRemove = false }) {
+            DropdownMenuItem(
+                text = { Text("Remove download") },
+                leadingIcon = { Icon(Icons.Filled.DeleteOutline, contentDescription = null) },
+                onClick = {
+                    offerRemove = false
+                    download.onRemove()
+                }
+            )
+        }
+    }
+}

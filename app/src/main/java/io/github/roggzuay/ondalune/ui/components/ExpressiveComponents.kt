@@ -456,10 +456,11 @@ fun <T> ExpressiveNavigationDock(
             hazeState = hazeState,
             compact = floating,
             modifier = if (floating) {
-                // Floating: a slim frosted pill that blurs whatever scrolls behind it.
+                // Floating: a slim frosted pill that blurs whatever scrolls behind it, as wide as
+                // the mini player above it.
                 Modifier
-                    .padding(start = 24.dp, end = 24.dp, bottom = 10.dp)
-                    .widthIn(max = 520.dp)
+                    .widthIn(max = 760.dp)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
                     .fillMaxWidth()
                     .height(62.dp)
                     .shadow(10.dp, pill, ambientColor = Color.Black.copy(alpha = 0.4f), spotColor = Color.Black.copy(alpha = 0.4f))
@@ -1052,7 +1053,8 @@ fun OndaluneBrandEmblem(
     frameShape: AppIconPreviewFrameShape = AppIconPreviewFrameShape.SQUIRCLE,
     foregroundScale: Float = 1f,
     foregroundAlpha: Float = 1f,
-    backgroundShift: Float = 0f
+    backgroundShift: Float = 0f,
+    backgroundAlpha: Float = 1f
 ) {
     val (bg, fg) = appIconLayers(variant)
     Box(
@@ -1068,7 +1070,11 @@ fun OndaluneBrandEmblem(
             contentScale = ContentScale.FillBounds,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { scaleX = 1.5f; scaleY = 1.5f; translationX = backgroundShift * this.size.width * 0.12f }
+                .graphicsLayer {
+                    scaleX = 1.5f; scaleY = 1.5f
+                    translationX = backgroundShift * this.size.width * 0.12f
+                    alpha = backgroundAlpha
+                }
         )
         Image(
             painter = painterResource(fg),

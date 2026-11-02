@@ -45,6 +45,9 @@ import io.github.roggzuay.ondalune.data.model.SeekBarStyle
 import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SleepTimerState
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
+import io.github.roggzuay.ondalune.data.model.smartShuffle
+import kotlinx.coroutines.flow.first
+import io.github.roggzuay.ondalune.data.model.spreadOut
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicArtist
@@ -884,7 +887,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         // Full lists: Home shows the first few of each, the shelf's "More" page shows all of it.
         val tracksByAlbum = trackList.groupBy { it.albumId }
         HomeShelves(
-            jumpBackIn = recentIds.mapNotNull { tracksById[it] },
+            jumpBackIn = recentIds.take(40).mapNotNull { tracksById[it] },
             recentlyAdded = serverOrdered("newest").ifEmpty { albumsByYear },
             favouriteTracks = trackList.filter { it.starred }.sortedByDescending { it.userRating },
             mostPlayed = trackList.filter { it.playCount > 0 }.sortedByDescending { it.playCount }
@@ -941,7 +944,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun recordPlayed(trackId: String) {
-        val updated = (listOf(trackId) + _recentTrackIds.value.filterNot { it == trackId }).take(40)
+        // Kept longer than "Jump back in" shows, so shuffles can move recent songs back.
+        val updated = (listOf(trackId) + _recentTrackIds.value.filterNot { it == trackId }).take(200)
         _recentTrackIds.value = updated
         prefs.edit().putString(PREF_RECENT_TRACKS, updated.joinToString(",")).apply()
     }
@@ -1045,6 +1049,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             val activeServer = repository.ensureSeeded()
             _activeServerId.value = activeServer.id
             downloadManager.refreshStorageSummary(activeServer.id)
+            resumeInterruptedDownloads(activeServer)
             _pingDiagnostic.value = repository.pingAndInspect(activeServer)
             val lastFull = prefs.getLong(PREF_FULL_SYNC_AT + activeServer.id, 0L)
             if (shouldSyncOnLaunch(lastFull, activeServer.isDemoServer)) {
@@ -2294,62 +2299,15 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .apply()
     }
 
-    /**
-     * Builds a personalized Smart Shuffle queue using Efraimidis-Spirakis weighted reservoir
-     * sampling (`u^(1 / weight)`) where weight combines:
-     * - User rating (1–5★)
-     * - Starred / Favourite status
-     * - Play count frequency
-     * Followed by an artist de-clustering pass so back-to-back songs vary across artists.
-     */
+    /** Smart Shuffle queue ([smartShuffle]), starting with [anchorTrack] when given. */
     private fun buildSmartShuffledQueue(
         anchorTrack: SubsonicTrack?,
         candidates: List<SubsonicTrack>,
         profile: SmartShuffleProfile = _customizationSettings.value.smartShuffleProfile
     ): List<SubsonicTrack> {
         if (candidates.isEmpty()) return emptyList()
-        val remaining = if (anchorTrack != null) {
-            candidates.filter { it.id != anchorTrack.id }
-        } else {
-            candidates
-        }
-
-        val weightedSorted = remaining
-            .map { track ->
-                val weight = track.smartShuffleWeight(profile)
-                val u = Random.nextDouble(0.08, 0.9999)
-                val key = u.pow(1.0 / weight)
-                track to key
-            }
-            .sortedByDescending { it.second }
-            .map { it.first }
-            .toMutableList()
-
-        // Artist de-clustering pass: avoid consecutive tracks by the same artist when possible
-        for (i in 0 until (weightedSorted.size - 1)) {
-            val prevArtist = if (i == 0 && anchorTrack != null) {
-                anchorTrack.artist
-            } else {
-                weightedSorted[i].artist
-            }
-            val checkIdx = if (i == 0 && anchorTrack != null) 0 else i + 1
-            if (checkIdx in weightedSorted.indices && weightedSorted[checkIdx].artist == prevArtist) {
-                val swapIdx = ((checkIdx + 1) until weightedSorted.size).firstOrNull { idx ->
-                    weightedSorted[idx].artist != prevArtist
-                }
-                if (swapIdx != null) {
-                    val temp = weightedSorted[checkIdx]
-                    weightedSorted[checkIdx] = weightedSorted[swapIdx]
-                    weightedSorted[swapIdx] = temp
-                }
-            }
-        }
-
-        return if (anchorTrack != null) {
-            listOf(anchorTrack) + weightedSorted
-        } else {
-            weightedSorted
-        }
+        val remaining = candidates.filter { it.id != anchorTrack?.id }
+        return listOfNotNull(anchorTrack) + smartShuffle(remaining, profile, _recentTrackIds.value, after = anchorTrack)
     }
 
     private fun buildQueueForMode(
@@ -2359,7 +2317,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     ): List<SubsonicTrack> {
         return when (mode) {
             ShuffleMode.OFF -> candidates
-            ShuffleMode.STANDARD -> listOf(anchorTrack) + candidates.filter { it.id != anchorTrack.id }.shuffled()
+            ShuffleMode.STANDARD ->
+                listOf(anchorTrack) + spreadOut(candidates.filter { it.id != anchorTrack.id }.shuffled(), after = anchorTrack)
             ShuffleMode.SMART -> buildSmartShuffledQueue(
                 anchorTrack = anchorTrack,
                 candidates = candidates,
@@ -2794,6 +2753,31 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             downloadManager.cancelDownload(_activeServerId.value, trackId)
             _statusBanner.value = "Cancelled download"
+        }
+    }
+
+    /** Downloads cut off when the app last closed pick up again, in their old queue order. */
+    private suspend fun resumeInterruptedDownloads(server: SubsonicServerConfig) {
+        val interrupted = downloadManager.interruptedDownloads(server.id).sortedBy { it.updatedAtMs }
+        if (interrupted.isEmpty()) return
+        val byId = repository.observeTracksForServer(server.id).first().associateBy { it.id }
+        interrupted.mapNotNull { byId[it.trackId] }.forEach {
+            downloadManager.enqueueTrackDownload(server, it, _customizationSettings.value.downloadSpeedLimit)
+        }
+    }
+
+    fun retryOfflineDownloads(trackIds: Collection<String>) {
+        val byId = allServerTracks.value.associateBy { it.id }
+        val server = activeServer()
+        trackIds.mapNotNull { byId[it] }.forEach {
+            downloadManager.enqueueTrackDownload(server, it, _customizationSettings.value.downloadSpeedLimit)
+        }
+    }
+
+    fun cancelOfflineDownloads(trackIds: Collection<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { downloadManager.cancelDownload(_activeServerId.value, it) }
+            _statusBanner.value = if (trackIds.size == 1) "Cancelled download" else "Cancelled ${trackIds.size} downloads"
         }
     }
 
