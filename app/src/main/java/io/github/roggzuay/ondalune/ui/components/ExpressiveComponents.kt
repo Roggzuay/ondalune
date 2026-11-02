@@ -14,6 +14,10 @@ import androidx.compose.animation.core.snap
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ripple
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.indication
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.roggzuay.ondalune.ui.theme.LocalCornerScale
 import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
@@ -33,7 +37,6 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.material3.MaterialShapes
 import androidx.graphics.shapes.toPath
 import androidx.graphics.shapes.Morph
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleOut
@@ -42,8 +45,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.animation.animateColorAsState
@@ -89,14 +92,12 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -273,6 +274,7 @@ fun ExpressiveBounceIconButton(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     },
+    onLongClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -307,12 +309,18 @@ fun ExpressiveBounceIconButton(
                 this.scaleY = scaleY
             }
             .clip(RoundedCornerShape(safeCornerDp))
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = {
                     hapticManager.performSubtleTick()
                     onClick()
+                },
+                onLongClick = onLongClick?.let { longClick ->
+                    {
+                        hapticManager.performToggleOption(false)
+                        longClick()
+                    }
                 }
             ),
         shape = RoundedCornerShape(safeCornerDp),
@@ -351,7 +359,9 @@ fun SpringPressableSurface(
         label = "cardScaleY"
     )
 
-    val corner = cornerRadius * LocalCornerScale.current
+    // Capped so Poster/Bloom with the pill preset (up to ×2.2) never round past text sitting
+    // 12dp inside a card.
+    val corner = (cornerRadius * LocalCornerScale.current).coerceAtMost(40.dp)
     val animatedCorner by animateDpAsState(
         targetValue = if (isPressed) (corner * 0.78f) else corner,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -365,7 +375,23 @@ fun SpringPressableSurface(
         this.scaleY = scaleY
     }
     val shape = RoundedCornerShape(safeAnimatedCorner)
-    if (onLongClick == null) {
+    if (color.alpha == 0f) {
+        // Nothing to fill, so nothing to clip: titles under the artwork stay whole however round
+        // the theme's corners are. Only the press ripple takes the shape.
+        Box(
+            modifier = modifier
+                .then(pressScale)
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                )
+        ) {
+            Box(Modifier.matchParentSize().clip(shape).indication(interactionSource, ripple()))
+            content()
+        }
+    } else if (onLongClick == null) {
         Surface(
             onClick = onClick,
             interactionSource = interactionSource,
@@ -420,57 +446,126 @@ fun <T> ExpressiveNavigationDock(
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null
 ) {
-    val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
-    if (dockStyle == DockStyle.STATIC) {
-        // Standard is transparent: the bar sits on the page itself instead of a tinted band.
-        NavigationBar(
-            modifier = modifier.fillMaxWidth(),
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
-            windowInsets = WindowInsets(0, 0, 0, 0)
-        ) {
-            items.forEach { item ->
-                val selected = item.id == selectedId
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = {
-                        hapticManager.performSubtleTick()
-                        onSelect(item.id)
-                    },
-                    icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, contentDescription = null) },
-                    label = {
-                        Text(
-                            text = item.label,
-                            style = if (selected) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
-                            maxLines = 1
-                        )
-                    },
-                    modifier = Modifier.testTag(item.testTag)
-                )
-            }
-        }
-        return
-    }
-
-    // Floating: a slim frosted pill that blurs whatever scrolls behind it.
+    val floating = dockStyle != DockStyle.STATIC
     val pill = RoundedCornerShape(percent = 50)
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Row(
-            modifier = Modifier
-                .padding(start = 24.dp, end = 24.dp, bottom = 10.dp)
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
-                .height(62.dp)
-                .shadow(10.dp, pill, ambientColor = Color.Black.copy(alpha = 0.4f), spotColor = Color.Black.copy(alpha = 0.4f))
-                .frosted(hazeState, pill)
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), pill)
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEach { item ->
+        DockItems(
+            items = items,
+            selectedId = selectedId,
+            onSelect = onSelect,
+            hazeState = hazeState,
+            compact = floating,
+            modifier = if (floating) {
+                // Floating: a slim frosted pill that blurs whatever scrolls behind it.
+                Modifier
+                    .padding(start = 24.dp, end = 24.dp, bottom = 10.dp)
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth()
+                    .height(62.dp)
+                    .shadow(10.dp, pill, ambientColor = Color.Black.copy(alpha = 0.4f), spotColor = Color.Black.copy(alpha = 0.4f))
+                    .frosted(hazeState, pill)
+                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), pill)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            } else {
+                // Standard is transparent: the bar sits on the page itself instead of a tinted band.
+                Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+            }
+        )
+    }
+}
+
+/**
+ * The tabs, with a rounded-square indicator behind the selected icon. Holding the bar and sliding
+ * brings up a clear glass square that follows the finger from tab to tab, showing the page behind
+ * the bar through a lighter blur; letting go opens the tab under it.
+ */
+@Composable
+private fun <T> DockItems(
+    items: List<ExpressiveNavItem<T>>,
+    selectedId: T,
+    onSelect: (T) -> Unit,
+    hazeState: HazeState?,
+    compact: Boolean,
+    modifier: Modifier
+) {
+    val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
+    val scope = rememberCoroutineScope()
+    val itemShape = RoundedCornerShape(18.dp)
+    var widthPx by remember { mutableIntStateOf(0) }
+    val slotPx = if (items.isEmpty()) 0f else widthPx / items.size.toFloat()
+    // Lens centre in px while it's out, its fade/grow, and the tab it's over.
+    val lensX = remember { Animatable(0f) }
+    val lensShown = remember { Animatable(0f) }
+    var lensIndex by remember { mutableStateOf<Int?>(null) }
+    val currentItems by rememberUpdatedState(items)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+
+    Box(
+        modifier
+            .onSizeChanged { widthPx = it.width }
+            .pointerInput(Unit) {
+                fun indexAt(x: Float) = (x / (size.width / currentItems.size.toFloat())).toInt().coerceIn(0, currentItems.lastIndex)
+                fun centreOf(i: Int) = (i + 0.5f) * size.width / currentItems.size
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { start ->
+                        val i = indexAt(start.x)
+                        lensIndex = i
+                        hapticManager.performGluePressStart()
+                        scope.launch { lensX.snapTo(centreOf(i)) }
+                        scope.launch { lensShown.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)) }
+                    },
+                    onDrag = { change, drag ->
+                        change.consume()
+                        val half = size.width / currentItems.size / 2f
+                        val x = (lensX.value + drag.x).coerceIn(half, size.width - half)
+                        scope.launch { lensX.snapTo(x) }
+                        val i = indexAt(x)
+                        if (i != lensIndex) {
+                            lensIndex = i
+                            hapticManager.performSubtleTick()
+                        }
+                    },
+                    onDragEnd = {
+                        val i = lensIndex ?: return@detectDragGesturesAfterLongPress
+                        currentOnSelect(currentItems[i].id)
+                        scope.launch {
+                            lensX.animateTo(centreOf(i), spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium))
+                            lensShown.animateTo(0f, tween(180))
+                            lensIndex = null
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch { lensShown.animateTo(0f, tween(180)); lensIndex = null }
+                    }
+                )
+            }
+    ) {
+        if (lensIndex != null && slotPx > 0f) {
+            val density = LocalDensity.current
+            val lensWidth = with(density) { slotPx.toDp() } - 4.dp
+            Box(
+                Modifier
+                    .offset { IntOffset((lensX.value - slotPx / 2f + 2.dp.toPx()).roundToInt(), 0) }
+                    .width(lensWidth)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        val t = lensShown.value
+                        alpha = t.coerceIn(0f, 1f)
+                        scaleX = 0.85f + 0.15f * t
+                        scaleY = 0.85f + 0.15f * t
+                    }
+                    .glassLens(hazeState, itemShape)
+            )
+        }
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            items.forEachIndexed { index, item ->
                 val selected = item.id == selectedId
+                val underLens = index == lensIndex
                 val indicatorWidth by animateDpAsState(
-                    targetValue = if (selected) 52.dp else 32.dp,
+                    targetValue = if (selected) (if (compact) 52.dp else 64.dp) else 32.dp,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
                     label = "dockIndicator"
                 )
@@ -478,23 +573,31 @@ fun <T> ExpressiveNavigationDock(
                     if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
                     label = "dockIndicatorColor"
                 )
+                // The glass magnifies what it's over a little.
+                val magnify by animateFloatAsState(
+                    if (underLens) 1.18f else 1f,
+                    spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium),
+                    label = "dockMagnify"
+                )
                 val tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
+                        .fillMaxHeight()
+                        .clip(itemShape)
                         .clickable {
                             hapticManager.performSubtleTick()
                             onSelect(item.id)
                         }
-                        .padding(vertical = 5.dp)
                         .testTag(item.testTag)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(width = indicatorWidth, height = 28.dp)
-                            .clip(pill)
+                            .graphicsLayer { scaleX = magnify; scaleY = magnify }
+                            .size(width = indicatorWidth, height = if (compact) 28.dp else 32.dp)
+                            .clip(RoundedCornerShape(if (compact) 10.dp else 12.dp))
                             .background(indicator),
                         contentAlignment = Alignment.Center
                     ) {
@@ -502,21 +605,48 @@ fun <T> ExpressiveNavigationDock(
                             if (selected) item.selectedIcon else item.unselectedIcon,
                             contentDescription = null,
                             tint = tint,
-                            modifier = Modifier.size(21.dp)
+                            modifier = Modifier.size(if (compact) 21.dp else 24.dp)
                         )
                     }
+                    if (!compact) Spacer(Modifier.height(4.dp))
                     Text(
                         text = item.label,
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = (if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium).copy(
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         ),
-                        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (selected || underLens) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * The dock's sliding lens: the page behind the bar under a much lighter blur than the bar's own
+ * frost, so it reads as a clear pane moving through it, with a thin bright rim. Without blur
+ * support (before Android 12) it is a faint wash with the same rim.
+ */
+@Composable
+private fun Modifier.glassLens(hazeState: HazeState?, shape: Shape): Modifier {
+    val rim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.38f), Color.White.copy(alpha = 0.06f)))
+    val glass = if (hazeState != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        this
+            .clip(shape)
+            .hazeEffect(
+                state = hazeState,
+                style = HazeStyle(
+                    backgroundColor = MaterialTheme.colorScheme.surface,
+                    tint = HazeTint(Color.White.copy(alpha = 0.05f)),
+                    blurRadius = 6.dp,
+                    noiseFactor = 0f
+                )
+            )
+    } else {
+        this.clip(shape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+    }
+    return glass.border(1.dp, rim, shape)
 }
 
 /**
@@ -1294,9 +1424,9 @@ fun PullSyncIndicator(
 
 /**
  * M3 Expressive transport: a real [ButtonGroup] so the pressed button widens and its neighbours
- * yield. Play/pause is the hero — it morphs pill ↔ squircle with the playback state and swaps
- * to a [LoadingIndicator] while buffering. Shuffle/repeat are toggles whose corners square off
- * when checked.
+ * yield. Play/pause is the hero — it morphs pill ↔ squircle with the playback state and swaps to
+ * a [LoadingIndicator] while buffering. Previous/next are tonal so their press squish shows;
+ * shuffle and repeat are plain icons that take the accent colour when on.
  */
 @Composable
 fun ExpressiveTransportGroup(
@@ -1326,6 +1456,12 @@ fun ExpressiveTransportGroup(
         label = "playCorner"
     )
     val glyphSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    // Skip buttons share play's squircle (28dp on 88dp ≈ 20dp on 64dp) and only tighten their
+    // corners on press: a small corner tween instead of a circle-to-square morph.
+    val skipShapes = IconButtonDefaults.shapes(
+        shape = RoundedCornerShape(20.dp),
+        pressedShape = RoundedCornerShape(12.dp)
+    )
 
     ButtonGroup(
         overflowIndicator = {},
@@ -1337,7 +1473,7 @@ fun ExpressiveTransportGroup(
     ) {
         customItem(
             buttonGroupContent = {
-                FilledTonalIconToggleButton(
+                IconToggleButton(
                     checked = shuffleEnabled,
                     onCheckedChange = {
                         haptics.performToggleOption(!shuffleEnabled)
@@ -1352,7 +1488,7 @@ fun ExpressiveTransportGroup(
                         .testTag("shuffle_button")
                 ) {
                     Icon(
-                        imageVector = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.AutoAwesome else Icons.Filled.Shuffle,
+                        imageVector = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
                         contentDescription = "Cycle Shuffle Mode (${shuffleMode.label})"
                     )
                 }
@@ -1366,7 +1502,7 @@ fun ExpressiveTransportGroup(
                         haptics.performTrackSkip(isNext = false)
                         onSkipPrevious()
                     },
-                    shapes = IconButtonDefaults.shapes(),
+                    shapes = skipShapes,
                     interactionSource = prevSource,
                     modifier = Modifier
                         .weight(1.25f)
@@ -1426,7 +1562,7 @@ fun ExpressiveTransportGroup(
                         haptics.performTrackSkip(isNext = true)
                         onSkipNext()
                     },
-                    shapes = IconButtonDefaults.shapes(),
+                    shapes = skipShapes,
                     interactionSource = nextSource,
                     modifier = Modifier
                         .weight(1.25f)
@@ -1441,7 +1577,7 @@ fun ExpressiveTransportGroup(
         )
         customItem(
             buttonGroupContent = {
-                FilledTonalIconToggleButton(
+                IconToggleButton(
                     checked = repeatOneEnabled,
                     onCheckedChange = {
                         haptics.performToggleOption(!repeatOneEnabled)

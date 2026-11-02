@@ -1,0 +1,1 @@
+A calmer look: colour now comes from your music, not the buttons. Hold the speed button in the player to reset speed, pitch and reverb. Hold the tab bar and slide to glide between tabs. A short note after big updates tells you what's new. Fixes & improvements, including a crash while the library syncs.

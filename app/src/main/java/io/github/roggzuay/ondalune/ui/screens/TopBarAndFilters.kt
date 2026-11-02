@@ -77,44 +77,15 @@ import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilters
-import java.time.LocalTime
-
-/** One line per launch under "Hi {name}". A few are time-aware so late nights read differently. */
-private val GreetingLines = listOf(
-    "What's your mood today?",
-    "Headphones on. World off.",
-    "Something loud or something slow?",
-    "Your next favourite song is in here somewhere.",
-    "Pick a vibe, we'll handle the rest.",
-    "Deep cuts or old favourites?",
-    "Every great day has a soundtrack.",
-    "Press play on something new.",
-    "Lossless ears deserve lossless music.",
-    "Turn it up, nobody's judging.",
-    "One more album, then sleep. Promise.",
-    "Let the bass do the talking."
-)
-
-fun greetingLine(index: Int): String {
-    val hour = LocalTime.now().hour
-    val timely = when (hour) {
-        in 5..10 -> "Coffee and a good album?"
-        in 0..4 -> "Late-night listening session?"
-        else -> null
-    }
-    // Every third launch in those hours uses the time-aware line; otherwise rotate.
-    return if (timely != null && index % 3 == 0) timely else GreetingLines[index.mod(GreetingLines.size)]
-}
 
 /**
- * Minimal app bar: a greeting (or the tab's title) on the left, icon actions on the right. Search
+ * Minimal app bar: the tab's title on the left, icon actions on the right. Search
  * opens in place of the title, so no search field sits on screen until it's wanted.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun OndaluneTopBar(
     title: String,
-    subtitle: String?,
     searchQuery: String,
     statusBanner: String?,
     activeDownloads: List<SubsonicDownloadEntity>,
@@ -163,15 +134,6 @@ fun OndaluneTopBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (subtitle != null) {
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
                     if (activeDownloads.isNotEmpty()) {
                         DownloadsIndicator(activeDownloads, onCancelDownload)
@@ -181,13 +143,15 @@ fun OndaluneTopBar(
                         shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.testTag("top_bar_search_button")
                     ) { Icon(Icons.Filled.Search, contentDescription = "Search") }
-                    IconButton(
-                        onClick = onOpenFilters,
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier.testTag("top_bar_filter_button")
-                    ) {
-                        BadgedBox(badge = { if (filtersActive) Badge() }) {
-                            Icon(Icons.Filled.FilterList, contentDescription = "Library filter")
+                    if (!isSettingsActive) {
+                        IconButton(
+                            onClick = onOpenFilters,
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier.testTag("top_bar_filter_button")
+                        ) {
+                            BadgedBox(badge = { if (filtersActive) Badge() }) {
+                                Icon(Icons.Filled.FilterList, contentDescription = "Library filter")
+                            }
                         }
                     }
                     if (isSettingsActive) {
@@ -210,33 +174,33 @@ fun OndaluneTopBar(
         AnimatedVisibility(visible = !statusBanner.isNullOrBlank()) {
             Surface(
                 shape = cornerShape(14.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(end = 12.dp, top = 4.dp)
                     .clickable { onDismissBanner() }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (bannerBusy) {
                         LoadingIndicator(
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(22.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(12.dp))
                     }
                     Text(
                         text = statusBanner.orEmpty(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
                     Icon(
                         Icons.Filled.Clear,
                         contentDescription = "Dismiss",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }

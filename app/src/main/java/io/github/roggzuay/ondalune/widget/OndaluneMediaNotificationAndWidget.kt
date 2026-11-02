@@ -138,6 +138,16 @@ class OndalunePlaybackService : Service() {
         super.onDestroy()
     }
 
+    // Swiping Ondalune away in Recents closes it, player included. Its controls lived in the
+    // closed screen, so music left running after it could no longer be paused or seeked.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        OndaluneMediaBridge.closePlayer(applicationContext)
+        releaseLocks()
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             OndaluneMediaBridge.ACTION_SERVICE_START_FOREGROUND -> {
@@ -367,6 +377,11 @@ object OndaluneMediaBridge {
                 lastTrack = cur.copy(starred = !cur.starred)
             }
         }
+        syncFromEngine(context, engine)
+    }
+
+    /** Notification, media session and widgets from the engine's own state (no ViewModel). */
+    private fun syncFromEngine(context: Context, engine: OndaluneAudioEngine) {
         syncPlaybackAndThemeState(
             context = context.applicationContext,
             track = lastTrack,
@@ -377,6 +392,25 @@ object OndaluneMediaBridge {
             playbackSpeed = engine.playbackSpeed.value,
             isBuffering = engine.isBuffering.value
         )
+    }
+
+    /**
+     * The app was swiped away: stop the music and take the media session and notification down
+     * with it, as closing an app should. The next launch starts from the paused track.
+     */
+    fun closePlayer(context: Context) {
+        foregroundStopHandler.removeCallbacksAndMessages(null)
+        OndalunePlaybackRuntime.peekEngine()?.pausePlayback()
+        lastIsPlaying = false
+        synchronized(this) {
+            mediaSession?.run {
+                isActive = false
+                release()
+            }
+            mediaSession = null
+        }
+        NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        refreshAllWidgets(context.applicationContext)
     }
 
     private fun ensureMediaSession(context: Context): MediaSession {
@@ -408,7 +442,9 @@ object OndaluneMediaBridge {
                         if (seekHandler != null) {
                             seekHandler.invoke(target)
                         } else {
-                            OndalunePlaybackRuntime.peekEngine()?.seekTo(target)
+                            val engine = OndalunePlaybackRuntime.peekEngine() ?: return
+                            engine.seekTo(target)
+                            syncFromEngine(appCtx, engine)
                         }
                     }
 

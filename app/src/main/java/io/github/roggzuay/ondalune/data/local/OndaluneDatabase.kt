@@ -9,6 +9,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -213,9 +214,14 @@ interface OndaluneDao {
     @Query("DELETE FROM subsonic_servers WHERE id = :serverId AND isDemoServer = 0")
     suspend fun deleteServer(serverId: Long)
 
+    // The whole library spans several CursorWindows, and each refill re-runs the query. Reading in
+    // one transaction keeps a single snapshot while the sync writes; without it the table can
+    // shrink mid-read and crash ("Couldn't read row N from CursorWindow", TrackListReadRaceTest).
+    @Transaction
     @Query("SELECT * FROM subsonic_tracks WHERE serverId = :serverId ORDER BY albumId ASC, trackNumber ASC")
     fun observeTracksForServer(serverId: Long): Flow<List<SubsonicTrack>>
 
+    @Transaction
     @Query("SELECT * FROM subsonic_tracks WHERE serverId = :serverId")
     suspend fun getTracksForServerOnce(serverId: Long): List<SubsonicTrack>
 

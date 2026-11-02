@@ -33,11 +33,11 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material3.IconToggleButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -113,6 +113,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -170,6 +176,7 @@ import io.github.roggzuay.ondalune.ui.components.rememberHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.NowPlayingSheetTab
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
@@ -206,7 +213,6 @@ fun FloatingExpressiveMiniPlayer(
     val latestPrevious by rememberUpdatedState(onSkipPrevious)
     val progress = (positionMs.toFloat() / durationMs.coerceAtLeast(1000L).toFloat()).coerceIn(0f, 1f)
     // The theme already follows the cover's real colors; the track's hex hint is only a guess.
-    val seedColor = MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -243,13 +249,7 @@ fun FloatingExpressiveMiniPlayer(
             color = Color.Transparent,
             cornerRadius = 22.dp
         ) {
-            Column(
-                modifier = Modifier.background(
-                    Brush.horizontalGradient(
-                        colors = listOf(seedColor.copy(alpha = 0.22f), Color.Transparent)
-                    )
-                )
-            ) {
+            Column {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -284,17 +284,11 @@ fun FloatingExpressiveMiniPlayer(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
                             )
-                            Surface(
-                                shape = cornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = track.suffix,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                )
-                            }
+                            Text(
+                                text = track.suffix,
+                                style = monoLabelSmall(),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         // Plain text here: the whole bar is a tap target to expand the player.
                         Text(
@@ -332,7 +326,7 @@ fun FloatingExpressiveMiniPlayer(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    FilledTonalIconButton(
+                    IconButton(
                         onClick = onSkipNext,
                         shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier
@@ -441,6 +435,10 @@ fun NowPlayingStudioOverlay(
     onToggleRepeatOne: () -> Unit,
     onToggleStar: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
+    /** Long-press on the speed button: back to 1×, original pitch, no reverb. */
+    onResetSpeedPitch: () -> Unit = {},
+    showSpeedResetHint: Boolean = false,
+    onSpeedResetHintShown: () -> Unit = {},
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit = {},
     /** The playlist the queue came from, while the current track is in it; named in the header. */
@@ -683,6 +681,9 @@ fun NowPlayingStudioOverlay(
                                 onToggleStar = onToggleStar,
                                 onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
                                 onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
+                                onResetSpeedPitch = onResetSpeedPitch,
+                                showSpeedResetHint = showSpeedResetHint,
+                                onSpeedResetHintShown = onSpeedResetHintShown,
                                 onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                                 onOpenArtist = onOpenArtist
                             )
@@ -762,6 +763,9 @@ fun NowPlayingStudioOverlay(
                         onToggleStar = onToggleStar,
                         onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
                         onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
+                        onResetSpeedPitch = onResetSpeedPitch,
+                        showSpeedResetHint = showSpeedResetHint,
+                        onSpeedResetHintShown = onSpeedResetHintShown,
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                         onOpenArtist = onOpenArtist
                     )
@@ -933,9 +937,9 @@ private fun NowPlayingTopHeaderBar(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = server.name.uppercase(),
+                    text = server.name,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1140,6 +1144,7 @@ private fun NowPlayingCenterStage(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NowPlayingControlsColumn(
     track: SubsonicTrack,
@@ -1171,6 +1176,9 @@ private fun NowPlayingControlsColumn(
     onToggleStar: () -> Unit,
     onSetTrackRating: (Int) -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
+    onResetSpeedPitch: () -> Unit,
+    showSpeedResetHint: Boolean,
+    onSpeedResetHintShown: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit = {}
 ) {
@@ -1289,7 +1297,7 @@ private fun NowPlayingControlsColumn(
                     if (showPlayerStarButton) {
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        FilledTonalIconToggleButton(
+                        IconToggleButton(
                             checked = track.starred,
                             onCheckedChange = { onToggleStar() },
                             shapes = IconButtonDefaults.toggleableShapes(),
@@ -1325,41 +1333,61 @@ private fun NowPlayingControlsColumn(
         AnimatedVisibility(visible = !isLyricsMode) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val isDspModified = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing
+                // One-time "Hold to reset" bubble, for new installs and upgrades alike. It counts as
+                // seen only once it has been on screen, so closing the player early shows it again.
+                val resetHint = rememberTooltipState(isPersistent = true)
+                LaunchedEffect(Unit) {
+                    if (!showSpeedResetHint) return@LaunchedEffect
+                    delay(700)
+                    launch { resetHint.show() }
+                    delay(4000)
+                    resetHint.dismiss()
+                    onSpeedResetHintShown()
+                }
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        ExpressiveBounceIconButton(
-                            onClick = onOpenSpeedPitchSheet,
-                            active = isDspModified,
-                            size = 48.dp,
-                            containerColor = if (isDspModified) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            contentColor = if (isDspModified) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.testTag("open_speed_pitch_pill")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Speed,
-                                contentDescription = "Speed, Pitch & Live Reverb Settings",
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        if (isDspModified) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(4.dp)
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                        tooltip = { PlainTooltip { Text("Hold to reset speed & pitch") } },
+                        state = resetHint,
+                        // Long-press belongs to the reset, not to showing the tooltip.
+                        enableUserInput = false
+                    ) {
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            ExpressiveBounceIconButton(
+                                onClick = onOpenSpeedPitchSheet,
+                                onLongClick = onResetSpeedPitch,
+                                active = isDspModified,
+                                size = 48.dp,
+                                containerColor = if (isDspModified) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                contentColor = if (isDspModified) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.testTag("open_speed_pitch_pill")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Speed,
+                                    contentDescription = "Speed, Pitch & Live Reverb Settings",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            if (isDspModified) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(4.dp)
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                            }
                         }
                     }
                 }
@@ -1383,7 +1411,7 @@ private fun NowPlayingControlsColumn(
 
         Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 16.dp else 10.dp))
 
-        // Minimalist Bottom Control Bar:
+        // Bottom bar, plain icons that take the accent while their panel is open:
         // Bottom Left: Up Next Queue | Bottom Center: Synced Lyrics (Icon Only) | Bottom Right: Sleep Timer (Icon Only)
         Row(
             modifier = Modifier
@@ -1394,7 +1422,7 @@ private fun NowPlayingControlsColumn(
         ) {
             // Bottom Left: Up Next Button
             val isQueueOpen = activeTab == NowPlayingSheetTab.QUEUE
-            FilledTonalIconToggleButton(
+            IconToggleButton(
                 checked = isQueueOpen,
                 onCheckedChange = { onSelectTab(if (isQueueOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.QUEUE) },
                 shapes = IconButtonDefaults.toggleableShapes(),
@@ -1411,7 +1439,7 @@ private fun NowPlayingControlsColumn(
 
             // Bottom Center: Synced Lyrics Icon-Only Button (No word required)
             val isLyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
-            FilledTonalIconToggleButton(
+            IconToggleButton(
                 checked = isLyricsOpen,
                 onCheckedChange = { onSelectTab(if (isLyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
                 shapes = IconButtonDefaults.toggleableShapes(),
@@ -1428,7 +1456,7 @@ private fun NowPlayingControlsColumn(
 
             // Bottom Right: Sleep Timer Icon-Only Button
             Box(contentAlignment = Alignment.TopEnd) {
-                FilledTonalIconToggleButton(
+                IconToggleButton(
                     checked = sleepTimerState.isActive,
                     onCheckedChange = { onOpenSleepTimerSheet() },
                     shapes = IconButtonDefaults.toggleableShapes(),

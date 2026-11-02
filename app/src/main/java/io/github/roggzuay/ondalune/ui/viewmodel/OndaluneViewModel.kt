@@ -58,6 +58,10 @@ import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
 import io.github.roggzuay.ondalune.data.repository.OndaluneRepository
 import io.github.roggzuay.ondalune.ui.components.AppIconLauncherManager
+import io.github.roggzuay.ondalune.ui.components.ReleaseNotes
+import io.github.roggzuay.ondalune.ui.components.majorMinor
+import io.github.roggzuay.ondalune.ui.components.whatsNewToShow
+import io.github.roggzuay.ondalune.BuildConfig
 import io.github.roggzuay.ondalune.widget.MediaBridgeCommand
 import io.github.roggzuay.ondalune.widget.OndaluneMediaBridge
 import io.github.roggzuay.ondalune.widget.OndalunePlaybackRuntime
@@ -451,6 +455,23 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val client = OpenSubsonicClient()
     private val repository = OndaluneRepository(database.dao(), client)
     val audioEngine: OndaluneAudioEngine = OndalunePlaybackRuntime.getOrCreateEngine(application, client)
+
+    /** Notification, widget and headset controls while this screen is alive (see onCleared). */
+    private val bridgeCommand: (MediaBridgeCommand) -> Unit = { action ->
+        viewModelScope.launch {
+            when (action) {
+                MediaBridgeCommand.TOGGLE_PLAY_PAUSE -> togglePlayPause()
+                MediaBridgeCommand.PLAY -> if (!isPlaying.value) togglePlayPause()
+                MediaBridgeCommand.PAUSE -> if (isPlaying.value) togglePlayPause()
+                MediaBridgeCommand.SKIP_NEXT -> skipNext()
+                MediaBridgeCommand.SKIP_PREVIOUS -> skipPrevious()
+                MediaBridgeCommand.TOGGLE_STAR -> {
+                    _currentTrack.value?.let { toggleStarTrack(it) }
+                }
+            }
+        }
+    }
+    private val bridgeSeek: (Long) -> Unit = { posMs -> viewModelScope.launch { seekTo(posMs) } }
     val downloadManager = OndaluneDownloadManager(application, database.dao(), client, viewModelScope)
 
     private var sleepTimerJob: Job? = null
@@ -526,11 +547,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Rotates once per launch: index into the Home greeting lines. */
-    val greetingIndex: Int = prefs.getInt("greeting_index", -1).plus(1).also {
-        prefs.edit().putInt("greeting_index", it).apply()
-    }
-
     val offlineStorageSummary: StateFlow<OfflineStorageSummary> = downloadManager.storageSummary
 
     private val _currentDestination = MutableStateFlow(PrimaryDestination.HOME)
@@ -595,6 +611,37 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     private val _showServerOnboarding = MutableStateFlow(!prefs.getBoolean("onboarding_completed", false))
     val showServerOnboarding: StateFlow<Boolean> = _showServerOnboarding.asStateFlow()
+
+    // Shown once per install, new or upgraded: the player's speed button resets on a long press.
+    private val _showSpeedResetHint = MutableStateFlow(!prefs.getBoolean("hint_speed_hold_reset", false))
+    val showSpeedResetHint: StateFlow<Boolean> = _showSpeedResetHint.asStateFlow()
+
+    fun markSpeedResetHintShown() {
+        _showSpeedResetHint.value = false
+        prefs.edit().putBoolean("hint_speed_hold_reset", true).apply()
+    }
+
+    private val _whatsNew = MutableStateFlow(
+        whatsNewToShow(BuildConfig.VERSION_NAME, prefs.getString("whats_new_seen", null), isAppUpdate(application))
+            // Nothing to say on this launch: remember the version, so a later patch update of a
+            // fresh install doesn't count as news.
+            .also { if (it == null) markWhatsNewSeen() }
+    )
+    val whatsNew: StateFlow<ReleaseNotes?> = _whatsNew.asStateFlow()
+
+    fun dismissWhatsNew() {
+        _whatsNew.value = null
+        markWhatsNewSeen()
+    }
+
+    private fun markWhatsNewSeen() {
+        prefs.edit().putString("whats_new_seen", majorMinor(BuildConfig.VERSION_NAME)).apply()
+    }
+
+    private fun isAppUpdate(app: Application): Boolean = runCatching {
+        @Suppress("DEPRECATION")
+        app.packageManager.getPackageInfo(app.packageName, 0).let { it.lastUpdateTime > it.firstInstallTime }
+    }.getOrDefault(false)
 
     private val _isCutoutSyncActive = MutableStateFlow(false)
     val isCutoutSyncActive: StateFlow<Boolean> = _isCutoutSyncActive.asStateFlow()
@@ -875,33 +922,15 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 audioEngine.replayGainMode = s.replayGainMode
             }
         }
-        OndaluneMediaBridge.onCommand = { action ->
-            viewModelScope.launch {
-                when (action) {
-                    MediaBridgeCommand.TOGGLE_PLAY_PAUSE -> togglePlayPause()
-                    MediaBridgeCommand.PLAY -> if (!isPlaying.value) togglePlayPause()
-                    MediaBridgeCommand.PAUSE -> if (isPlaying.value) togglePlayPause()
-                    MediaBridgeCommand.SKIP_NEXT -> skipNext()
-                    MediaBridgeCommand.SKIP_PREVIOUS -> skipPrevious()
-                    MediaBridgeCommand.TOGGLE_STAR -> {
-                        _currentTrack.value?.let { toggleStarTrack(it) }
-                    }
-                }
-            }
-        }
-        OndaluneMediaBridge.onSeekTo = { posMs ->
-            viewModelScope.launch {
-                seekTo(posMs)
-            }
-        }
+        OndaluneMediaBridge.onCommand = bridgeCommand
+        OndaluneMediaBridge.onSeekTo = bridgeSeek
         viewModelScope.launch {
             val activeServer = repository.ensureSeeded()
             _activeServerId.value = activeServer.id
             downloadManager.refreshStorageSummary(activeServer.id)
             _pingDiagnostic.value = repository.pingAndInspect(activeServer)
-            // Keep the local mirror complete: full walk on first launch after install and when stale.
             val lastFull = prefs.getLong(PREF_FULL_SYNC_AT + activeServer.id, 0L)
-            if (!activeServer.isDemoServer && System.currentTimeMillis() - lastFull > FULL_SYNC_INTERVAL_MS) {
+            if (shouldSyncOnLaunch(lastFull, activeServer.isDemoServer)) {
                 triggerQuickSync(activeServer)
             }
         }
@@ -2831,11 +2860,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         sleepTimerJob?.cancel()
-        // Preserve background playback when MainActivity closes while audio is actively playing
-        if (!audioEngine.isPlaying.value) {
-            OndaluneMediaBridge.onCommand = null
-            OndaluneMediaBridge.onSeekTo = null
-        }
+        // These handlers launch in viewModelScope, which is cancelled now: left attached they
+        // swallowed every notification command, so music playing on could not be paused or
+        // seeked. Detached, the bridge drives the engine directly. A newer screen's handlers stay.
+        if (OndaluneMediaBridge.onCommand === bridgeCommand) OndaluneMediaBridge.onCommand = null
+        if (OndaluneMediaBridge.onSeekTo === bridgeSeek) OndaluneMediaBridge.onSeekTo = null
     }
 }
 
@@ -2850,7 +2879,14 @@ data class LibraryFilters(
     val active: Boolean get() = downloadedOnly || hideShortTracks || losslessOnly
 }
 private const val PREF_FULL_SYNC_AT = "full_library_sync_at_"
-private const val FULL_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000L
+
+/**
+ * The library syncs on its own only once per server, when it has never been fully synced (first
+ * run, or a server added outside onboarding). After that only the user starts a sync: pull to
+ * refresh on Home, or Sync in the library filter and server sheets.
+ */
+internal fun shouldSyncOnLaunch(lastFullSyncAt: Long, isDemoServer: Boolean): Boolean =
+    !isDemoServer && lastFullSyncAt == 0L
 
 enum class HomeShelfKind(val title: String) {
     JUMP_BACK_IN("Jump back in"),

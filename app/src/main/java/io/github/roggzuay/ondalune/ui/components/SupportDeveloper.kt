@@ -1,10 +1,5 @@
 package io.github.roggzuay.ondalune.ui.components
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
@@ -48,7 +42,7 @@ fun SupportDeveloperCard(modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     SpringPressableSurface(
         onClick = { open = true },
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         cornerRadius = 22.dp,
         modifier = modifier
             .fillMaxWidth()
@@ -59,21 +53,20 @@ fun SupportDeveloperCard(modifier: Modifier = Modifier) {
                 Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiary),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.LocalCafe, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiary)
+                Icon(Icons.Filled.LocalCafe, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("Support Ondalune", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Text("Support Ondalune", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
                     "Buy the developer a coffee on Ko-fi",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Icon(Icons.Filled.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
         }
     }
     if (open) SupportDeveloperDialog(onDismiss = { open = false })
@@ -82,13 +75,6 @@ fun SupportDeveloperCard(modifier: Modifier = Modifier) {
 @Composable
 private fun SupportDeveloperDialog(onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
-    val beat = rememberInfiniteTransition(label = "supportHeart")
-    val pulse by beat.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.14f,
-        animationSpec = infiniteRepeatable(tween(520), RepeatMode.Reverse),
-        label = "supportHeartPulse"
-    )
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -96,9 +82,7 @@ private fun SupportDeveloperDialog(onDismiss: () -> Unit) {
                 Icons.Filled.Favorite,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                modifier = Modifier.size(40.dp)
             )
         },
         title = { Text("Thank you for listening", textAlign = TextAlign.Center) },
