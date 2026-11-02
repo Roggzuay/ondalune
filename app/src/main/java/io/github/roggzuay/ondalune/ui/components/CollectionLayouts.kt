@@ -150,8 +150,9 @@ private fun PlayChip(onPlay: () -> Unit, size: Int, filled: Boolean) {
     ExpressiveBounceIconButton(
         onClick = onPlay,
         size = size.dp,
-        containerColor = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-        contentColor = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+        // On artwork: a dark scrim; in a row: a neutral disc. The accent stays for the player.
+        containerColor = if (filled) Color.Black.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = if (filled) Color.White else MaterialTheme.colorScheme.onSurface
     ) { Icon(Icons.Filled.PlayArrow, contentDescription = "Play", modifier = Modifier.size((size * 0.5f).dp)) }
 }
 
@@ -239,7 +240,6 @@ private fun EntryTile(entry: CollectionEntry, modifier: Modifier) {
         cornerRadius = 16.dp,
         modifier = modifier.testTag("entry_tile_${entry.key}")
     ) {
-        // Bottom padding keeps the title clear of the tile's rounded press-clip corners.
         Column(
             horizontalAlignment = if (entry.round) Alignment.CenterHorizontally else Alignment.Start,
             modifier = Modifier.padding(bottom = 8.dp)
@@ -284,7 +284,7 @@ private fun EntryCard(entry: CollectionEntry, modifier: Modifier) {
             if (entry.detail.isNotBlank()) Text(
                 entry.detail,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

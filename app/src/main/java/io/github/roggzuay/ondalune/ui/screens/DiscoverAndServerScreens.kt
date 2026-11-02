@@ -73,7 +73,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -194,16 +194,16 @@ enum class SettingsExpandableSection(
     APP_ICON(
         title = "App icon",
         subtitle = "Colours, shapes and themed icons",
-        icon = Icons.Filled.AutoAwesome
+        icon = Icons.Filled.Apps
     ),
     EQ_BITRATE(
         title = "Sound & streaming",
-        subtitle = "Equalizer, transcoding quality, downloads & cache",
+        subtitle = "Equalizer, quality, downloads & cache",
         icon = Icons.Filled.Equalizer
     ),
     APPEARANCE_THEME(
         title = "Appearance",
-        subtitle = "Interface style, colours, player background, dock",
+        subtitle = "Style, colours, player background, dock",
         icon = Icons.Filled.Palette
     ),
     PLAYBACK_DSP(
@@ -696,7 +696,7 @@ fun SettingsCustomizationScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
+                                    imageVector = Icons.Filled.Apps,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
@@ -1150,7 +1150,7 @@ fun SettingsCustomizationScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
+                                imageVector = Icons.Filled.Palette,
                                 contentDescription = null,
                                 tint = LocalContentColor.current
                             )
@@ -1696,8 +1696,8 @@ fun SettingsCustomizationScreen(
                     )
 
                     SettingsToggleRow(
-                        title = "120Hz ProMotion / LTPO Display Mode",
-                        subtitle = "Negotiate maximum hardware refresh rate (120Hz) & VSYNC frame-paced wave physics",
+                        title = "Highest refresh rate",
+                        subtitle = "Runs at the fastest rate your screen supports, for smoother scrolling and waves",
                         checked = settings.highRefreshRate120Hz,
                         onCheckedChange = onSetHighRefreshRate120Hz,
                         testTag = "toggle_120hz_refresh"
@@ -2244,11 +2244,11 @@ private fun ExpandableSettingsSectionCard(
         ) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))

@@ -78,7 +78,7 @@ fun AboutLicencesRow(modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     SpringPressableSurface(
         onClick = { open = true },
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         cornerRadius = 22.dp,
         modifier = modifier
             .fillMaxWidth()
@@ -89,12 +89,12 @@ fun AboutLicencesRow(modifier: Modifier = Modifier) {
                 Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text("About & licences", style = MaterialTheme.typography.titleMedium)
                 Text(

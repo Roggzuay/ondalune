@@ -23,13 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -108,7 +104,6 @@ import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
-import kotlin.math.PI
 import kotlin.math.sin
 
 /** Cover art and the artist line shown on the Your Mix hero, from the listener's own shelves. */
@@ -163,13 +158,6 @@ fun YourMixHero(
     val scope = rememberCoroutineScope()
     // 0 = resting, 1 = shapes gone and the button covering the screen.
     val launch = remember { Animatable(0f) }
-    val drift = rememberInfiniteTransition(label = "mixDrift")
-    val phase = if (reduced) null else drift.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
-        label = "mixPhase"
-    )
     // Shapes pop in one after another the first time Home appears.
     val entrance = remember { Animatable(if (reduced) 1f else 0f) }
     LaunchedEffect(Unit) {
@@ -267,14 +255,14 @@ fun YourMixHero(
             indication = null,
             onClick = start
         )
-        MixPiece(cover(1), CircleShape, 104.dp, left + w * 0.0f, 250.dp - rise, phase, 1.4f, entranceValue, 1, collage, launchValue, focus)
-        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, left + w * 0.14f, 300.dp - rise, phase, 0f, entranceValue, 2, collage, launchValue, focus,
+        MixPiece(cover(1), CircleShape, 104.dp, left + w * 0.0f, 250.dp - rise, 1.4f, entranceValue, 1, collage, launchValue, focus)
+        MixPiece(cover(0), RoundedCornerShape(50), w * 0.78f, left + w * 0.14f, 300.dp - rise, 0f, entranceValue, 2, collage, launchValue, focus,
             height = 168.dp, rotation = -36f)
-        MixPiece(cover(4), CircleShape, 70.dp, left + w * 0.66f, 236.dp - rise, phase, 2.2f, entranceValue, 3, collage, launchValue, focus,
-            morph = remember { Morph(MaterialShapes.Cookie6Sided, MaterialShapes.Clover4Leaf) })
-        MixPiece(cover(2), CircleShape, 132.dp, left + w - 136.dp, 404.dp - rise, phase, 3.1f, entranceValue, 4, collage, launchValue, focus)
+        MixPiece(cover(4), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie6Sided) }, 70.dp,
+            left + w * 0.66f, 236.dp - rise, 2.2f, entranceValue, 3, collage, launchValue, focus)
+        MixPiece(cover(2), CircleShape, 132.dp, left + w - 136.dp, 404.dp - rise, 3.1f, entranceValue, 4, collage, launchValue, focus)
         MixPiece(cover(3), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie9Sided) }, 96.dp, left + 4.dp, 420.dp - rise,
-            phase, 4.4f, entranceValue, 5, collage, launchValue, focus)
+            4.4f, entranceValue, 5, collage, launchValue, focus)
 
         MixPlayButton(
             onClick = start,
@@ -284,7 +272,7 @@ fun YourMixHero(
             modifier = Modifier
                 .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
                 .padding(top = if (wide) 200.dp else 86.dp)
-                .floating(phase, 0.6f, entranceValue, 0)
+                .resting(0.6f, entranceValue, 0)
         )
         }
     }
@@ -316,16 +304,14 @@ private fun Modifier.flyOut(
     compositingStrategy = compositing
 }
 
-/** Gentle bob and sway driven by the shared [phase]; read in the draw layer, so no recomposition. */
-private fun Modifier.floating(
-    phase: androidx.compose.runtime.State<Float>?,
+/** Each piece's own small lift and tilt, and its pop-in; read in the draw layer, so no recomposition. */
+private fun Modifier.resting(
     offset: Float,
     entrance: () -> Float,
     order: Int
 ): Modifier = graphicsLayer {
-    val p = phase?.value ?: 0f
-    translationY = sin(p + offset) * 7.dp.toPx()
-    rotationZ = sin(p * 0.5f + offset) * 3f
+    translationY = sin(offset) * 7.dp.toPx()
+    rotationZ = sin(offset) * 3f
     val local = ((entrance() * 1.6f) - order * 0.12f).coerceIn(0f, 1f)
     scaleX = 0.6f + 0.4f * local
     scaleY = 0.6f + 0.4f * local
@@ -339,7 +325,6 @@ private fun MixPiece(
     width: Dp,
     x: Dp,
     y: Dp,
-    phase: androidx.compose.runtime.State<Float>?,
     offset: Float,
     entrance: () -> Float,
     order: Int,
@@ -347,23 +332,16 @@ private fun MixPiece(
     launch: () -> Float,
     focus: DpOffset,
     height: Dp = width,
-    rotation: Float = 0f,
-    morph: Morph? = null
+    rotation: Float = 0f
 ) {
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
             .size(width, height)
             .flyOut(DpOffset(x + width / 2, y + height / 2), focus, launch)
-            .floating(phase, offset, entrance, order)
+            .resting(offset, entrance, order)
             .graphicsLayer { rotationZ += rotation }
-            .then(
-                // A morphing piece re-cuts its outline in the draw layer each frame (no recomposition).
-                if (morph != null) Modifier.graphicsLayer {
-                    clip = true
-                    shape = MorphShape(morph, (sin(phase?.value ?: 0f) + 1f) / 2f)
-                } else Modifier.clip(pieceShape)
-            )
+            .clip(pieceShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .then(modifier)
     ) {
@@ -438,10 +416,11 @@ private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, maxZoom: Flo
 fun HomeQuickActions(onOpenShelf: (HomeShelfKind) -> Unit, onShuffle: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val actions = listOf(
-        QuickAction("History", Icons.Filled.History, scheme.primaryContainer, scheme.onPrimaryContainer) { onOpenShelf(HomeShelfKind.JUMP_BACK_IN) },
-        QuickAction("Last added", Icons.Filled.LibraryAdd, scheme.tertiaryContainer, scheme.onTertiaryContainer) { onOpenShelf(HomeShelfKind.RECENTLY_ADDED) },
-        QuickAction("Most played", Icons.AutoMirrored.Filled.TrendingUp, scheme.secondaryContainer, scheme.onSecondaryContainer) { onOpenShelf(HomeShelfKind.MOST_PLAYED) },
-        QuickAction("Shuffle", Icons.Filled.Shuffle, scheme.inversePrimary, scheme.onSurface, onShuffle)
+        // One neutral tone for all four: colour belongs to the music, not the shortcuts.
+        QuickAction("History", Icons.Filled.History, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.JUMP_BACK_IN) },
+        QuickAction("Last added", Icons.Filled.LibraryAdd, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.RECENTLY_ADDED) },
+        QuickAction("Most played", Icons.AutoMirrored.Filled.TrendingUp, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.MOST_PLAYED) },
+        QuickAction("Shuffle", Icons.Filled.Shuffle, scheme.surfaceContainerHighest, scheme.onSurfaceVariant, onShuffle)
     )
     Row(
         modifier = Modifier

@@ -66,7 +66,7 @@ val LocalStyleSpec = staticCompositionLocalOf { styleSpecFor(InterfaceStyle.SIGN
 fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     InterfaceStyle.SIGNATURE -> StyleSpec(
         style, AppFont.UNBOUNDED, AppFont.FIGTREE, PaletteStyle.Vibrant, 1f, false,
-        ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = true, cardTiles = true, artBorder = true,
+        ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, cardTiles = true, artBorder = true,
         monoBadges = true, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
             HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,

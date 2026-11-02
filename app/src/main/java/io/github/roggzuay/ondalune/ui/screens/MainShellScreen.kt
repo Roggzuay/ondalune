@@ -14,6 +14,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
+import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
 import io.github.roggzuay.ondalune.ui.components.SelectionTopBar
 import io.github.roggzuay.ondalune.ui.components.LocalDownloads
 import io.github.roggzuay.ondalune.ui.components.LocalTrackSelection
@@ -227,6 +228,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isUserServerOpen by viewModel.isUserServerSheetOpen.collectAsStateWithLifecycle()
     val isAppIconSettingsOpen by viewModel.isAppIconSettingsOpen.collectAsStateWithLifecycle()
     val showServerOnboarding by viewModel.showServerOnboarding.collectAsStateWithLifecycle()
+    val whatsNew by viewModel.whatsNew.collectAsStateWithLifecycle()
+    val showSpeedResetHint by viewModel.showSpeedResetHint.collectAsStateWithLifecycle()
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
         targetValue = if (showServerOnboarding) 0.9f else 1f,
@@ -456,11 +459,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         if (trackSelection.active) {
                             SelectionTopBar(selection = trackSelection, onMore = { selectionSheetOpen = true })
                         } else {
-                        val greetingName = activeServer.username.takeIf { !activeServer.isDemoServer && it.isNotBlank() }
-                            ?.replaceFirstChar { it.uppercase() } ?: "there"
                         OndaluneTopBar(
-                            title = if (currentDestination == PrimaryDestination.HOME) "Hi $greetingName" else currentDestination.label,
-                            subtitle = if (currentDestination == PrimaryDestination.HOME) greetingLine(viewModel.greetingIndex) else null,
+                            title = currentDestination.label,
                             searchQuery = searchQuery,
                             statusBanner = statusBanner,
                             activeDownloads = activeDownloads,
@@ -954,6 +954,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onSetTrackRating = viewModel::setTrackRating,
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
+                                onResetSpeedPitch = {
+                                    viewModel.resetSpeedAndPitch()
+                                    viewModel.resetReverbToDry()
+                                },
+                                showSpeedResetHint = showSpeedResetHint,
+                                onSpeedResetHintShown = viewModel::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
                                 playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
@@ -1149,6 +1155,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onSetIconFollowsTheme = viewModel::setIconFollowsTheme,
                         onClose = { viewModel.setAppIconSettingsOpen(false) }
                     )
+                }
+
+                // First launch after a major/minor update (1.1, 2.0): what changed.
+                whatsNew?.takeIf { !showServerOnboarding }?.let { notes ->
+                    WhatsNewDialog(notes, onDismiss = viewModel::dismissWhatsNew)
                 }
 
                 // Application Introduction / Server Details Onboarding Modal

@@ -82,6 +82,15 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("release")
     }
+    // Test builds that install next to the release instead of updating it: own package and
+    // launcher name ("Ondalune Preview", src/preview/res), release-optimized, debug-signed.
+    create("preview") {
+      initWith(getByName("release"))
+      applicationIdSuffix = ".preview"
+      versionNameSuffix = "-preview"
+      signingConfig = signingConfigs.getByName("debug")
+      matchingFallbacks += "release"
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11

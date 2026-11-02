@@ -43,6 +43,7 @@ import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
 import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
 import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
+import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.ButtonDefaults
@@ -128,8 +129,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -159,7 +164,6 @@ import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
 import io.github.roggzuay.ondalune.ui.components.formatDurationSec
-import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
 import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
 import kotlinx.coroutines.Job
@@ -329,16 +333,16 @@ fun ListenNowHomeScreen(
                     )
                 }
                 HomeSection.JUMP_BACK_IN -> if (shelves.jumpBackIn.isNotEmpty()) item(key = "shelf_jump") {
-                    TrackShelf(HomeShelfKind.JUMP_BACK_IN.title, shelves.jumpBackIn, currentTrackId, isPlaying, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.JUMP_BACK_IN) }
+                    TrackShelf(HomeShelfKind.JUMP_BACK_IN.title, shelves.jumpBackIn, currentTrackId, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.JUMP_BACK_IN) }
                 }
                 HomeSection.RECENTLY_ADDED -> if (shelves.recentlyAdded.isNotEmpty()) item(key = "shelf_added") {
                     AlbumShelf(HomeShelfKind.RECENTLY_ADDED.title, shelves.recentlyAdded, onOpenAlbum, onPlayAlbum) { onOpenShelf(HomeShelfKind.RECENTLY_ADDED) }
                 }
                 HomeSection.FAVOURITE_TRACKS -> if (shelves.favouriteTracks.isNotEmpty()) item(key = "shelf_fav") {
-                    TrackShelf(HomeShelfKind.FAVOURITE_TRACKS.title, shelves.favouriteTracks, currentTrackId, isPlaying, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.FAVOURITE_TRACKS) }
+                    TrackShelf(HomeShelfKind.FAVOURITE_TRACKS.title, shelves.favouriteTracks, currentTrackId, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.FAVOURITE_TRACKS) }
                 }
                 HomeSection.MOST_PLAYED -> if (shelves.mostPlayed.isNotEmpty()) item(key = "shelf_most") {
-                    TrackShelf(HomeShelfKind.MOST_PLAYED.title, shelves.mostPlayed, currentTrackId, isPlaying, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.MOST_PLAYED) }
+                    TrackShelf(HomeShelfKind.MOST_PLAYED.title, shelves.mostPlayed, currentTrackId, onPlayTrackFrom) { onOpenShelf(HomeShelfKind.MOST_PLAYED) }
                 }
                 HomeSection.TOP_ARTISTS -> item(key = "top_artists") {
                     TopArtistsShelf(shelves) { ShelfHeader("Top artists", onMore = null) }
@@ -367,12 +371,11 @@ fun ListenNowHomeScreen(
 @Composable
 fun FeaturedAlbumHeroCard(
     album: SubsonicAlbum,
+    featured: Boolean = true,
     onOpenAlbum: () -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffleAlbum: () -> Unit
 ) {
-    val seedColor = parseHexColor(album.paletteSeedHex)
-    val accentColor = parseHexColor(album.accentHex)
     val spec = LocalStyleSpec.current
     val standard = !spec.artBorder
 
@@ -380,31 +383,13 @@ fun FeaturedAlbumHeroCard(
         onClick = onOpenAlbum,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .then(
-                if (standard) Modifier else Modifier.border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                    shape = cornerShape(30.dp)
-                )
-            ),
-        cornerRadius = 30.dp,
+            .padding(horizontal = 16.dp),
+        cornerRadius = 28.dp,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (standard) Modifier else Modifier.background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                seedColor.copy(alpha = 0.34f),
-                                MaterialTheme.colorScheme.surfaceContainerHigh,
-                                accentColor.copy(alpha = 0.22f)
-                            )
-                        )
-                    )
-                )
                 .padding(20.dp)
         ) {
             Row(
@@ -412,24 +397,15 @@ fun FeaturedAlbumHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    if (standard) {
+                    // On the album's own page the card is its header, so "Featured" would say nothing.
+                    if (featured) {
                         Text(
                             text = if (spec.eyebrows) "FEATURED FOR YOU" else "Featured album",
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else Surface(
-                        shape = cornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Text(
-                            text = "FEATURED MASTER",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = album.name,
                         style = MaterialTheme.typography.headlineMedium,
@@ -441,7 +417,7 @@ fun FeaturedAlbumHeroCard(
                     Text(
                         text = album.artist,
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "${album.genre} • ${album.year}",
@@ -473,7 +449,7 @@ fun FeaturedAlbumHeroCard(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (standard) "Play" else "Play Master",
+                                    text = "Play",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
@@ -503,7 +479,7 @@ fun FeaturedAlbumHeroCard(
                     artStyleIndex = album.artStyleIndex,
                     coverArtUrl = album.coverArtUrl,
                     shapeMode = if (standard) ArtworkShapeMode.SQUIRCLE else ArtworkShapeMode.COOKIE,
-                    isSpinning = !standard,
+                    isSpinning = false,
                     modifier = Modifier.size(116.dp)
                 )
             }
@@ -558,6 +534,7 @@ internal fun ShelfHeader(title: String, onMore: (() -> Unit)?, onPlayAll: (() ->
         if (onMore != null) TextButton(
             onClick = onMore,
             shapes = ButtonDefaults.shapes(),
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
             modifier = Modifier.testTag("shelf_more_${title.lowercase().replace(' ', '_')}")
         ) { Text(if (spec.eyebrows) "See all" else "More") }
     }
@@ -596,7 +573,6 @@ private fun TrackShelf(
     title: String,
     tracks: List<SubsonicTrack>,
     currentTrackId: String?,
-    isPlaying: Boolean,
     onPlayTrack: (SubsonicTrack, List<SubsonicTrack>) -> Unit,
     onMore: () -> Unit
 ) {
@@ -608,41 +584,44 @@ private fun TrackShelf(
         ) {
             items(tracks.take(ShelfPreviewCount), key = { it.id }) { track ->
                 val isCurrent = track.id == currentTrackId
-                Column(
+                SpringPressableSurface(
+                    onClick = { onPlayTrack(track, tracks) },
+                    color = Color.Transparent,
                     modifier = Modifier
                         .width(132.dp)
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable { onPlayTrack(track, tracks) }
-                        .padding(bottom = 8.dp)
-                        .testTag("shelf_track_${track.id}"),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                        .testTag("shelf_track_${track.id}")
                 ) {
-                    Box(contentAlignment = Alignment.BottomEnd) {
-                        ExpressiveArtwork(
-                            seedHex = track.paletteSeedHex,
-                            accentHex = track.accentHex,
-                            artStyleIndex = track.artStyleIndex,
-                            coverArtUrl = track.coverArtUrl,
-                            shapeMode = if (isCurrent && isPlaying) ArtworkShapeMode.COOKIE else ArtworkShapeMode.SQUIRCLE,
-                            modifier = Modifier.size(132.dp)
+                    Column(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            ExpressiveArtwork(
+                                seedHex = track.paletteSeedHex,
+                                accentHex = track.accentHex,
+                                artStyleIndex = track.artStyleIndex,
+                                coverArtUrl = track.coverArtUrl,
+                                // Shape changes belong to the player; the shelf keeps one cut.
+                                modifier = Modifier.size(132.dp)
+                            )
+                        }
+                        Text(
+                            text = track.title,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = track.artist,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Text(
-                        text = track.title,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                        style = MaterialTheme.typography.titleSmallEmphasized,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = track.artist,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
         }
@@ -680,8 +659,8 @@ fun AlbumExpressiveCard(
                 ExpressiveBounceIconButton(
                     onClick = onPlayClick,
                     size = 42.dp,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = Color.Black.copy(alpha = 0.45f),
+                    contentColor = Color.White,
                     modifier = Modifier.padding(8.dp)
                 ) {
                     Icon(
@@ -712,7 +691,7 @@ fun AlbumExpressiveCard(
                 Text(
                     text = "${album.songCount} tracks • ${album.year}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -739,7 +718,9 @@ fun TrackExpressiveRow(
     @Suppress("UNUSED_PARAMETER") onAddToQueue: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** Dense one-line row: smaller art, no badges, no heart button. */
-    compact: Boolean = false
+    compact: Boolean = false,
+    /** On an album's own page every row has the same cover, so the row shows its number instead. */
+    trackNumber: Int? = null
 ) {
     val actions = LocalTrackActions.current
     val selection = LocalTrackSelection.current
@@ -789,7 +770,7 @@ fun TrackExpressiveRow(
             },
             color = when {
                 selected -> MaterialTheme.colorScheme.secondaryContainer
-                isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                isCurrent -> MaterialTheme.colorScheme.surfaceContainerHighest
                 // Flat-row themes draw rows straight on the page; solid while swiping.
                 !LocalStyleSpec.current.cardRows && swipeState.dismissDirection == SwipeToDismissBoxValue.Settled -> Color.Transparent
                 !LocalStyleSpec.current.cardRows -> MaterialTheme.colorScheme.surface
@@ -804,17 +785,21 @@ fun TrackExpressiveRow(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = if (compact) 6.dp else 12.dp),
+                        .padding(horizontal = 12.dp, vertical = if (compact) 6.dp else 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    if (trackNumber != null) Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
+                        if (selected) SelectedBadge() else Text(
+                            text = "$trackNumber",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else Box(contentAlignment = Alignment.Center) {
                         ExpressiveArtwork(
                             seedHex = track.paletteSeedHex,
                             accentHex = track.accentHex,
                             artStyleIndex = track.artStyleIndex,
                             coverArtUrl = track.coverArtUrl,
-                            shapeMode = if (isCurrent && isPlaying) ArtworkShapeMode.COOKIE else ArtworkShapeMode.SQUIRCLE,
-                            isSpinning = isCurrent && isPlaying,
                             styleShape = LocalStyleSpec.current.rowArtShape,
                             modifier = Modifier.size(if (compact) 42.dp else 52.dp)
                         )
@@ -829,7 +814,7 @@ fun TrackExpressiveRow(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -852,17 +837,11 @@ fun TrackExpressiveRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                shape = cornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest
-                            ) {
-                                Text(
-                                    text = "${track.suffix} ${track.bitDepth}/${track.samplingRate / 1000}k",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                            Text(
+                                text = "${track.suffix} ${track.bitDepth}/${track.samplingRate / 1000}k",
+                                style = monoLabelSmall(),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             if (isDownloaded) {
                                 Icon(
                                     imageVector = Icons.Filled.CloudDone,
@@ -892,11 +871,7 @@ fun TrackExpressiveRow(
                         onClick = onToggleStar,
                         active = track.starred,
                         size = 42.dp,
-                        containerColor = if (track.starred) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        },
+                        containerColor = Color.Transparent,
                         contentColor = if (track.starred) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -1329,8 +1304,18 @@ fun LibraryCollectionScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 ) else LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        // The last pill fades out under the ⋮ instead of being cut flat: it scrolls.
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = Brush.horizontalGradient(0.85f to Color.Black, 1f to Color.Transparent),
+                                blendMode = BlendMode.DstIn
+                            )
+                        }
                 ) {
                     items(visibleTabs) { tab ->
                         val selected = tab == activeTab
@@ -1655,7 +1640,7 @@ fun AlbumDetailSubScreen(
             .fillMaxSize()
             .testTag("album_detail_subscreen"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         item {
             Row(
@@ -1681,8 +1666,6 @@ fun AlbumDetailSubScreen(
                     // Every album page downloads, wherever it was opened from.
                     onClick = { onDownloadAlbum?.invoke() ?: downloadActions?.download(tracks) },
                     size = 46.dp,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.testTag("album_detail_download_button")
                 ) {
                     Icon(Icons.Filled.CloudDownload, contentDescription = "Download Album Offline")
@@ -1691,12 +1674,15 @@ fun AlbumDetailSubScreen(
         }
 
         item {
-            FeaturedAlbumHeroCard(
-                album = album,
-                onOpenAlbum = {},
-                onPlayAlbum = onPlayAll,
-                onShuffleAlbum = onShuffleAll
-            )
+            Box(Modifier.padding(top = 8.dp, bottom = 12.dp)) {
+                FeaturedAlbumHeroCard(
+                    album = album,
+                    featured = false,
+                    onOpenAlbum = {},
+                    onPlayAlbum = onPlayAll,
+                    onShuffleAlbum = onShuffleAll
+                )
+            }
         }
 
         items(tracks, key = { it.id }) { track ->
@@ -1710,7 +1696,8 @@ fun AlbumDetailSubScreen(
                 onDownloadTrack = { onDownloadTrack(track) },
                 onRemoveDownload = { onRemoveDownload(track.id) },
                 onPlayNext = { onPlayTrackNext(track) },
-                onAddToQueue = { onAddTrackToQueue(track) }
+                onAddToQueue = { onAddTrackToQueue(track) },
+                trackNumber = track.trackNumber
             )
         }
 

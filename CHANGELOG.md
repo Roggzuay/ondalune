@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 (2026-11-02)
+
+- **A calmer look:** colour now comes from your music, not the buttons. Labels, cards and controls are quieter so album art stands out.
+- **Hold to reset:** hold the speed button in the player to reset speed, pitch and reverb at once.
+- **Slide between tabs:** hold the tab bar and slide; a glass square follows your finger and opens the tab you let go on.
+- **What's new:** after big updates, a short note shows what changed.
+- **Fixes & improvements**, including a crash while the library syncs.
+
 ## 1.0.5 (2026-11-01)
 
 - The mini player stays hidden until you play something. Before, it showed a song that wasn't playing, on a first launch even a song from the built-in demo library ("Rain on Shimokitazawa").
