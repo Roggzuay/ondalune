@@ -368,6 +368,26 @@ class OpenSubsonicClient {
         null
     }
 
+    /** The newest Ondalune release on GitHub, or null when offline, rate limited or unreadable. */
+    suspend fun fetchLatestRelease(): AppUpdate? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url(LATEST_RELEASE_API)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "Ondalune (update check)")
+                .get()
+                .build()
+            okHttpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val json = JSONObject(resp.body?.string().orEmpty())
+                val tag = json.optString("tag_name").removePrefix("v")
+                if (tag.isBlank()) null else AppUpdate(tag, releaseNoteItems(json.optString("body")))
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * Queries `/rest/getArtistInfo2.view` (with fallback to `getArtistInfo.view`) for an artist's
      * high-resolution portrait (`largeImageUrl`, `mediumImageUrl`, `smallImageUrl`) and biography.

@@ -40,4 +40,4 @@
 <li>Lock-screen playback, media notification and resizable widgets</li>
 </ul>
 
-<p><b>Private by design</b>: no ads, no analytics, no trackers and no account. Passwords are encrypted with Android's Keystore. Ondalune talks only to your servers, to Wikipedia for missing artist bios, and to Ko-fi if you tap the support button.</p>
+<p><b>Private by design</b>: no ads, no analytics, no trackers and no account. Passwords are encrypted with Android's Keystore. Ondalune talks only to your servers, to Wikipedia for missing artist bios, to GitHub once a day to check for updates (you can turn this off), and to Ko-fi if you tap the support button.</p>

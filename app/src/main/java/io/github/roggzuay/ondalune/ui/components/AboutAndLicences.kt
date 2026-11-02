@@ -131,7 +131,8 @@ private fun AboutSheet(onDismiss: () -> Unit) {
                 Spacer(Modifier.size(8.dp))
                 Text(
                     "Privacy: Ondalune talks only to the music servers you add, to Wikipedia for artist " +
-                        "bios, and to Ko-fi if you open the support link. It has no ads, analytics or trackers.",
+                        "bios, to GitHub once a day to check for updates (you can turn this off), and to " +
+                        "Ko-fi if you open the support link. It has no ads, analytics or trackers.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

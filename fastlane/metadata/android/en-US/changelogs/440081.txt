@@ -1,0 +1,1 @@
+Ondalune now tells you when a new version is out, and can download and install it for you: read what's new, watch the download, then confirm in Android's installer. Check any time in Settings → Updates, or turn the daily check off.

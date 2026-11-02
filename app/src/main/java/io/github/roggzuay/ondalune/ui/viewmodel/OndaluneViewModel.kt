@@ -8,7 +8,10 @@ import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.roggzuay.ondalune.audio.OndaluneAudioEngine
+import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
+import io.github.roggzuay.ondalune.data.local.UpdateInstallState
+import kotlinx.coroutines.CancellationException
 import io.github.roggzuay.ondalune.data.local.OndaluneDatabase
 import io.github.roggzuay.ondalune.data.local.OndaluneDownloadManager
 import io.github.roggzuay.ondalune.data.model.AlbumListType
@@ -55,7 +58,10 @@ import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.data.model.WidgetLayoutMode
 import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
+import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
+import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
+import io.github.roggzuay.ondalune.data.network.isNewerVersion
 import io.github.roggzuay.ondalune.data.repository.OndaluneRepository
 import io.github.roggzuay.ondalune.ui.components.AppIconLauncherManager
 import io.github.roggzuay.ondalune.ui.components.ReleaseNotes
@@ -638,6 +644,116 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         prefs.edit().putString("whats_new_seen", majorMinor(BuildConfig.VERSION_NAME)).apply()
     }
 
+    private val _availableUpdate = MutableStateFlow<AppUpdate?>(null)
+    val availableUpdate: StateFlow<AppUpdate?> = _availableUpdate.asStateFlow()
+
+    /**
+     * Asks GitHub at most once a day and keeps the answer, so the Home banner survives restarts
+     * without asking again. "Later" hides that version until a newer one comes out.
+     */
+    private fun checkForUpdate() {
+        if (!_customizationSettings.value.checkForUpdates) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            if (now - prefs.getLong(PREF_UPDATE_CHECKED_AT, 0L) >= UPDATE_CHECK_INTERVAL_MS) {
+                client.fetchLatestRelease()?.let(::rememberLatestRelease)
+            }
+            val version = prefs.getString(PREF_UPDATE_VERSION, null)
+            if (version == null || !isNewerVersion(version, BuildConfig.VERSION_NAME)) {
+                // Up to date, maybe through an in-app update: its downloaded APK can go.
+                withContext(Dispatchers.IO) { AppUpdateInstaller.clearDownloads(getApplication()) }
+                return@launch
+            }
+            if (version != prefs.getString(PREF_UPDATE_DISMISSED, null) &&
+                _customizationSettings.value.checkForUpdates
+            ) {
+                val notes = prefs.getString(PREF_UPDATE_NOTES, "").orEmpty().lines().filter { it.isNotBlank() }
+                _availableUpdate.value = AppUpdate(version, notes)
+            }
+        }
+    }
+
+    private fun rememberLatestRelease(latest: AppUpdate) {
+        prefs.edit()
+            .putLong(PREF_UPDATE_CHECKED_AT, System.currentTimeMillis())
+            .putString(PREF_UPDATE_VERSION, latest.version)
+            .putString(PREF_UPDATE_NOTES, latest.notes.joinToString("\n"))
+            .apply()
+    }
+
+    private val _updateCheckStatus = MutableStateFlow(UpdateCheckStatus.IDLE)
+    val updateCheckStatus: StateFlow<UpdateCheckStatus> = _updateCheckStatus.asStateFlow()
+
+    /** Settings → Updates → Check now: asks GitHub right away, even with daily checks off. */
+    fun checkForUpdatesNow() {
+        if (_updateCheckStatus.value == UpdateCheckStatus.CHECKING) return
+        viewModelScope.launch {
+            _updateCheckStatus.value = UpdateCheckStatus.CHECKING
+            val latest = client.fetchLatestRelease()
+            if (latest == null) {
+                _updateCheckStatus.value = UpdateCheckStatus.FAILED
+                return@launch
+            }
+            rememberLatestRelease(latest)
+            if (isNewerVersion(latest.version, BuildConfig.VERSION_NAME)) {
+                // Asked for it: show it again even if "Later" hid this version.
+                prefs.edit().remove(PREF_UPDATE_DISMISSED).apply()
+                _availableUpdate.value = latest
+                _updateCheckStatus.value = UpdateCheckStatus.IDLE
+            } else {
+                _updateCheckStatus.value = UpdateCheckStatus.UP_TO_DATE
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        _availableUpdate.value?.let { prefs.edit().putString(PREF_UPDATE_DISMISSED, it.version).apply() }
+        _availableUpdate.value = null
+    }
+
+    private val _updateInstall = MutableStateFlow<UpdateInstallState>(UpdateInstallState.Idle)
+    val updateInstall: StateFlow<UpdateInstallState> = _updateInstall.asStateFlow()
+    private var updateJob: Job? = null
+
+    /** Downloads the update shown in the banner, then hands it to Android's installer. */
+    fun startUpdate() {
+        val version = _availableUpdate.value?.version ?: return
+        if (updateJob?.isActive == true) return
+        updateJob = viewModelScope.launch {
+            val app = getApplication<Application>()
+            _updateInstall.value = UpdateInstallState.Downloading(0f)
+            val apk = try {
+                AppUpdateInstaller.download(app, version) { _updateInstall.value = UpdateInstallState.Downloading(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _updateInstall.value = UpdateInstallState.Failed("Couldn't download the update. Check your connection and try again.")
+                return@launch
+            }
+            if (!withContext(Dispatchers.IO) { AppUpdateInstaller.isTrustedUpdate(app, apk) }) {
+                AppUpdateInstaller.clearDownloads(app)
+                _updateInstall.value = UpdateInstallState.Failed("This download isn't signed by Ondalune, so it wasn't installed.")
+                return@launch
+            }
+            _updateInstall.value = if (AppUpdateInstaller.canInstall(app)) {
+                UpdateInstallState.Ready(apk)
+            } else {
+                UpdateInstallState.NeedsPermission(apk)
+            }
+        }
+    }
+
+    fun cancelUpdate() {
+        updateJob?.cancel()
+        _updateInstall.value = UpdateInstallState.Idle
+    }
+
+    /** Back from Android's "Install unknown apps" screen: carry on if it was allowed. */
+    fun resumeUpdateInstall() {
+        val state = _updateInstall.value as? UpdateInstallState.NeedsPermission ?: return
+        if (AppUpdateInstaller.canInstall(getApplication())) _updateInstall.value = UpdateInstallState.Ready(state.apk)
+    }
+
     private fun isAppUpdate(app: Application): Boolean = runCatching {
         @Suppress("DEPRECATION")
         app.packageManager.getPackageInfo(app.packageName, 0).let { it.lastUpdateTime > it.firstInstallTime }
@@ -924,6 +1040,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
         OndaluneMediaBridge.onCommand = bridgeCommand
         OndaluneMediaBridge.onSeekTo = bridgeSeek
+        checkForUpdate()
         viewModelScope.launch {
             val activeServer = repository.ensureSeeded()
             _activeServerId.value = activeServer.id
@@ -1963,6 +2080,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         updateCustomization { it.copy(widgetShowLyrics = show) }
     }
 
+    fun setCheckForUpdates(enabled: Boolean) {
+        updateCustomization { it.copy(checkForUpdates = enabled) }
+        if (enabled) checkForUpdate() else _availableUpdate.value = null
+    }
+
     /**
      * Restores all UI, Library, Player, DSP, and Widget preferences back to factory defaults
      * without deleting any saved OpenSubsonic servers, tracks, or playlists.
@@ -2115,7 +2237,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             widgetThemeMode = WidgetThemeMode.entries.find { it.name == prefs.getString("cfg_widget_theme", defaults.widgetThemeMode.name) } ?: defaults.widgetThemeMode,
             widgetShowArtwork = prefs.getBoolean("cfg_widget_artwork", defaults.widgetShowArtwork),
             widgetShowFavoriteButton = prefs.getBoolean("cfg_widget_fav", defaults.widgetShowFavoriteButton),
-            widgetShowLyrics = prefs.getBoolean("cfg_widget_lyrics", defaults.widgetShowLyrics)
+            widgetShowLyrics = prefs.getBoolean("cfg_widget_lyrics", defaults.widgetShowLyrics),
+            checkForUpdates = prefs.getBoolean("cfg_check_updates", defaults.checkForUpdates)
         )
     }
 
@@ -2167,6 +2290,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .putBoolean("cfg_widget_artwork", s.widgetShowArtwork)
             .putBoolean("cfg_widget_fav", s.widgetShowFavoriteButton)
             .putBoolean("cfg_widget_lyrics", s.widgetShowLyrics)
+            .putBoolean("cfg_check_updates", s.checkForUpdates)
             .apply()
     }
 
@@ -2879,6 +3003,11 @@ data class LibraryFilters(
     val active: Boolean get() = downloadedOnly || hideShortTracks || losslessOnly
 }
 private const val PREF_FULL_SYNC_AT = "full_library_sync_at_"
+private const val PREF_UPDATE_CHECKED_AT = "update_checked_at"
+private const val PREF_UPDATE_VERSION = "update_latest_version"
+private const val PREF_UPDATE_NOTES = "update_latest_notes"
+private const val PREF_UPDATE_DISMISSED = "update_dismissed_version"
+private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
 
 /**
  * The library syncs on its own only once per server, when it has never been fully synced (first

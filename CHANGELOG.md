@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 (2026-11-02)
+
+- **Update notices:** when a new version is out, a quiet card on Home says so. Check any time in Settings → Updates, or turn the daily check off.
+- **Update from the app:** read what's new, then download and install the update without leaving Ondalune. Android asks you to allow installs once and to confirm each update, and only accepts updates signed by Ondalune.
+
 ## 1.1.0 (2026-11-02)
 
 - **A calmer look:** colour now comes from your music, not the buttons. Labels, cards and controls are quieter so album art stands out.

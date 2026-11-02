@@ -5,6 +5,9 @@ package io.github.roggzuay.ondalune.ui.screens
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlaybackSettingsRow
 import io.github.roggzuay.ondalune.ui.components.SupportDeveloperCard
 import io.github.roggzuay.ondalune.ui.components.AboutLicencesRow
+import io.github.roggzuay.ondalune.ui.components.UpdatesCard
+import io.github.roggzuay.ondalune.data.network.AppUpdate
+import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
 import io.github.roggzuay.ondalune.ui.theme.styleSpecFor
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.AppFont
@@ -429,6 +432,11 @@ fun SettingsCustomizationScreen(
     onSetWidgetShowArtwork: (Boolean) -> Unit = {},
     onSetWidgetShowFavoriteButton: (Boolean) -> Unit = {},
     onSetWidgetShowLyrics: (Boolean) -> Unit = {},
+    onSetCheckForUpdates: (Boolean) -> Unit = {},
+    availableUpdate: AppUpdate? = null,
+    updateCheckStatus: UpdateCheckStatus = UpdateCheckStatus.IDLE,
+    onCheckForUpdatesNow: () -> Unit = {},
+    onViewUpdate: () -> Unit = {},
     onRestoreDefaults: () -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -2147,6 +2155,15 @@ fun SettingsCustomizationScreen(
         if (shownSection == null) item {
             Spacer(modifier = Modifier.height(12.dp))
             SupportDeveloperCard()
+            Spacer(modifier = Modifier.height(12.dp))
+            UpdatesCard(
+                available = availableUpdate,
+                status = updateCheckStatus,
+                autoCheck = settings.checkForUpdates,
+                onCheckNow = onCheckForUpdatesNow,
+                onView = onViewUpdate,
+                onSetAutoCheck = onSetCheckForUpdates
+            )
             Spacer(modifier = Modifier.height(12.dp))
             AboutLicencesRow()
         }
