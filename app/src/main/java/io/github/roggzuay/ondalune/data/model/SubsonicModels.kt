@@ -385,6 +385,7 @@ enum class ArtworkCut(val label: String) {
 /** Rows the Home screen can show, in the user's order. */
 enum class HomeSection(val label: String, val description: String) {
     YOUR_MIX("Your Mix", "Animated artwork collage that plays a smart mix"),
+    MIXES("Mixes for you", "Genre, artist, favourites and new-music mixes from your library"),
     QUICK_ACTIONS("Quick actions", "Shortcuts to history, new music, top tracks and shuffle"),
     FEATURED("Featured album", "A large card for your newest album"),
     JUMP_BACK_IN("Jump back in", "Tracks you played recently"),
@@ -665,6 +666,10 @@ data class PlayerCustomizationSettings(
     val checkForUpdates: Boolean = true,
     val crossfadeSeconds: Int = 4,
     val gaplessPlayback: Boolean = true,
+    /** When the queue runs out, keep playing songs like the last ones (see autoplayPicks). */
+    val autoplaySimilar: Boolean = true,
+    /** Optional on-device analysis of downloaded songs (tempo, energy); off until switched on. */
+    val songAnalysis: Boolean = false,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,
     val autoScrobble: Boolean = true,
     val animatedSquigglyWave: Boolean = true,
@@ -737,7 +742,9 @@ enum class OfflineDownloadState(val label: String) {
     DOWNLOADING("Downloading"),
     COMPLETED("Downloaded Offline"),
     FAILED("Download Failed"),
-    CANCELLED("Cancelled")
+    CANCELLED("Cancelled"),
+    /** Stopped by the user to continue later; not picked up again on launch. */
+    PAUSED("Paused")
 }
 
 /**

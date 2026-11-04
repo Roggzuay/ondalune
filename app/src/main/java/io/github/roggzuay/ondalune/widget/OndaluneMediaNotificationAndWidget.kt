@@ -548,7 +548,9 @@ object OndaluneMediaBridge {
     /** Minimal ongoing notification used when the service must go foreground before a track is set. */
     fun buildFallbackNotification(context: Context): Notification {
         ensureNotificationChannel(context)
-        return Notification.Builder(context, CHANNEL_ID)
+        @Suppress("DEPRECATION")
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, CHANNEL_ID) else Notification.Builder(context)
+        return builder
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle("Ondalune")
             .setContentText("Getting your music ready")
@@ -1063,7 +1065,7 @@ object OndaluneMediaBridge {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
                 .setColor(palette.primaryArgb)
-                .setColorized(true)
+                .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setColorized(true) }
                 .setStyle(mediaStyle)
                 .addAction(prevAction)
                 .addAction(playPauseAction)

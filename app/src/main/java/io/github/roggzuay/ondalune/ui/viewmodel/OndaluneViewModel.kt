@@ -3,6 +3,10 @@ package io.github.roggzuay.ondalune.ui.viewmodel
 import kotlinx.coroutines.withTimeoutOrNull
 import io.github.roggzuay.ondalune.data.model.genreTokens
 import android.app.Application
+import android.os.SystemClock
+import coil.imageLoader
+import coil.request.ImageRequest
+import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
@@ -17,9 +21,11 @@ import io.github.roggzuay.ondalune.data.local.OndaluneDownloadManager
 import io.github.roggzuay.ondalune.data.model.AlbumListType
 import io.github.roggzuay.ondalune.data.model.AppFont
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import io.github.roggzuay.ondalune.ui.theme.resolveDynamicSurfacePalette
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.HomeSection
+import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
@@ -46,6 +52,12 @@ import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SleepTimerState
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
 import io.github.roggzuay.ondalune.data.model.smartShuffle
+import io.github.roggzuay.ondalune.data.model.LibraryMix
+import io.github.roggzuay.ondalune.data.model.localEpochDay
+import io.github.roggzuay.ondalune.data.model.SongFeatures
+import io.github.roggzuay.ondalune.data.local.SongAnalysis
+import io.github.roggzuay.ondalune.data.model.autoplayPicks
+import io.github.roggzuay.ondalune.data.model.libraryMixes
 import kotlinx.coroutines.flow.first
 import io.github.roggzuay.ondalune.data.model.spreadOut
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
@@ -86,6 +98,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -482,6 +495,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
     private val bridgeSeek: (Long) -> Unit = { posMs -> viewModelScope.launch { seekTo(posMs) } }
     val downloadManager = OndaluneDownloadManager(application, database.dao(), client, viewModelScope)
+    private val songAnalysis = SongAnalysis(application)
 
     private var sleepTimerJob: Job? = null
     private var cutoutSyncJob: Job? = null
@@ -865,6 +879,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         repository.deriveArtists(trackList, settings.fallbackArtistToAlbumArt)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private var songAnalysisJob: Job? = null
+
+    /** Analysed features of the active server's songs, by track id. */
+    val songFeatures: StateFlow<Map<String, SongFeatures>> = combine(songAnalysis.features, _activeServerId) { all, server ->
+        val prefix = "${server}_"
+        all.entries.filter { it.key.startsWith(prefix) }.associate { it.key.removePrefix(prefix) to it.value }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     // ---- Home shelves -------------------------------------------------------------------
     /** Server-side album orderings keyed by getAlbumList2 type (newest / recent / frequent). */
     private val _serverAlbumOrder = MutableStateFlow<Map<String, List<String>>>(emptyMap())
@@ -877,13 +899,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val homeShelves: StateFlow<HomeShelves> = combine(
         tracks,
         _serverAlbumOrder,
-        _recentTrackIds
-    ) { trackList, order, recentIds ->
+        _recentTrackIds,
+        songFeatures
+    ) { trackList, order, recentIds, features ->
         val albumsByYear = repository.deriveAlbums(trackList, AlbumListType.NEWEST)
         val albumsById = albumsByYear.associateBy { it.id }
         val tracksById = trackList.associateBy { it.id }
         fun serverOrdered(type: String) = order[type].orEmpty().mapNotNull { albumsById[it] }
-        val day = java.time.LocalDate.now().toEpochDay()
+        val day = localEpochDay()
         // Full lists: Home shows the first few of each, the shelf's "More" page shows all of it.
         val tracksByAlbum = trackList.groupBy { it.albumId }
         HomeShelves(
@@ -894,9 +917,33 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 .ifEmpty { serverOrdered("frequent").flatMap { tracksByAlbum[it.id].orEmpty() } }
                 .take(200),
             recentlyPlayed = serverOrdered("recent"),
-            rediscover = albumsByYear.shuffled(kotlin.random.Random(day)).take(60)
+            rediscover = albumsByYear.shuffled(kotlin.random.Random(day)).take(60),
+            mixes = libraryMixes(trackList, recentIds, order["newest"].orEmpty(), seed = day, features = features)
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeShelves())
+    }.flowOn(Dispatchers.Default) // whole-library work; keep it off the main thread
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeShelves())
+
+    private val _homeIntroSeen = MutableStateFlow(prefs.getBoolean(PREF_HOME_INTRO_SEEN, false))
+    /** Whether "A Home that learns" has been shown (once, when the library first has mixes). */
+    val homeIntroSeen: StateFlow<Boolean> = _homeIntroSeen.asStateFlow()
+
+    fun dismissHomeIntro() {
+        _homeIntroSeen.value = true
+        prefs.edit().putBoolean(PREF_HOME_INTRO_SEEN, true).apply()
+    }
+
+    /** Plays a Home mix from its first song. */
+    fun playMix(mix: LibraryMix) {
+        val first = mix.tracks.firstOrNull() ?: return
+        prefetchCovers(mix.tracks.take(2))
+        _shuffleMode.value = ShuffleMode.OFF
+        _shuffleEnabled.value = false
+        _queuePlaylistId.value = null
+        _playbackQueue.value = mix.tracks
+        persistQueueTrackIds(mix.tracks)
+        startPlayback(first)
+        _statusBanner.value = "${mix.title}: ${mix.tracks.size} songs"
+    }
 
     private val _scrollToTopSignal = MutableStateFlow(0)
     /** Bumped when the current tab is tapped again at its root: lists scroll back to the top. */
@@ -1001,6 +1048,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        if (_customizationSettings.value.songAnalysis) startSongAnalysis()
         // Confirmation banners ("Reverb set to…", "Added to queue") clear themselves; only the live
         // sync counter stays up while the sync runs.
         viewModelScope.launch {
@@ -1189,16 +1237,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             _isSyncing.value = true
             val diag = repository.pingAndInspect(server)
             _pingDiagnostic.value = diag
-            // The server answers in pages; count up toward each new total frame by frame so the
-            // number climbs steadily instead of leaping a page at a time.
+            // The server answers in pages; the pacer turns them into a steady climb.
             val found = java.util.concurrent.atomic.AtomicInteger(0) // written from the network thread
+            val pacer = SyncCountPacer(SystemClock.uptimeMillis())
             var shown = 0
             _statusBanner.value = "Syncing library…"
             val counter = launch {
                 while (true) {
-                    val target = found.get()
-                    if (shown < target) {
-                        shown += ((target - shown + 7) / 8).coerceAtLeast(1)
+                    val next = pacer.next(found.get(), SystemClock.uptimeMillis())
+                    if (next != shown) {
+                        shown = next
                         _statusBanner.value = "Syncing library… $shown songs"
                     }
                     delay(32L)
@@ -1206,6 +1254,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             }
             val syncedCount = repository.syncServerCatalog(server) { n -> found.set(n) }
             found.set(syncedCount)
+            pacer.finish(syncedCount, SystemClock.uptimeMillis())
             withTimeoutOrNull(1500L) { while (shown < syncedCount) delay(32L) }
             counter.cancel()
             markFullSync(server)
@@ -1360,6 +1409,25 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Similar artists the server named for each opened artist (ids, keyed by the opened id). */
+    private val _similarArtistIds = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val similarArtistIds: StateFlow<Map<String, List<String>>> = _similarArtistIds.asStateFlow()
+
+    private val _favouriteArtistIds = MutableStateFlow(prefs.getStringSet(PREF_FAVOURITE_ARTISTS, emptySet()).orEmpty().toSet())
+    /** Artists starred from their page; kept here and starred on the server too. */
+    val favouriteArtistIds: StateFlow<Set<String>> = _favouriteArtistIds.asStateFlow()
+
+    fun toggleFavouriteArtist(artist: SubsonicArtist) {
+        val favourite = artist.id !in _favouriteArtistIds.value
+        val updated = if (favourite) _favouriteArtistIds.value + artist.id else _favouriteArtistIds.value - artist.id
+        _favouriteArtistIds.value = updated
+        prefs.edit().putStringSet(PREF_FAVOURITE_ARTISTS, updated).apply()
+        val server = activeServer()
+        if (server.isDemoServer) return
+        val rawId = tracks.value.firstOrNull { it.artist.equals(artist.name, ignoreCase = true) }?.artistId?.ifBlank { null } ?: artist.id
+        viewModelScope.launch { repository.client.setStarredRemote(server, rawId, favourite, idParam = "artistId") }
+    }
+
     fun openArtistDetail(artistId: String?) {
         if (artistId == null && returnFromJump("artist:${_selectedArtistDetailId.value}")) return
         _selectedArtistDetailId.value = artistId
@@ -1372,11 +1440,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                         it.artist.equals(matchedArtist?.name.orEmpty(), ignoreCase = true)
                 }?.artistId?.ifBlank { artistId } ?: artistId
                 viewModelScope.launch {
-                    repository.enrichArtistMetadata(
+                    val similar = repository.enrichArtistMetadata(
                         server = server,
                         artistId = rawArtistId,
                         artistName = matchedArtist?.name.orEmpty()
                     )
+                    if (similar.isNotEmpty()) _similarArtistIds.value += (artistId to similar)
                 }
             }
         }
@@ -1491,13 +1560,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             )
             OndaluneMediaBridge.clearRemoteArtworkCache()
             val total = async { repository.client.fetchLibrarySongCount(config) }
-            // Pages arrive in bursts; count up toward each new total smoothly.
+            // Pages arrive in bursts; the pacer turns them into a steady climb.
             val found = java.util.concurrent.atomic.AtomicInteger(0)
+            val pacer = SyncCountPacer(SystemClock.uptimeMillis())
             var shown = 0
             val counter = launch {
                 while (true) {
                     val target = found.get()
-                    if (shown < target) shown += ((target - shown + 7) / 8).coerceAtLeast(1)
+                    shown = pacer.next(target, SystemClock.uptimeMillis())
                     if (target > 0) {
                         _onboardingSync.value = OnboardingSync(shown, total.takeIf { it.isCompleted }?.getCompleted(), OnboardingSync.Phase.SYNCING)
                     }
@@ -1516,6 +1586,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             }
             val synced = tracks.value.count { it.serverId == saved.id }.coerceAtLeast(found.get())
             found.set(synced)
+            pacer.finish(synced, SystemClock.uptimeMillis())
             withTimeoutOrNull(1500L) { while (shown < synced) delay(32L) }
             counter.cancel()
             markFullSync(saved)
@@ -1993,6 +2064,31 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         updateCustomization { it.copy(gaplessPlayback = enabled) }
     }
 
+    fun setAutoplaySimilar(enabled: Boolean) {
+        updateCustomization { it.copy(autoplaySimilar = enabled) }
+    }
+
+    fun setSongAnalysis(enabled: Boolean) {
+        updateCustomization { it.copy(songAnalysis = enabled) }
+        if (enabled) startSongAnalysis() else {
+            songAnalysisJob?.cancel()
+            songAnalysisJob = null
+            viewModelScope.launch { songAnalysis.clear() }
+        }
+    }
+
+    /** Analyses downloaded songs as they arrive, one at a time in the background, while it is on. */
+    private fun startSongAnalysis() {
+        if (songAnalysisJob?.isActive == true) return
+        songAnalysisJob = viewModelScope.launch {
+            songAnalysis.load()
+            downloadsMap
+                .map { map -> map.values.filter { it.isCompleted } }
+                .distinctUntilChangedBy { list -> list.map { it.downloadKey }.toSet() }
+                .collectLatest { completed -> songAnalysis.analysePending(completed) }
+        }
+    }
+
     fun setReplayGainMode(mode: ReplayGainMode) {
         updateCustomization { it.copy(replayGainMode = mode) }
     }
@@ -2224,6 +2320,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             defaultGridColumns = prefs.getInt("cfg_default_grid_cols", defaults.defaultGridColumns).coerceIn(2, 4),
             crossfadeSeconds = prefs.getInt("cfg_crossfade_sec", defaults.crossfadeSeconds).coerceIn(0, 12),
             gaplessPlayback = prefs.getBoolean("cfg_gapless", defaults.gaplessPlayback),
+            autoplaySimilar = prefs.getBoolean("cfg_autoplay", defaults.autoplaySimilar),
+            songAnalysis = prefs.getBoolean("cfg_song_analysis", defaults.songAnalysis),
             replayGainMode = ReplayGainMode.entries.find { it.name == prefs.getString("cfg_replay_gain", defaults.replayGainMode.name) } ?: defaults.replayGainMode,
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
@@ -2276,6 +2374,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .putInt("cfg_default_grid_cols", s.defaultGridColumns)
             .putInt("cfg_crossfade_sec", s.crossfadeSeconds)
             .putBoolean("cfg_gapless", s.gaplessPlayback)
+            .putBoolean("cfg_autoplay", s.autoplaySimilar)
+            .putBoolean("cfg_song_analysis", s.songAnalysis)
             .putString("cfg_replay_gain", s.replayGainMode.name)
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)
@@ -2413,6 +2513,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
      * main-thread work) until its zoom covers the screen. Returns the job that finishes once the
      * mix is playing, or null when there is nothing to play.
      */
+    /** Decodes covers the player is about to show into the image cache, at the player's largest size. */
+    private fun prefetchCovers(tracks: List<SubsonicTrack>) {
+        val app = getApplication<Application>()
+        val px = (420 * app.resources.displayMetrics.density).toInt()
+        tracks.map { it.coverArtUrl }.filter { it.isNotBlank() }.forEach { url ->
+            val key = artworkCacheKey(url)
+            app.imageLoader.enqueue(ImageRequest.Builder(app).data(url).memoryCacheKey(key).diskCacheKey(key).size(px).build())
+        }
+    }
+
     fun playYourMix(startAfter: Job? = null): Job? {
         val shelves = homeShelves.value
         val seeds = (shelves.favouriteTracks.take(25) + shelves.mostPlayed.take(25) + shelves.jumpBackIn.take(15))
@@ -2431,6 +2541,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             if (picks.isEmpty()) return@launch
+            // The player opens on the first song: start decoding its cover now, during the zoom,
+            // so the player shows the cover rather than an empty tile while it loads.
+            prefetchCovers(picks.take(2))
             startAfter?.join()
             _shuffleMode.value = ShuffleMode.OFF
             _shuffleEnabled.value = false
@@ -2502,13 +2615,20 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
      * what's playing: shared genres and sub-genres first, then same artist, then nearby years.
      */
     private fun extendQueueWithSuggestionsIfEnding() {
-        if (_repeatOneEnabled.value) return
+        if (_repeatOneEnabled.value || !_customizationSettings.value.autoplaySimilar) return
         val current = _currentTrack.value ?: return
         val queue = _playbackQueue.value
         val idx = queue.indexOfFirst { it.id == current.id }
         if (idx in 0 until queue.lastIndex) return
         val recentSeeds = (queue.takeLast(5) + current).distinctBy { it.id }
-        val suggestions = similarTracks(recentSeeds, exclude = queue.mapTo(HashSet()) { it.id }, count = 25)
+        val suggestions = autoplayPicks(
+            seeds = recentSeeds,
+            library = allServerTracks.value,
+            recentIds = _recentTrackIds.value,
+            exclude = queue.mapTo(HashSet()) { it.id },
+            count = 25,
+            features = songFeatures.value
+        )
         if (suggestions.isEmpty()) return
         _playbackQueue.value = queue.ifEmpty { listOf(current) } + suggestions
         persistQueueTrackIds(_playbackQueue.value)
@@ -2731,12 +2851,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 track = track,
                 speedLimit = _customizationSettings.value.downloadSpeedLimit
             )
-            _statusBanner.value = "Downloading \"${track.title}\" for offline playback"
+            // No banner: the download button that was tapped turns into a spinner, and the
+            // download activity button shows it from anywhere else.
         }
     }
 
     fun downloadAlbumForOffline(albumId: String) {
-        val albumTracks = tracks.value.filter { it.albumId == albumId }
+        // Songs already on the phone stay as they are; only the rest are fetched.
+        val albumTracks = tracks.value.filter { it.albumId == albumId && downloadsMap.value[it.id]?.isCompleted != true }
         if (albumTracks.isEmpty()) return
         viewModelScope.launch {
             val server = activeServer()
@@ -2745,7 +2867,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 albumTracks = albumTracks,
                 speedLimit = _customizationSettings.value.downloadSpeedLimit
             )
-            _statusBanner.value = "Downloading ${albumTracks.size} tracks from \"${albumTracks.first().album}\" for offline playback"
         }
     }
 
@@ -2772,6 +2893,30 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         trackIds.mapNotNull { byId[it] }.forEach {
             downloadManager.enqueueTrackDownload(server, it, _customizationSettings.value.downloadSpeedLimit)
         }
+    }
+
+    fun pauseOfflineDownloads(trackIds: Collection<String>) {
+        viewModelScope.launch {
+            downloadManager.pauseDownloads(_activeServerId.value, trackIds)
+        }
+    }
+
+    /** Resuming queues the songs again, in the order given. */
+    fun resumeOfflineDownloads(trackIds: Collection<String>) =
+        retryOfflineDownloads(trackIds.filter { downloadsMap.value[it]?.stateEnum == OfflineDownloadState.PAUSED })
+
+    fun removeOfflineDownloads(trackIds: Collection<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { downloadManager.removeDownload(_activeServerId.value, it) }
+            _statusBanner.value = if (trackIds.size == 1) "Removed offline download" else "Removed ${trackIds.size} offline downloads"
+        }
+    }
+
+    /** From the downloads sheet: opens the song's album and plays it from there. */
+    fun openAndPlayDownloadedTrack(trackId: String) {
+        val track = allServerTracks.value.firstOrNull { it.id == trackId } ?: return
+        openAlbumAnywhere(track.albumId)
+        playTrack(track, allServerTracks.value.filter { it.albumId == track.albumId })
     }
 
     fun cancelOfflineDownloads(trackIds: Collection<String>) {
@@ -2858,12 +3003,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun downloadTracks(list: List<SubsonicTrack>) {
+    fun downloadTracks(tracks: List<SubsonicTrack>) {
+        val list = tracks.filter { downloadsMap.value[it.id]?.isCompleted != true }
         if (list.isEmpty()) return
         if (list.size == 1) return downloadTrackForOffline(list.first())
         viewModelScope.launch {
             downloadManager.enqueueAlbumDownload(activeServer(), list, _customizationSettings.value.downloadSpeedLimit)
-            _statusBanner.value = "Downloading ${list.size} tracks"
         }
     }
 
@@ -2977,6 +3122,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 }
 
 private const val PREF_RECENT_TRACKS = "home_recent_track_ids"
+private const val PREF_FAVOURITE_ARTISTS = "favourite_artist_ids"
+private const val PREF_HOME_INTRO_SEEN = "intro_home_learns_seen"
 private val LosslessSuffixes = setOf("FLAC", "ALAC", "WAV", "AIFF", "AIF", "APE", "WV", "DSF", "DFF")
 
 data class LibraryFilters(
@@ -3016,7 +3163,8 @@ data class HomeShelves(
     val favouriteTracks: List<SubsonicTrack> = emptyList(),
     val mostPlayed: List<SubsonicTrack> = emptyList(),
     val recentlyPlayed: List<SubsonicAlbum> = emptyList(),
-    val rediscover: List<SubsonicAlbum> = emptyList()
+    val rediscover: List<SubsonicAlbum> = emptyList(),
+    val mixes: List<LibraryMix> = emptyList()
 ) {
     fun tracksFor(kind: HomeShelfKind): List<SubsonicTrack>? = when (kind) {
         HomeShelfKind.JUMP_BACK_IN -> jumpBackIn

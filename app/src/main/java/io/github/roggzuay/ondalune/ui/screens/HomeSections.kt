@@ -14,6 +14,12 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.zIndex
 import androidx.compose.runtime.derivedStateOf
 import kotlinx.coroutines.Job
@@ -43,6 +49,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -97,6 +104,8 @@ import androidx.graphics.shapes.Morph
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import io.github.roggzuay.ondalune.data.model.HomeSection
+import io.github.roggzuay.ondalune.data.model.LibraryMix
+import io.github.roggzuay.ondalune.data.model.localEpochDay
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.ui.components.LocalTrackActions
 import io.github.roggzuay.ondalune.ui.components.MorphShape
@@ -121,7 +130,7 @@ private fun mixArt(shelves: HomeShelves): MixArt {
         shelves.recentlyAdded.map { it.id to it.coverArtUrl },
         shelves.rediscover.map { it.id to it.coverArtUrl }
     ).map { list -> list.filter { it.second.isNotBlank() }.distinctBy { it.first }.take(12) }
-    val day = java.time.LocalDate.now().toEpochDay()
+    val day = localEpochDay()
     val picked = LinkedHashMap<String, String>()
     for (round in 0 until 12) for (list in sources) {
         list.getOrNull(round)?.let { (album, url) -> picked.putIfAbsent(album, url) }
@@ -144,13 +153,34 @@ private fun mixArt(shelves: HomeShelves): MixArt {
  * artwork shapes and the title rush away from it and grow, as if the camera dived past them into
  * the button. Then [onOpenPlayer] takes over. Coming back to Home, the shapes pop back in.
  */
+/**
+ * The Your Mix launch, shared with the shell: the zoom's progress (0..1) and the play button's
+ * centre on screen. Home's button stops at the edges of its list, so the shell draws the same
+ * growing circle over its app bars too: the button swallows them as it reaches them.
+ */
+@Stable
+class HeroLaunch {
+    var progress by mutableFloatStateOf(0f)
+    var centre by mutableStateOf(Offset.Unspecified)
+    var maxZoom by mutableFloatStateOf(17f)
+}
+
+/** The play button's scale at launch progress [t]: still until 0.15, then swelling to [maxZoom]. */
+fun heroZoom(t: Float, maxZoom: Float): Float =
+    if (t <= 0.15f) 1f else 1f + ((t - 0.15f) / 0.85f).let { it * it } * (maxZoom - 1f)
+
+/** Radius of the Your Mix play button at rest. */
+val HeroButtonRadius = 64.dp
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun YourMixHero(
     shelves: HomeShelves,
     onPlay: (startAfter: Job?) -> Job?,
     onOpenPlayer: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Mirrors the launch for the shell, which draws the zoom over its bars as well. */
+    heroLaunch: HeroLaunch = remember { HeroLaunch() }
 ) {
     val art = remember(shelves) { mixArt(shelves) }
     val reduced = LocalReducedMotion.current
@@ -158,6 +188,8 @@ fun YourMixHero(
     val scope = rememberCoroutineScope()
     // 0 = resting, 1 = shapes gone and the button covering the screen.
     val launch = remember { Animatable(0f) }
+    // Home can leave mid-zoom (its scope is cancelled with it); never leave the bars covered.
+    DisposableEffect(heroLaunch) { onDispose { heroLaunch.progress = 0f } }
     // Shapes pop in one after another the first time Home appears.
     val entrance = remember { Animatable(if (reduced) 1f else 0f) }
     LaunchedEffect(Unit) {
@@ -190,12 +222,14 @@ fun YourMixHero(
             onOpenPlayer()
         }
         scope.launch {
-            launch.animateTo(1f, tween(560, easing = FastOutSlowInEasing))
+            // Written from the animation's own frame callback, so the shell's circle grows in the same frame.
+            launch.animateTo(1f, tween(560, easing = FastOutSlowInEasing)) { heroLaunch.progress = value }
             // Stay covered until the mix is playing, then reset under the player and let the
             // shapes pop back in for when Home shows again.
             mix?.join()
             delay(600)
             launch.snapTo(0f)
+            heroLaunch.progress = 0f
             entrance.snapTo(0f)
             entrance.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessVeryLow))
         }
@@ -264,11 +298,14 @@ fun YourMixHero(
         MixPiece(cover(3), remember { io.github.roggzuay.ondalune.ui.theme.PolygonShape(MaterialShapes.Cookie9Sided) }, 96.dp, left + 4.dp, 420.dp - rise,
             4.4f, entranceValue, 5, collage, launchValue, focus)
 
+        // Swell far enough to cover the whole screen, however wide it is.
+        val maxZoom = maxOf(17f, fullWidth.value * 3.2f / 128f)
+        SideEffect { heroLaunch.maxZoom = maxZoom }
         MixPlayButton(
             onClick = start,
             launch = launchValue,
-            // Swell far enough to cover the whole screen, however wide it is.
-            maxZoom = maxOf(17f, fullWidth.value * 3.2f / 128f),
+            maxZoom = maxZoom,
+            onCentre = { heroLaunch.centre = it },
             modifier = Modifier
                 .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
                 .padding(top = if (wide) 200.dp else 86.dp)
@@ -367,7 +404,13 @@ private fun MixPiece(
 /** Big round play button that squishes into a cookie while pressed. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, maxZoom: Float, modifier: Modifier = Modifier) {
+private fun MixPlayButton(
+    onClick: () -> Unit,
+    launch: () -> Float,
+    maxZoom: Float,
+    onCentre: (Offset) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val progress by animateFloatAsState(
@@ -382,12 +425,13 @@ private fun MixPlayButton(onClick: () -> Unit, launch: () -> Float, maxZoom: Flo
     val shape = if (progress == 0f || launching) CircleShape else MorphShape(morph, progress)
     Box(
         modifier = modifier
-            .size(128.dp)
+            .size(HeroButtonRadius * 2)
+            // Unclipped centre in window coordinates, for the shell's copy of the zoom.
+            .onGloballyPositioned { onCentre(it.localToRoot(Offset(it.size.width / 2f, it.size.height / 2f))) }
             .graphicsLayer {
                 // On launch the button swells past the screen edges: the zoom into the player.
                 val t = launch()
-                val zoom = if (t <= 0.15f) 1f else 1f + ((t - 0.15f) / 0.85f).let { it * it } * (maxZoom - 1f)
-                val s = (1f - 0.06f * progress) * zoom
+                val s = (1f - 0.06f * progress) * heroZoom(t, maxZoom)
                 scaleX = s; scaleY = s
                 rotationZ = progress * 20f + t * 40f
             }
@@ -479,7 +523,8 @@ fun TopArtistsShelf(shelves: HomeShelves, header: @Composable () -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(top, key = { it.artist }) { track: SubsonicTrack ->
+            // Unkeyed like the shelves, so a newly top artist shows at the start.
+            items(top) { track: SubsonicTrack ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -562,9 +607,13 @@ fun HomeLayoutEditor(
             }
         },
         onEnd = {
-            dragging = null
-            dragOffset = 0f
-            onChange(order)
+            // Only a real drag commits. The detectors also end when a row leaves the list (its
+            // switch was turned off), and committing then put the section straight back.
+            if (dragging != null) {
+                dragging = null
+                dragOffset = 0f
+                onChange(order)
+            }
         }
     )
 
@@ -577,6 +626,8 @@ fun HomeLayoutEditor(
                     section = section,
                     visible = true,
                     drag = drag,
+                    // Keep one section, so Home never ends up empty.
+                    canToggle = order.size > 1,
                     onToggle = { onChange(order - section) },
                     modifier = Modifier
                         .zIndex(if (lifted) 1f else 0f)
@@ -623,8 +674,12 @@ private fun HomeSectionRow(
     visible: Boolean,
     drag: DragCallbacks?,
     onToggle: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    canToggle: Boolean = true
 ) {
+    // The detectors below outlive recompositions; read the latest callbacks, whose `order` is
+    // current, rather than the ones captured when the row first appeared.
+    val currentDrag by rememberUpdatedState(drag)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
@@ -632,10 +687,10 @@ private fun HomeSectionRow(
             .then(
                 if (drag != null) Modifier.pointerInput(section) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = { drag.onStart(section) },
-                        onDragEnd = drag.onEnd,
-                        onDragCancel = drag.onEnd
-                    ) { change, amount -> change.consume(); drag.onDrag(amount.y) }
+                        onDragStart = { currentDrag?.onStart(section) },
+                        onDragEnd = { currentDrag?.onEnd() },
+                        onDragCancel = { currentDrag?.onEnd() }
+                    ) { change, amount -> change.consume(); currentDrag?.onDrag(amount.y) }
                 } else Modifier
             )
             .padding(vertical = 4.dp)
@@ -650,10 +705,10 @@ private fun HomeSectionRow(
                     .size(44.dp)
                     .pointerInput(section) {
                         detectVerticalDragGestures(
-                            onDragStart = { drag.onStart(section) },
-                            onDragEnd = drag.onEnd,
-                            onDragCancel = drag.onEnd
-                        ) { change, amount -> change.consume(); drag.onDrag(amount) }
+                            onDragStart = { currentDrag?.onStart(section) },
+                            onDragEnd = { currentDrag?.onEnd() },
+                            onDragCancel = { currentDrag?.onEnd() }
+                        ) { change, amount -> change.consume(); currentDrag?.onDrag(amount) }
                     }
                     .padding(10.dp)
                     .testTag("home_section_handle_${section.name.lowercase()}")
@@ -676,7 +731,7 @@ private fun HomeSectionRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Switch(checked = visible, onCheckedChange = { onToggle() })
+        Switch(checked = visible, enabled = canToggle, onCheckedChange = { onToggle() })
     }
 }
 
@@ -707,6 +762,76 @@ fun HomeLayoutSheet(
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
             HomeLayoutEditor(sections, customSections.isNotEmpty(), onChange, onReset)
+        }
+    }
+}
+
+/**
+ * "Mixes for you": mixes made from the library (genres, the most played artist, favourites, new
+ * arrivals, forgotten favourites), each a card with a collage of its covers. Tapping plays it.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
+    Column {
+        ShelfHeader("Mixes for you", onMore = null)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            items(mixes, key = { it.key }) { mix ->
+                Column(
+                    modifier = Modifier
+                        .width(156.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClickLabel = "Play ${mix.title}") { onPlay(mix) }
+                        // Room inside the rounded corner, so the clip never touches the text.
+                        .padding(bottom = 12.dp)
+                        .testTag("mix_${mix.key}")
+                ) {
+                    MixCollage(mix.covers, Modifier.size(156.dp))
+                    Text(
+                        mix.title,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 8.dp, start = 6.dp, end = 6.dp)
+                    )
+                    Text(
+                        mix.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 6.dp, end = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Four covers in a rounded square (fewer fill what they can), on the theme's container colour. */
+@Composable
+internal fun MixCollage(covers: List<String>, modifier: Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+    ) {
+        val cells = covers.take(4)
+        if (cells.size < 4) {
+            cells.firstOrNull()?.let { AsyncImage(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                cells.chunked(2).forEach { row ->
+                    Row(Modifier.weight(1f)) {
+                        row.forEach { url ->
+                            AsyncImage(url, null, contentScale = ContentScale.Crop, modifier = Modifier.weight(1f).fillMaxHeight())
+                        }
+                    }
+                }
+            }
         }
     }
 }

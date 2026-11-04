@@ -1,0 +1,34 @@
+name: Music source proposal
+description: Suggest support for another server or music source (Jellyfin, local files, Plex…)
+labels: [provider]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ondalune plays music you own or host. It won't add sources that would mean getting around
+        a service's subscription, login, DRM or terms.
+  - type: input
+    id: source
+    attributes:
+      label: Server or source
+      placeholder: e.g. Jellyfin 10.10, files on the phone, a WebDAV share
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: How do you use it today, and what would you like Ondalune to do with it?
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: API or protocol details you know of
+      description: Links to its API docs, Subsonic compatibility, auth method, anything that helps.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can test against my own server
+        - label: I'd like to work on this myself

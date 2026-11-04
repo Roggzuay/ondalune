@@ -9,6 +9,8 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -260,6 +262,8 @@ private fun colorToHex(color: Color): String = "#%06X".format(color.toArgb() and
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun OndaluneExpressiveTheme(
+    /** Changing this fades the colour scheme across; changing only the seed switches it at once. */
+    transitionKey: String = "",
     seedHex: String = "#FF6B5B",
     @Suppress("UNUSED_PARAMETER") accentHex: String = "#70F5FF",
     themeMode: AppThemeMode = AppThemeMode.DARK,
@@ -287,12 +291,38 @@ fun OndaluneExpressiveTheme(
     val standard = spec.standardShapes
     // Applied instantly: animating the scheme recomposed every color reader on every frame of the
     // fade, which was the stutter on track change. The artwork crossfade carries the transition.
-    val colorScheme = remember(seedHex, isDark, isAmoled, useMaterialYouDynamic, unifiedMaterialYouColor, harmonizeWithArtwork, curatedPalette, interfaceStyle) {
+    val targetScheme = remember(seedHex, isDark, isAmoled, useMaterialYouDynamic, unifiedMaterialYouColor, harmonizeWithArtwork, curatedPalette, interfaceStyle) {
         buildOndaluneColorScheme(
             context, seedHex, isDark, isAmoled,
             useMaterialYouDynamic, unifiedMaterialYouColor, harmonizeWithArtwork, curatedPalette, interfaceStyle
         )
     }
+    // Only a change of [transitionKey] (an artist page taking over the colours, or giving them
+    // back) fades, for 380 ms; it happens without playback starting at the same time.
+    val fade = remember { SchemeFade(targetScheme, transitionKey) }
+    val progress = remember { Animatable(1f) }
+    if (fade.to !== targetScheme) {
+        val animate = fade.key != transitionKey && !isSystemReducedMotionEnabled(context)
+        fade.from = if (animate) fade.shown else targetScheme
+        fade.to = targetScheme
+        fade.key = transitionKey
+        fade.pending = animate
+    }
+    LaunchedEffect(targetScheme) {
+        if (fade.pending) {
+            progress.snapTo(0f)
+            fade.pending = false
+            progress.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+        } else progress.snapTo(1f)
+    }
+    // Read every time: a branch that skipped it left the theme unsubscribed from the fade.
+    val p = progress.value
+    val colorScheme = when {
+        fade.pending -> fade.from
+        p >= 1f -> targetScheme
+        else -> lerpScheme(fade.from, targetScheme, p)
+    }
+    fade.shown = colorScheme
     val resolvedShapes = remember(cornerStylePreset, standard) {
         if (standard) buildStandardShapes(cornerStylePreset) else buildShapesForPreset(cornerStylePreset)
     }
@@ -333,4 +363,37 @@ fun MyApplicationTheme(
 @ReadOnlyComposable
 fun monoLabelSmall() = MaterialTheme.typography.labelSmall.let {
     if (LocalStyleSpec.current.monoBadges) it.copy(fontFamily = MonoFontFamily) else it
+}
+
+/** Bookkeeping for the colour-scheme fade in [OndaluneExpressiveTheme]. */
+private class SchemeFade(initial: ColorScheme, var key: String) {
+    var from = initial
+    var to = initial
+    var shown = initial
+    var pending = false
+}
+
+private fun lerpScheme(a: ColorScheme, b: ColorScheme, t: Float): ColorScheme {
+    fun l(x: Color, y: Color) = androidx.compose.ui.graphics.lerp(x, y, t)
+    return b.copy(
+        primary = l(a.primary, b.primary), onPrimary = l(a.onPrimary, b.onPrimary),
+        primaryContainer = l(a.primaryContainer, b.primaryContainer), onPrimaryContainer = l(a.onPrimaryContainer, b.onPrimaryContainer),
+        inversePrimary = l(a.inversePrimary, b.inversePrimary),
+        secondary = l(a.secondary, b.secondary), onSecondary = l(a.onSecondary, b.onSecondary),
+        secondaryContainer = l(a.secondaryContainer, b.secondaryContainer), onSecondaryContainer = l(a.onSecondaryContainer, b.onSecondaryContainer),
+        tertiary = l(a.tertiary, b.tertiary), onTertiary = l(a.onTertiary, b.onTertiary),
+        tertiaryContainer = l(a.tertiaryContainer, b.tertiaryContainer), onTertiaryContainer = l(a.onTertiaryContainer, b.onTertiaryContainer),
+        background = l(a.background, b.background), onBackground = l(a.onBackground, b.onBackground),
+        surface = l(a.surface, b.surface), onSurface = l(a.onSurface, b.onSurface),
+        surfaceVariant = l(a.surfaceVariant, b.surfaceVariant), onSurfaceVariant = l(a.onSurfaceVariant, b.onSurfaceVariant),
+        surfaceTint = l(a.surfaceTint, b.surfaceTint),
+        inverseSurface = l(a.inverseSurface, b.inverseSurface), inverseOnSurface = l(a.inverseOnSurface, b.inverseOnSurface),
+        outline = l(a.outline, b.outline), outlineVariant = l(a.outlineVariant, b.outlineVariant),
+        surfaceBright = l(a.surfaceBright, b.surfaceBright), surfaceDim = l(a.surfaceDim, b.surfaceDim),
+        surfaceContainer = l(a.surfaceContainer, b.surfaceContainer),
+        surfaceContainerHigh = l(a.surfaceContainerHigh, b.surfaceContainerHigh),
+        surfaceContainerHighest = l(a.surfaceContainerHighest, b.surfaceContainerHighest),
+        surfaceContainerLow = l(a.surfaceContainerLow, b.surfaceContainerLow),
+        surfaceContainerLowest = l(a.surfaceContainerLowest, b.surfaceContainerLowest)
+    )
 }

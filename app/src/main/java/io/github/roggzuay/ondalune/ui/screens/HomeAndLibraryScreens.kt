@@ -22,6 +22,7 @@ import io.github.roggzuay.ondalune.data.model.genreList
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilledTonalButton
 import io.github.roggzuay.ondalune.data.model.HomeSection
+import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 import io.github.roggzuay.ondalune.ui.components.ViewModeMenuButton
 import io.github.roggzuay.ondalune.ui.components.collectionEntries
@@ -32,6 +33,8 @@ import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.UpdateBanner
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.ui.components.LocalDownloads
+import io.github.roggzuay.ondalune.ui.components.DownloadButton
+import io.github.roggzuay.ondalune.ui.components.downloadStatusOf
 import io.github.roggzuay.ondalune.ui.components.LocalTrackSelection
 import io.github.roggzuay.ondalune.ui.components.SelectableTracks
 import io.github.roggzuay.ondalune.ui.components.TrackSelection
@@ -208,7 +211,10 @@ fun ListenNowHomeScreen(
     onViewUpdate: () -> Unit = {},
     onLaterUpdate: () -> Unit = {},
     /** Pass a state held above the tab's content to come back to the same scroll position. */
-    listState: LazyListState = rememberLazyListState()
+    listState: LazyListState = rememberLazyListState(),
+    onPlayMix: (LibraryMix) -> Unit = {},
+    /** Your Mix launch, read by the shell to draw the zoom over its bars too. */
+    heroLaunch: HeroLaunch = remember { HeroLaunch() }
 ) {
     var showLayoutEditor by remember { mutableStateOf(false) }
     val sections = homeSections.ifEmpty { LocalStyleSpec.current.defaultHome }
@@ -320,7 +326,7 @@ fun ListenNowHomeScreen(
         bannerVersion = arrived
     }
 
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(pullSyncConnection)
@@ -344,7 +350,10 @@ fun ListenNowHomeScreen(
         sections.forEach { section ->
             when (section) {
                 HomeSection.YOUR_MIX -> item(key = "your_mix") {
-                    YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onOpenPlayer = onOpenPlayerFromMix)
+                    YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onOpenPlayer = onOpenPlayerFromMix, heroLaunch = heroLaunch)
+                }
+                HomeSection.MIXES -> if (shelves.mixes.isNotEmpty()) item(key = "mixes") {
+                    MixesShelf(shelves.mixes, onPlayMix)
                 }
                 HomeSection.QUICK_ACTIONS -> item(key = "quick_actions") {
                     HomeQuickActions(onOpenShelf = onOpenShelf, onShuffle = { onStartSmartShuffle(null) })
@@ -568,6 +577,10 @@ internal fun ShelfHeader(title: String, onMore: (() -> Unit)?, onPlayAll: (() ->
 /** How many items a Home shelf previews before "More". */
 private const val ShelfPreviewCount = 12
 
+// Shelf rows are not keyed on purpose. A keyed LazyRow keeps its first visible item in place when
+// items arrive in front of it, so albums a sync added (or the song just played) landed off-screen
+// to the left until Home was rebuilt. Unkeyed rows hold their index: at the start, new items show.
+
 @Composable
 private fun AlbumShelf(
     title: String,
@@ -582,7 +595,7 @@ private fun AlbumShelf(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(albums.take(ShelfPreviewCount), key = { it.id }) { album ->
+            items(albums.take(ShelfPreviewCount)) { album ->
                 AlbumExpressiveCard(
                     album = album,
                     onClick = { onOpenAlbum(album.id) },
@@ -607,7 +620,7 @@ private fun TrackShelf(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(tracks.take(ShelfPreviewCount), key = { it.id }) { track ->
+            items(tracks.take(ShelfPreviewCount)) { track ->
                 val isCurrent = track.id == currentTrackId
                 SpringPressableSurface(
                     onClick = { onPlayTrack(track, tracks) },
@@ -1248,6 +1261,7 @@ fun LibraryCollectionScreen(
             isPlaying = isPlaying,
             onBack = { onOpenArtist(null) },
             onPlayTrack = { onPlayTrack(it, artistTracks) },
+            onShuffle = { artistTracks.shuffled().let { queue -> queue.firstOrNull()?.let { onPlayTrack(it, queue) } } },
             onToggleStar = onToggleStarTrack,
             onOpenAlbum = { onOpenAlbum(it) },
             onPlayAlbum = { onPlayAlbum(it, false) }
@@ -1687,13 +1701,24 @@ fun AlbumDetailSubScreen(
                     modifier = Modifier.weight(1f)
                 )
                 val downloadActions = LocalTrackActions.current
-                ExpressiveBounceIconButton(
+                val downloads = LocalDownloads.current
+                // The album's songs as one download: the cloud becomes a spinner, then a ring that
+                // fills song by song, then the done cloud.
+                val albumDownload = remember(tracks, downloads) { downloadStatusOf(tracks.map { downloads[it.id] }) }
+                DownloadButton(
+                    status = albumDownload,
                     // Every album page downloads, wherever it was opened from.
-                    onClick = { onDownloadAlbum?.invoke() ?: downloadActions?.download(tracks) },
-                    size = 46.dp,
-                    modifier = Modifier.testTag("album_detail_download_button")
-                ) {
-                    Icon(Icons.Filled.CloudDownload, contentDescription = "Download Album Offline")
+                    onDownload = { onDownloadAlbum?.invoke() ?: downloadActions?.download(tracks) },
+                    onCancel = { downloadActions?.cancelDownloads(tracks) },
+                    onResume = { downloadActions?.resumeDownloads(tracks) },
+                    onRemove = { downloadActions?.removeDownloads(tracks) },
+                    iconSize = 24.dp
+                ) { onClick, content ->
+                    ExpressiveBounceIconButton(
+                        onClick = onClick,
+                        size = 46.dp,
+                        modifier = Modifier.testTag("album_detail_download_button")
+                    ) { content() }
                 }
             }
         }
@@ -1730,168 +1755,6 @@ fun AlbumDetailSubScreen(
     }
 }
 
-@Composable
-private fun ArtistDetailSubScreen(
-    artist: SubsonicArtist,
-    tracks: List<SubsonicTrack>,
-    albums: List<SubsonicAlbum>,
-    currentTrackId: String?,
-    isPlaying: Boolean,
-    onBack: () -> Unit,
-    onPlayTrack: (SubsonicTrack) -> Unit,
-    onToggleStar: (SubsonicTrack) -> Unit,
-    onOpenAlbum: (String) -> Unit,
-    onPlayAlbum: (String) -> Unit
-) {
-    val topTracks = remember(tracks) { tracks.sortedByDescending { it.playCount } }
-    SelectableTracks(topTracks)
-    var bioExpanded by rememberSaveable(artist.id) { mutableStateOf(false) }
-    var bioOverflows by remember(artist.id, artist.bio) { mutableStateOf(false) }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            ExpressiveBounceIconButton(onClick = onBack, size = 46.dp) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-        }
-
-        // Hero: circular portrait, name, stats, play
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                ExpressiveArtwork(
-                    seedHex = artist.paletteSeedHex,
-                    accentHex = artist.accentHex,
-                    artStyleIndex = artist.artStyleIndex,
-                    coverArtUrl = artist.coverArtUrl,
-                    monogramText = artist.name,
-                    shapeMode = ArtworkShapeMode.VINYL,
-                    modifier = Modifier.size(176.dp)
-                )
-                Text(
-                    text = artist.name,
-                    style = MaterialTheme.typography.headlineLargeEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = listOfNotNull(
-                        artist.genre.takeIf { it.isNotBlank() },
-                        "${artist.albumCount} albums",
-                        "${tracks.size} tracks"
-                    ).joinToString(" • "),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (topTracks.isNotEmpty()) {
-                    Button(
-                        onClick = { onPlayTrack(topTracks.first()) },
-                        shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier
-                            .height(52.dp)
-                            .testTag("artist_play_button")
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Play", style = MaterialTheme.typography.titleMediumEmphasized)
-                    }
-                }
-            }
-        }
-
-        // About: expandable biography (server bio, or Wikipedia when the server has none)
-        if (artist.bio.isNotBlank()) item {
-            Surface(
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())
-            ) {
-                Column(
-                    modifier = Modifier
-                        .clickable(enabled = artist.bio.isNotBlank()) { bioExpanded = !bioExpanded }
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "About",
-                        style = MaterialTheme.typography.titleLargeEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (artist.bio.isNotBlank()) {
-                        Text(
-                            text = artist.bio,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = if (bioExpanded) Int.MAX_VALUE else 4,
-                            overflow = TextOverflow.Ellipsis,
-                            onTextLayout = { if (!bioExpanded) bioOverflows = it.hasVisualOverflow }
-                        )
-                        if (bioOverflows || bioExpanded) {
-                            Text(
-                                text = if (bioExpanded) "Show less" else "Read more",
-                                style = MaterialTheme.typography.labelLargeEmphasized,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (albums.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Albums",
-                    style = MaterialTheme.typography.headlineSmallEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(albums, key = { it.id }) { album ->
-                        AlbumExpressiveCard(
-                            album = album,
-                            onClick = { onOpenAlbum(album.id) },
-                            onPlayClick = { onPlayAlbum(album.id) }
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Text(
-                text = "Top tracks",
-                style = MaterialTheme.typography.headlineSmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-        items(topTracks, key = { it.id }) { track ->
-            TrackExpressiveRow(
-                track = track,
-                isCurrent = track.id == currentTrackId,
-                isPlaying = isPlaying,
-                onPlay = { onPlayTrack(track) },
-                onToggleStar = { onToggleStar(track) }
-            )
-        }
-
-        item { Spacer(modifier = Modifier.height(150.dp)) }
-    }
-}
 
 @Composable
 private fun CreatePlaylistDialog(
@@ -2153,6 +2016,7 @@ fun SmartDynamicSearchScreen(
             isPlaying = isPlaying,
             onBack = { onOpenArtist(null) },
             onPlayTrack = { onPlayTrack(it, artistTracks) },
+            onShuffle = { artistTracks.shuffled().let { queue -> queue.firstOrNull()?.let { onPlayTrack(it, queue) } } },
             onToggleStar = onToggleStarTrack,
             onOpenAlbum = { onOpenAlbum(it) },
             onPlayAlbum = { onPlayAlbum(it, false) }

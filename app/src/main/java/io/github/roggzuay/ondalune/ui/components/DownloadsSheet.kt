@@ -1,6 +1,9 @@
 package io.github.roggzuay.ondalune.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +17,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,27 +40,38 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
+import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 
 /**
- * Every download on the active server, grouped: in progress (downloading, then waiting), failed
- * with the reason and Retry, and saved on the phone. Opened from the top bar's download ring and
- * from Settings.
+ * Every download on the active server, grouped: in progress (downloading, then waiting) with
+ * pause and cancel, paused with resume, failed with the reason and Retry, and saved on the phone.
+ * Tapping a song opens its album and plays it. Opened from the download activity button, the
+ * filter sheet and Settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadsSheet(
     downloads: Collection<SubsonicDownloadEntity>,
+    /** Fixed order for the rows (see [DownloadOrder]), so they don't swap as they progress. */
+    order: Comparator<SubsonicDownloadEntity>,
+    trackFor: (String) -> SubsonicTrack?,
     onCancel: (List<String>) -> Unit,
+    onPause: (List<String>) -> Unit,
+    onResume: (List<String>) -> Unit,
     onRetry: (List<String>) -> Unit,
     onRemove: (String) -> Unit,
+    onOpenTrack: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val byState = downloads.groupBy { it.stateEnum }
-    val inProgress = byState[OfflineDownloadState.DOWNLOADING].orEmpty() +
-        byState[OfflineDownloadState.QUEUED].orEmpty().sortedBy { it.updatedAtMs }
-    val failed = byState[OfflineDownloadState.FAILED].orEmpty().sortedByDescending { it.updatedAtMs }
+    val inProgress = (byState[OfflineDownloadState.DOWNLOADING].orEmpty() + byState[OfflineDownloadState.QUEUED].orEmpty())
+        .sortedWith(order)
+    val paused = byState[OfflineDownloadState.PAUSED].orEmpty().sortedWith(order)
+    val failed = byState[OfflineDownloadState.FAILED].orEmpty().sortedWith(order)
     val saved = downloads.filter { it.isCompleted }.sortedByDescending { it.updatedAtMs }
 
+    // ModalBottomSheet rises from the bottom edge; skipPartiallyExpanded lets it open in one motion.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -63,7 +79,7 @@ fun DownloadsSheet(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 24.dp, end = 12.dp, bottom = 32.dp)
+            contentPadding = PaddingValues(start = 20.dp, end = 8.dp, bottom = 32.dp)
         ) {
             item {
                 Column(Modifier.padding(bottom = 8.dp)) {
@@ -85,8 +101,15 @@ fun DownloadsSheet(
                     )
                 }
             }
-            section("In progress", inProgress, "Cancel all", { onCancel(inProgress.map { it.trackId }) }) { d ->
-                DownloadRow(d, Icons.Filled.Clear, "Cancel download", { onCancel(listOf(d.trackId)) }) {
+            section("In progress", inProgress, listOf(
+                "Pause all" to { onPause(inProgress.map { it.trackId }) },
+                "Cancel all" to { onCancel(inProgress.map { it.trackId }) }
+            )) { d ->
+                DownloadRow(
+                    d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
+                    Icons.Filled.Pause to { onPause(listOf(d.trackId)) }, "Pause download",
+                    Icons.Filled.Clear to { onCancel(listOf(d.trackId)) }, "Cancel download"
+                ) {
                     if (d.stateEnum == OfflineDownloadState.DOWNLOADING) {
                         LinearProgressIndicator(
                             progress = { d.progressPercent / 100f },
@@ -97,14 +120,25 @@ fun DownloadsSheet(
                     }
                 }
             }
-            section("Failed", failed, "Retry all", { onRetry(failed.map { it.trackId }) }) { d ->
+            section("Paused", paused, listOf("Resume all" to { onResume(paused.map { it.trackId }) })) { d ->
                 DownloadRow(
-                    d, Icons.Filled.Refresh, "Retry download", { onRetry(listOf(d.trackId)) },
-                    secondIcon = Icons.Filled.Clear to { onRemove(d.trackId) }
+                    d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
+                    Icons.Filled.PlayArrow to { onResume(listOf(d.trackId)) }, "Resume download",
+                    Icons.Filled.Clear to { onCancel(listOf(d.trackId)) }, "Cancel download"
+                ) { Detail(if (d.progressPercent > 0) "Paused at ${d.progressPercent}%" else "Paused") }
+            }
+            section("Failed", failed, listOf("Retry all" to { onRetry(failed.map { it.trackId }) })) { d ->
+                DownloadRow(
+                    d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
+                    Icons.Filled.Refresh to { onRetry(listOf(d.trackId)) }, "Retry download",
+                    Icons.Filled.Clear to { onRemove(d.trackId) }, "Remove from list"
                 ) { Detail(d.errorMessage.ifBlank { "Download failed" }, MaterialTheme.colorScheme.error) }
             }
             section("Saved on this phone", saved) { d ->
-                DownloadRow(d, Icons.Outlined.DeleteOutline, "Remove download", { onRemove(d.trackId) }) {
+                DownloadRow(
+                    d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
+                    Icons.Outlined.DeleteOutline to { onRemove(d.trackId) }, "Remove download"
+                ) {
                     Detail("${d.artist} · ${formatBytes(d.totalBytes)}")
                 }
             }
@@ -115,15 +149,14 @@ fun DownloadsSheet(
 private fun LazyListScope.section(
     title: String,
     rows: List<SubsonicDownloadEntity>,
-    action: String? = null,
-    onAction: () -> Unit = {},
+    actions: List<Pair<String, () -> Unit>> = emptyList(),
     row: @Composable (SubsonicDownloadEntity) -> Unit
 ) {
     if (rows.isEmpty()) return
     item(key = "header_$title") {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).height(40.dp)
+            modifier = Modifier.animateItem().fillMaxWidth().padding(top = 16.dp, end = 4.dp).height(40.dp)
         ) {
             Text(
                 "$title · ${rows.size}",
@@ -131,34 +164,61 @@ private fun LazyListScope.section(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            if (action != null && rows.size > 1) TextButton(onClick = onAction) { Text(action) }
+            if (rows.size > 1) {
+                val haptics = LocalHapticFeedbackManager.current
+                actions.forEach { (label, onAction) ->
+                    TextButton(onClick = { haptics?.performSubtleTick(); onAction() }) { Text(label) }
+                }
+            }
         }
     }
-    items(rows, key = { it.downloadKey }) { row(it) }
+    // Keyed by download, so a paused or resumed song glides into its new section instead of jumping.
+    items(rows, key = { it.downloadKey }) { Box(Modifier.animateItem()) { row(it) } }
 }
 
 @Composable
 private fun DownloadRow(
     download: SubsonicDownloadEntity,
-    icon: ImageVector,
-    iconLabel: String,
-    onIcon: () -> Unit,
-    secondIcon: Pair<ImageVector, () -> Unit>? = null,
+    track: SubsonicTrack?,
+    onOpen: () -> Unit,
+    first: Pair<ImageVector, () -> Unit>,
+    firstLabel: String,
+    second: Pair<ImageVector, () -> Unit>? = null,
+    secondLabel: String = "",
     detail: @Composable () -> Unit
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClickLabel = "Open album and play", onClick = onOpen)
+            .padding(vertical = 6.dp)
+            .testTag("download_row_${download.trackId}")
     ) {
+        if (track != null) {
+            ExpressiveArtwork(
+                seedHex = track.paletteSeedHex,
+                accentHex = track.accentHex,
+                artStyleIndex = track.artStyleIndex,
+                coverArtUrl = track.coverArtUrl,
+                styleShape = LocalStyleSpec.current.rowArtShape,
+                modifier = Modifier.size(44.dp)
+            )
+            Spacer(Modifier.size(12.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(download.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             detail()
         }
-        Spacer(Modifier.size(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-            IconButton(onClick = onIcon) { Icon(icon, contentDescription = iconLabel, modifier = Modifier.size(20.dp)) }
-            secondIcon?.let { (secondIconImage, onSecond) ->
-                IconButton(onClick = onSecond) { Icon(secondIconImage, contentDescription = "Remove from list", modifier = Modifier.size(20.dp)) }
+        Spacer(Modifier.size(4.dp))
+        val haptics = LocalHapticFeedbackManager.current
+        IconButton(onClick = { haptics?.performSubtleTick(); first.second() }) {
+            Icon(first.first, contentDescription = firstLabel, modifier = Modifier.size(20.dp))
+        }
+        second?.let { (icon, onClick) ->
+            IconButton(onClick = { haptics?.performSubtleTick(); onClick() }) {
+                Icon(icon, contentDescription = secondLabel, modifier = Modifier.size(20.dp))
             }
         }
     }

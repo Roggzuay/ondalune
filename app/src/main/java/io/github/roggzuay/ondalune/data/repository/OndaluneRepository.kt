@@ -225,12 +225,13 @@ class OndaluneRepository(
     ): List<SubsonicArtist> =
         DemoSubsonicCatalog.deriveArtistsFromTracks(tracks, fallbackToAlbumArt)
 
+    /** Stores the artist's portrait and bio; returns the server's similar artists' ids. */
     suspend fun enrichArtistMetadata(
         server: SubsonicServerConfig,
         artistId: String,
         artistName: String
-    ) {
-        if (server.isDemoServer || artistId.isBlank()) return
+    ): List<String> {
+        if (server.isDemoServer || artistId.isBlank()) return emptyList()
         val info2 = client.fetchArtistInfo2(server, artistId)
         // Server bio first; Wikipedia only fills what the server left empty.
         val wiki = if (info2?.bio.isNullOrBlank()) client.fetchWikipediaArtistSummary(artistName) else null
@@ -245,6 +246,7 @@ class OndaluneRepository(
                 artistBio = bio
             )
         }
+        return info2?.similarArtistIds.orEmpty()
     }
 
     fun deriveGenres(tracks: List<SubsonicTrack>): List<SubsonicGenre> =

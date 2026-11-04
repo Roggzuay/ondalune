@@ -6,6 +6,10 @@
 
 **A music player for your own server, made to feel alive.**
 
+[![Build](https://github.com/Roggzuay/ondalune/actions/workflows/build.yml/badge.svg)](https://github.com/Roggzuay/ondalune/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/Roggzuay/ondalune)](https://github.com/Roggzuay/ondalune/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/github/license/Roggzuay/ondalune)](LICENSE)
+
 Ondalune streams your library from Navidrome or any Subsonic/OpenSubsonic server and plays it
 through a hand-tuned audio engine: real-time speed and pitch control, a live studio reverb,
 synced lyrics, and a player that takes its colours and motion from whatever is playing.

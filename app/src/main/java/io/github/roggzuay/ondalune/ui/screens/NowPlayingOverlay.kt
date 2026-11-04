@@ -52,6 +52,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -187,6 +188,16 @@ import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.NowPlayingSheetTab
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import androidx.compose.animation.core.animate
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
+import coil.request.ImageRequest
+import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
+import io.github.roggzuay.ondalune.ui.components.DownloadButton
+import io.github.roggzuay.ondalune.ui.components.DownloadPhase
+import io.github.roggzuay.ondalune.ui.components.downloadStatusOf
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
@@ -1039,8 +1050,32 @@ private fun NowPlayingCenterStage(
     val latestSwipeDownFinish by rememberUpdatedState(onSwipeDownFinish)
     val swipeHaptics = LocalHapticFeedbackManager.current
     val swipeScope = rememberCoroutineScope()
-    // Horizontal offset of the cover while it is dragged or flung to the next/previous track.
-    val artDragX = remember { Animatable(0f) }
+    // Horizontal offset of the cover while it is dragged or flung to the next/previous track. The
+    // finger writes it directly (a coroutine per move event landed a frame late); [artSettle]
+    // animates it back, or out and in again for the next cover.
+    var artDragX by remember { mutableFloatStateOf(0f) }
+    val artSettle = remember { arrayOfNulls<Job>(1) }
+    suspend fun animateArtTo(target: Float, spec: AnimationSpec<Float>, velocity: Float = 0f) =
+        animate(artDragX, target, velocity, spec) { value, _ -> artDragX = value }
+    val flingVelocity = with(LocalDensity.current) { 700.dp.toPx() }
+
+    // Decode the neighbouring covers ahead, so a swipe lands on a cover that is already in memory
+    // instead of decoding it while the new one slides in.
+    val context = LocalContext.current
+    val artPx = with(LocalDensity.current) { maxArtworkSize.coerceIn(160.dp, 420.dp).roundToPx() }
+    LaunchedEffect(track.id, queue) {
+        val i = queue.indexOfFirst { it.id == track.id }
+        if (i < 0) return@LaunchedEffect
+        listOfNotNull(queue.getOrNull(i + 1), queue.getOrNull(i - 1))
+            .filter { it.coverArtUrl.isNotBlank() }
+            .forEach { neighbour ->
+                val key = artworkCacheKey(neighbour.coverArtUrl)
+                context.imageLoader.enqueue(
+                    ImageRequest.Builder(context).data(neighbour.coverArtUrl)
+                        .memoryCacheKey(key).diskCacheKey(key).size(artPx).build()
+                )
+            }
+    }
     val centerMode = if (activeTab == NowPlayingSheetTab.LYRICS) {
         NowPlayingSheetTab.LYRICS
     } else {
@@ -1089,50 +1124,72 @@ private fun NowPlayingCenterStage(
                                 )
                             }
                             .graphicsLayer {
-                                val travel = artDragX.value / size.width.coerceAtLeast(1f)
-                                translationX = artDragX.value
-                                rotationZ = travel * 9f
-                                alpha = 1f - abs(travel).coerceIn(0f, 0.7f)
+                                // Straight sideways, no tilt: rotating around the centre made the
+                                // leading edge dip, as if the cover rode a wheel.
+                                translationX = artDragX
+                                alpha = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
                             }
                             .pointerInput(Unit) {
-                                // One drag detector so the gesture locks to whichever axis moves
-                                // first: sideways skips tracks, downwards closes the player.
+                                // One drag detector so the gesture locks to one axis: sideways skips
+                                // tracks, downwards closes the player.
                                 var horizontal: Boolean? = null
+                                var fingerX = 0f
+                                val tracker = VelocityTracker()
                                 detectDragGestures(
-                                    onDragStart = { horizontal = null },
+                                    onDragStart = {
+                                        horizontal = null
+                                        fingerX = 0f
+                                        tracker.resetTracking()
+                                        artSettle[0]?.cancel() // catch a cover that is still settling
+                                    },
                                     onDragEnd = {
                                         if (horizontal == true) {
                                             val width = size.width.toFloat()
-                                            val offset = artDragX.value
+                                            val offset = artDragX
+                                            val velocity = tracker.calculateVelocity().x
+                                            // A quick flick skips even when short; a slow drag has
+                                            // to carry the cover past a fifth of its width.
                                             val direction = when {
-                                                offset < -width * 0.22f -> -1
-                                                offset > width * 0.22f -> 1
+                                                offset < -width * 0.22f || (offset < 0f && velocity < -flingVelocity) -> -1
+                                                offset > width * 0.22f || (offset > 0f && velocity > flingVelocity) -> 1
                                                 else -> 0
                                             }
-                                            swipeScope.launch {
+                                            artSettle[0] = swipeScope.launch {
                                                 if (direction == 0) {
-                                                    artDragX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                                    animateArtTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), velocity)
                                                     return@launch
                                                 }
                                                 swipeHaptics?.performSubtleTick()
-                                                artDragX.animateTo(direction * width * 1.1f, tween(160))
+                                                animateArtTo(direction * width * 1.1f, tween(160))
                                                 if (direction < 0) latestNext() else latestPrevious()
                                                 // The new cover slides in from the opposite side.
-                                                artDragX.snapTo(-direction * width * 0.6f)
-                                                artDragX.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow))
+                                                artDragX = -direction * width * 0.6f
+                                                animateArtTo(0f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow))
                                             }
                                         } else {
                                             latestSwipeDownFinish()
                                         }
                                     },
                                     onDragCancel = {
-                                        if (horizontal == true) swipeScope.launch { artDragX.animateTo(0f) } else latestSwipeDownFinish()
+                                        if (horizontal == true) {
+                                            artSettle[0] = swipeScope.launch { animateArtTo(0f, spring()) }
+                                        } else {
+                                            latestSwipeDownFinish()
+                                        }
                                     }
                                 ) { change, amount ->
-                                    if (horizontal == null) horizontal = abs(amount.x) > abs(amount.y)
+                                    // The first delta points the way the finger left the slop
+                                    // circle. Lean sideways (up to ~56° off horizontal): a thumb's
+                                    // arc starts a little downward, and that dragged the whole
+                                    // player down instead of moving the cover.
+                                    if (horizontal == null) horizontal = abs(amount.y) <= abs(amount.x) * 1.5f
                                     change.consume()
                                     if (horizontal == true) {
-                                        swipeScope.launch { artDragX.snapTo(artDragX.value + amount.x) }
+                                        artDragX += amount.x
+                                        // The layer moves with the finger, so local positions
+                                        // barely change; track the finger's own travel instead.
+                                        fingerX += amount.x
+                                        tracker.addPosition(change.uptimeMillis, Offset(fingerX, 0f))
                                     } else {
                                         latestSwipeDown(amount.y)
                                     }
@@ -1991,61 +2048,28 @@ class PlayerDownload(
     val state: SubsonicDownloadEntity?,
     val onDownload: () -> Unit,
     val onCancel: () -> Unit,
+    val onResume: () -> Unit,
     val onRemove: () -> Unit
 )
 
-/**
- * Download, then a progress ring while it downloads (tap to cancel), then a filled tick once the
- * song is on the phone; tapping the tick offers to remove it.
- */
+/** The shared [DownloadButton] (cloud, spinner, progress ring, done) in the player's toggle shape. */
 @Composable
 private fun PlayerDownloadButton(download: PlayerDownload) {
-    val state = download.state?.stateEnum
-    val saved = download.state?.isCompleted == true
-    val transferring = state == OfflineDownloadState.DOWNLOADING || state == OfflineDownloadState.QUEUED
-    var offerRemove by remember { mutableStateOf(false) }
-    Box {
+    val status = remember(download.state) { downloadStatusOf(listOf(download.state)) }
+    DownloadButton(
+        status = status,
+        onDownload = download.onDownload,
+        onCancel = download.onCancel,
+        onResume = download.onResume,
+        onRemove = download.onRemove
+    ) { onClick, content ->
         IconToggleButton(
-            checked = saved,
-            onCheckedChange = {
-                when {
-                    saved -> offerRemove = true
-                    transferring -> download.onCancel()
-                    else -> download.onDownload()
-                }
-            },
+            checked = status.phase == DownloadPhase.SAVED,
+            onCheckedChange = { onClick() },
             shapes = IconButtonDefaults.toggleableShapes(),
             modifier = Modifier
                 .size(width = 64.dp, height = 52.dp)
                 .testTag("now_playing_download")
-        ) {
-            when {
-                transferring -> Box(contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(
-                        progress = { (download.state?.progressPercent ?: 0) / 100f },
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.5.dp
-                    )
-                    Icon(Icons.Filled.Clear, contentDescription = "Cancel download", modifier = Modifier.size(12.dp))
-                }
-                saved -> Icon(Icons.Filled.DownloadDone, contentDescription = "Downloaded", modifier = Modifier.size(22.dp))
-                else -> Icon(
-                    Icons.Filled.Download,
-                    contentDescription = if (state == OfflineDownloadState.FAILED) "Download failed, try again" else "Download",
-                    tint = if (state == OfflineDownloadState.FAILED) MaterialTheme.colorScheme.error else LocalContentColor.current,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        DropdownMenu(expanded = offerRemove, onDismissRequest = { offerRemove = false }) {
-            DropdownMenuItem(
-                text = { Text("Remove download") },
-                leadingIcon = { Icon(Icons.Filled.DeleteOutline, contentDescription = null) },
-                onClick = {
-                    offerRemove = false
-                    download.onRemove()
-                }
-            )
-        }
+        ) { content() }
     }
 }

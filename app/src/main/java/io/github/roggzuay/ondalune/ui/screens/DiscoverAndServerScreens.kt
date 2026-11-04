@@ -418,6 +418,10 @@ fun SettingsCustomizationScreen(
     onSelectReverbPreset: (ReverbPreset) -> Unit = {},
     onSetCrossfadeSeconds: (Int) -> Unit,
     onSetGapless: (Boolean) -> Unit,
+    onSetAutoplay: (Boolean) -> Unit = {},
+    onSetSongAnalysis: (Boolean) -> Unit = {},
+    /** "12 of 40 downloaded songs analysed", while song analysis is on. */
+    songAnalysisStatus: String? = null,
     onSetReplayGain: (ReplayGainMode) -> Unit,
     onSetAutoScrobble: (Boolean) -> Unit,
     onSetPauseOnHeadphoneDisconnect: (Boolean) -> Unit = {},
@@ -1694,6 +1698,29 @@ fun SettingsCustomizationScreen(
                         onCheckedChange = onSetGapless,
                         testTag = "toggle_gapless"
                     )
+
+                    SettingsToggleRow(
+                        title = "Autoplay similar songs",
+                        subtitle = "When the queue ends, keep going with songs like the last ones from your library, leaving out what you just heard",
+                        checked = settings.autoplaySimilar,
+                        onCheckedChange = onSetAutoplay,
+                        testTag = "toggle_autoplay"
+                    )
+
+                    SettingsToggleRow(
+                        title = "Song analysis",
+                        subtitle = "Off unless you turn it on. Reads up to 45 seconds of each song you've downloaded, on this phone, to estimate tempo and energy for mood mixes and smoother autoplay. Nothing is uploaded, and turning it off deletes the results.",
+                        checked = settings.songAnalysis,
+                        onCheckedChange = onSetSongAnalysis,
+                        testTag = "toggle_song_analysis"
+                    )
+                    if (settings.songAnalysis && songAnalysisStatus != null) {
+                        Text(
+                            text = songAnalysisStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     SettingsToggleRow(
                         title = "Animated Squiggly Waveform Scrubber",

@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -75,7 +74,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
-import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilters
 
@@ -89,15 +87,12 @@ fun OndaluneTopBar(
     title: String,
     searchQuery: String,
     statusBanner: String?,
-    activeDownloads: List<SubsonicDownloadEntity>,
     filtersActive: Boolean,
     isSettingsActive: Boolean,
     bannerBusy: Boolean = false,
     onQueryChange: (String) -> Unit,
     onOpenFilters: () -> Unit,
     onOpenSettings: () -> Unit,
-    failedDownloads: Int,
-    onOpenDownloads: () -> Unit,
     onDismissBanner: () -> Unit
 ) {
     var searchOpen by remember { mutableStateOf(searchQuery.isNotEmpty()) }
@@ -136,9 +131,6 @@ fun OndaluneTopBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    }
-                    if (activeDownloads.isNotEmpty() || failedDownloads > 0) {
-                        DownloadsIndicator(activeDownloads, failedDownloads, onOpenDownloads)
                     }
                     IconButton(
                         onClick = { searchOpen = true },
@@ -253,37 +245,6 @@ private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onClose: (
                 .focusRequester(focus)
                 .testTag("opensubsonic_search_bar")
         )
-    }
-}
-
-/**
- * Ring showing overall progress of running downloads, or a red download icon while some failed;
- * tap for the Downloads sheet.
- */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun DownloadsIndicator(downloads: List<SubsonicDownloadEntity>, failed: Int, onOpen: () -> Unit) {
-    IconButton(
-        onClick = onOpen,
-        shapes = IconButtonDefaults.shapes(),
-        modifier = Modifier.testTag("top_bar_downloads_indicator")
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (downloads.isNotEmpty()) {
-                CircularProgressIndicator(
-                    progress = { downloads.sumOf { it.progressPercent } / (downloads.size * 100f) },
-                    modifier = Modifier.size(30.dp),
-                    strokeWidth = 2.5.dp,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-            }
-            Icon(
-                Icons.Filled.Download,
-                contentDescription = if (downloads.isEmpty()) "$failed downloads failed" else "Downloads",
-                tint = if (downloads.isEmpty()) MaterialTheme.colorScheme.error else LocalContentColor.current,
-                modifier = Modifier.size(if (downloads.isEmpty()) 22.dp else 16.dp)
-            )
-        }
     }
 }
 
