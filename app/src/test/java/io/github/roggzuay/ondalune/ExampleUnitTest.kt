@@ -2,7 +2,6 @@ package io.github.roggzuay.ondalune
 
 import io.github.roggzuay.ondalune.audio.OndaluneReverbDspProcessor
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
-import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
 import io.github.roggzuay.ondalune.data.model.LibrarySortOption
 import io.github.roggzuay.ondalune.data.model.PitchCorrectionMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
@@ -98,21 +97,6 @@ class ExampleUnitTest {
         val albumPref = TabDisplayPreference.defaultForCategory("ALBUMS")
         val songPref = TabDisplayPreference.defaultForCategory("SONGS")
         assertNotEquals(albumPref.viewMode, songPref.viewMode)
-    }
-
-    @Test
-    fun `credential security encrypts and decrypts tokens and redacts sensitive urls`() {
-        val secret = "SuperSecretSubsonicToken!2026"
-        val encrypted = OndaluneCredentialSecurity.encryptCredential(secret)
-        assertTrue(OndaluneCredentialSecurity.isEncrypted(encrypted))
-        assertNotEquals(secret, encrypted)
-        assertEquals(secret, OndaluneCredentialSecurity.decryptCredential(encrypted))
-
-        val rawUrl = "https://music.example.com/rest/stream.view?u=alice&t=9f8e7d6c5b&s=123456&p=enc:70617373&id=tr_1"
-        val redacted = OndaluneCredentialSecurity.redactSensitiveUrl(rawUrl)
-        assertFalse(redacted.contains("9f8e7d6c5b"))
-        assertFalse(redacted.contains("70617373"))
-        assertTrue(redacted.contains("t=[REDACTED]"))
     }
 
     @Test

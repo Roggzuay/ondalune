@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.0 (2026-11-05)
+
+- **Artist pages:** a full-size portrait running to the top of the screen, and the whole app takes on its colours while you're there. Play, shuffle, favourite, download and share, the latest release, popular songs, albums, singles and EPs, and similar artists. Tablets show the portrait beside the lists.
+- **Mixes for you:** genre, artist, favourites, new-music and forgotten-favourites mixes made from your library, on Home.
+- **Smarter autoplay:** when the queue ends, songs like the last ones play next, favouring songs you love and leaving out what you just heard. Turn it off in Settings → Playback.
+- **Song analysis (optional, off by default):** estimates the tempo and energy of downloaded songs on your phone, for Upbeat and Calm mixes and smoother autoplay.
+- **Downloads:** the cloud you tap turns into a progress ring; a button bottom-right opens the downloads sheet with pause, resume, cancel and retry, and tapping a song plays it from its album.
+- **Fixes & improvements:**
+  - Home sections can be switched off again.
+  - Newly synced albums show on Home right away.
+  - The Your Mix launch covers the top bar and tab bar as it grows.
+  - Swiping the cover in the player moves straight sideways and responds to a quick flick.
+  - The sync count climbs steadily instead of in jumps.
+  - Ondalune no longer crashes on Android 7 when adding a server.
+
 ## 1.3.0 (2026-11-02)
 
 - **Downloads page:** see what's downloading, waiting, failed or saved, and cancel, retry or remove from one place. Open it from the filter button, the download ring in the top bar, or Settings → Sound & streaming.

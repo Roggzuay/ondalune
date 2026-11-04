@@ -248,7 +248,9 @@ class OpenSubsonicClient {
         val id: String,
         val name: String,
         val imageUrl: String,
-        val bio: String
+        val bio: String,
+        /** Ids of the server's "similar artists" (Navidrome lists those in the library). */
+        val similarArtistIds: List<String> = emptyList()
     )
 
     /**
@@ -424,11 +426,14 @@ class OpenSubsonicClient {
                     .firstOrNull { it.startsWith("http", ignoreCase = true) }
                     ?: buildCoverArtUrl(server, fallbackCoverId.ifBlank { artistId })
 
+                val similar = infoObj.optJSONArray("similarArtist")
                 RemoteArtistMeta(
                     id = artistId,
                     name = "",
                     imageUrl = bestImg,
-                    bio = rawBio
+                    bio = rawBio,
+                    similarArtistIds = (0 until (similar?.length() ?: 0))
+                        .mapNotNull { similar?.optJSONObject(it)?.optString("id")?.takeIf(String::isNotBlank) }
                 )
             }
         } catch (_: Exception) {
@@ -693,11 +698,13 @@ class OpenSubsonicClient {
     suspend fun setStarredRemote(
         server: SubsonicServerConfig,
         id: String,
-        starred: Boolean
+        starred: Boolean,
+        /** `id` for songs, `albumId` or `artistId` for those. */
+        idParam: String = "id"
     ): Boolean = withContext(Dispatchers.IO) {
         if (server.isDemoServer) return@withContext true
         val endpoint = if (starred) "star" else "unstar"
-        val url = buildEndpointUrl(server, endpoint, mapOf("id" to id))
+        val url = buildEndpointUrl(server, endpoint, mapOf(idParam to id))
         if (url.isBlank()) return@withContext false
         try {
             val req = Request.Builder().url(url).get().build()

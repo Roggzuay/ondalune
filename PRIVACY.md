@@ -1,6 +1,6 @@
 # Privacy policy
 
-_Last updated: 2 November 2026_
+_Last updated: 5 November 2026_
 
 Ondalune is a music player for servers you run or have an account on. It is built so that your
 listening stays between your phone and your server.
@@ -28,6 +28,10 @@ Ondalune only connects to:
 - **Server details.** Passwords are encrypted with a key held in Android's Keystore, which never
   leaves the device.
 - **Your library cache, settings, queue, and downloaded songs.**
+- **Song analysis, only if you turn it on** (Settings → Playback → Song analysis). Ondalune reads up
+  to 45 seconds of songs you have downloaded and keeps an estimate of their tempo, energy, brightness
+  and beat strength in its private storage. The audio never leaves the phone, and turning the setting
+  off deletes the results.
 
 All of this is stored in the app's private storage, which other apps can't read. Uninstalling
 Ondalune deletes it.

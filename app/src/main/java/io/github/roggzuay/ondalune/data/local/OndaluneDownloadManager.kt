@@ -54,6 +54,9 @@ class OndaluneDownloadManager(
 ) {
     private val activeJobs = ConcurrentHashMap<String, Job>()
 
+    /** Cancels a transfer for a pause: the row already says paused, so the transfer leaves it alone. */
+    private class DownloadPaused : CancellationException("Paused by user")
+
     // Two transfers at a time: an album download fills the queue instead of opening a stream per track.
     private val transferSlots = Semaphore(2)
 
@@ -266,6 +269,7 @@ class OndaluneDownloadManager(
         } catch (ce: CancellationException) {
             targetFile.delete()
             File(targetFile.parentFile, "${targetFile.name}.part").delete()
+            if (ce is DownloadPaused) throw ce
             val cancelled = initialEntity.copy(
                 progressPercent = 0,
                 status = OfflineDownloadState.CANCELLED.name,
@@ -340,6 +344,37 @@ class OndaluneDownloadManager(
             )
         }
         refreshStorageSummary(serverId)
+    }
+
+    /**
+     * Stops queued or running downloads and keeps them as paused, with the progress they had. The
+     * rows are marked paused first, in one write, so the downloads sheet answers at once; the
+     * transfers stop after that (a running one at its next chunk). Resuming enqueues them again;
+     * the transfer starts over, because not every server answers range requests.
+     */
+    suspend fun pauseDownloads(serverId: Long, trackIds: Collection<String>) = withContext(Dispatchers.IO) {
+        val rows = trackIds.mapNotNull { dao.getDownloadByKey(downloadKeyFor(serverId, it)) }
+            .filter { it.stateEnum == OfflineDownloadState.QUEUED || it.stateEnum == OfflineDownloadState.DOWNLOADING }
+        if (rows.isEmpty()) return@withContext
+        val now = System.currentTimeMillis()
+        dao.upsertDownloads(rows.map { it.copy(status = OfflineDownloadState.PAUSED.name, errorMessage = "", updatedAtMs = now) })
+        rows.forEach { row ->
+            val key = row.downloadKey
+            batch.remove(key)
+            val job = activeJobs.remove(key) ?: return@forEach
+            job.cancel(DownloadPaused())
+            scope.launch {
+                job.join()
+                // A progress write already under way when the pause came in can land after it.
+                // Put the pause back, unless the song finished or was resumed in the meantime.
+                val latest = dao.getDownloadByKey(key) ?: return@launch
+                val moving = latest.stateEnum == OfflineDownloadState.QUEUED || latest.stateEnum == OfflineDownloadState.DOWNLOADING
+                if (moving && activeJobs[key] == null) {
+                    dao.upsertDownload(latest.copy(status = OfflineDownloadState.PAUSED.name, errorMessage = "", updatedAtMs = now))
+                }
+            }
+        }
+        notifyBatch(force = true)
     }
 
     suspend fun removeDownloadedTrack(serverId: Long, trackId: String) = removeDownload(serverId, trackId)

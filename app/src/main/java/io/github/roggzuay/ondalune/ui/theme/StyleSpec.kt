@@ -69,7 +69,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, cardTiles = true, artBorder = true,
         monoBadges = true, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
-            HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
+            HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
             HomeSection.FAVOURITE_TRACKS, HomeSection.MOST_PLAYED, HomeSection.TOP_ARTISTS,
             HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER
         )
@@ -79,7 +79,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
-            HomeSection.QUICK_ACTIONS, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
+            HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
             HomeSection.MOST_PLAYED, HomeSection.FAVOURITE_TRACKS, HomeSection.RECENTLY_PLAYED,
             HomeSection.TOP_ARTISTS, HomeSection.REDISCOVER
         )
@@ -89,7 +89,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.MIXED, ArtShape.MIXED, cardRows = false, cardTiles = true, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = true,
         defaultHome = listOf(
-            HomeSection.RECENTLY_ADDED, HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN,
+            HomeSection.RECENTLY_ADDED, HomeSection.MIXES, HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN,
             HomeSection.FAVOURITE_TRACKS, HomeSection.TOP_ARTISTS, HomeSection.MOST_PLAYED,
             HomeSection.REDISCOVER
         )
@@ -99,7 +99,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.PILL, ArtShape.CIRCLE, cardRows = false, cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = true, shelfPlayButtons = true,
         defaultHome = listOf(
-            HomeSection.YOUR_MIX, HomeSection.MOST_PLAYED, HomeSection.RECENTLY_ADDED,
+            HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.MOST_PLAYED, HomeSection.RECENTLY_ADDED,
             HomeSection.TOP_ARTISTS, HomeSection.FAVOURITE_TRACKS, HomeSection.JUMP_BACK_IN,
             HomeSection.RECENTLY_PLAYED
         )
@@ -109,7 +109,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = true, cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = true, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
-            HomeSection.FEATURED, HomeSection.RECENTLY_PLAYED, HomeSection.JUMP_BACK_IN,
+            HomeSection.FEATURED, HomeSection.MIXES, HomeSection.RECENTLY_PLAYED, HomeSection.JUMP_BACK_IN,
             HomeSection.FAVOURITE_TRACKS, HomeSection.RECENTLY_ADDED, HomeSection.MOST_PLAYED,
             HomeSection.REDISCOVER
         )
@@ -119,7 +119,7 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
         ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
-            HomeSection.QUICK_ACTIONS, HomeSection.TOP_ARTISTS, HomeSection.RECENTLY_ADDED,
+            HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.TOP_ARTISTS, HomeSection.RECENTLY_ADDED,
             HomeSection.MOST_PLAYED, HomeSection.JUMP_BACK_IN, HomeSection.FAVOURITE_TRACKS,
             HomeSection.RECENTLY_PLAYED
         )

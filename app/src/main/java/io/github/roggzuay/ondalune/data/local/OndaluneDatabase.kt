@@ -25,7 +25,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.security.SecureRandom
-import java.util.Base64
+import android.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -111,9 +111,10 @@ object OndaluneCredentialSecurity {
                 throw CredentialSecurityException("AES-GCM cipher failed to generate a valid IV")
             }
             val cipherBytes = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
-            val encoder = Base64.getEncoder().withoutPadding()
-            val ivB64 = encoder.encodeToString(iv)
-            val dataB64 = encoder.encodeToString(cipherBytes)
+            // android.util.Base64 (java.util.Base64 needs Android 8, and minSdk is 7). Same standard
+            // alphabet without padding as before, so existing stored credentials still decode.
+            val ivB64 = Base64.encodeToString(iv, B64_FLAGS)
+            val dataB64 = Base64.encodeToString(cipherBytes, B64_FLAGS)
             return "$ENCRYPTED_PREFIX$ivB64:$dataB64"
         } catch (e: CredentialSecurityException) {
             throw e
@@ -138,9 +139,8 @@ object OndaluneCredentialSecurity {
             throw CredentialSecurityException("Malformed encrypted credential payload (missing IV/ciphertext delimiter)")
         }
         return try {
-            val decoder = Base64.getDecoder()
-            val iv = decoder.decode(payload.substring(0, splitIdx))
-            val cipherBytes = decoder.decode(payload.substring(splitIdx + 1))
+            val iv = Base64.decode(payload.substring(0, splitIdx), B64_FLAGS)
+            val cipherBytes = Base64.decode(payload.substring(splitIdx + 1), B64_FLAGS)
             if (iv.isEmpty() || cipherBytes.size < GCM_TAG_BITS / 8) {
                 throw CredentialSecurityException("Encrypted credential payload is truncated or invalid")
             }
@@ -266,6 +266,9 @@ interface OndaluneDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDownload(entity: SubsonicDownloadEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDownloads(entities: List<SubsonicDownloadEntity>)
 
     @Query("DELETE FROM subsonic_downloads WHERE downloadKey = :downloadKey")
     suspend fun deleteDownloadByKey(downloadKey: String)
@@ -930,3 +933,5 @@ object DemoSubsonicCatalog {
         }.distinctBy { it.path }
     }
 }
+
+private const val B64_FLAGS = Base64.NO_WRAP or Base64.NO_PADDING

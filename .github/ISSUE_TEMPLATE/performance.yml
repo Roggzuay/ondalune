@@ -1,0 +1,44 @@
+name: Performance problem
+description: Something is slow, stutters, drains the battery or uses too much data
+labels: [performance]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is slow or janky?
+      description: Which screen or action, and what you see (stutter, delay, heat, battery drain…).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: |
+        1. Open …
+        2. Scroll …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ondalune version
+      description: Settings → About & licences
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone, Android version and screen refresh rate
+      placeholder: e.g. Galaxy S23 Ultra, Android 16, 120 Hz
+    validations:
+      required: true
+  - type: input
+    id: library
+    attributes:
+      label: Rough library size and server
+      placeholder: e.g. 25,000 songs on Navidrome 0.58
+  - type: textarea
+    id: media
+    attributes:
+      label: Screen recording or logs
+      description: A recording shows stutter best. Remove server addresses, usernames and tokens from logs.

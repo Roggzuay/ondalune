@@ -1,0 +1,32 @@
+name: UI / UX suggestion
+description: Something about how Ondalune looks or feels could be better
+labels: [ui/ux]
+body:
+  - type: textarea
+    id: where
+    attributes:
+      label: Where in the app?
+      placeholder: e.g. the artist page, the player, Settings → Playback
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What feels wrong or could be better?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like instead?
+      description: Sketches, mock-ups or examples from other apps are welcome.
+  - type: input
+    id: device
+    attributes:
+      label: Phone or tablet, and Android version
+      placeholder: e.g. Pixel 8, Android 16
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or a recording
+      description: Drag files here. Please blur anything private (server addresses, account names).

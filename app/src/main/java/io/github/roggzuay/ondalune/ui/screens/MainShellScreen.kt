@@ -17,6 +17,8 @@ import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
 import io.github.roggzuay.ondalune.ui.components.UpdateDialog
 import io.github.roggzuay.ondalune.ui.components.DownloadsSheet
+import io.github.roggzuay.ondalune.ui.components.DownloadActivityButton
+import io.github.roggzuay.ondalune.ui.components.DownloadOrder
 import io.github.roggzuay.ondalune.data.network.LATEST_RELEASE_PAGE
 import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
 import io.github.roggzuay.ondalune.data.local.UpdateInstallState
@@ -39,6 +41,7 @@ import androidx.compose.animation.ContentTransform
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.LocalArtworkPalette
 import io.github.roggzuay.ondalune.ui.theme.rememberArtworkPalette
+import io.github.roggzuay.ondalune.ui.theme.ArtworkPaletteCache
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -116,6 +119,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -124,6 +130,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import kotlin.math.roundToInt
+import androidx.compose.ui.geometry.isUnspecified
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -236,6 +246,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
     var playerZoomEntry by remember { mutableStateOf(false) }
+    // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
+    val heroLaunch = remember { HeroLaunch() }
     LaunchedEffect(isPlayerExpanded) { if (!isPlayerExpanded) playerZoomEntry = false }
     val isSonicLabOpen by viewModel.isSonicLabSheetOpen.collectAsStateWithLifecycle()
     val isSpeedPitchOpen by viewModel.isSpeedPitchSheetOpen.collectAsStateWithLifecycle()
@@ -327,6 +339,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             override fun setFavourite(tracks: List<SubsonicTrack>, favourite: Boolean) = viewModel.setTracksFavourite(tracks, favourite)
             override fun download(tracks: List<SubsonicTrack>) = viewModel.downloadTracks(tracks)
             override fun removeDownload(track: SubsonicTrack) = viewModel.removeOfflineDownload(track.id)
+            override fun cancelDownloads(tracks: List<SubsonicTrack>) = viewModel.cancelOfflineDownloads(tracks.map { it.id })
+            override fun resumeDownloads(tracks: List<SubsonicTrack>) = viewModel.resumeOfflineDownloads(tracks.map { it.id })
+            override fun removeDownloads(tracks: List<SubsonicTrack>) = viewModel.removeOfflineDownloads(tracks.map { it.id })
             override fun addToPlaylist(tracks: List<SubsonicTrack>, playlist: SubsonicPlaylist) = viewModel.addTracksToPlaylist(tracks, playlist)
             override fun createPlaylist(name: String, tracks: List<SubsonicTrack>) = viewModel.createPlaylist(name, "", tracks.map { it.id })
             override fun openAlbum(track: SubsonicTrack) = viewModel.openAlbumAnywhere(track.albumId)
@@ -334,19 +349,39 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             override fun openArtist(artistId: String, name: String) = viewModel.openArtistByName(artistId, name)
         }
     }
-    // Keep each download where it first appeared (queue order). The database orders rows by last
-    // update, so sorting by it made the list reshuffle on every progress tick.
-    val downloadOrder = remember { HashMap<String, Int>() }
-    val activeDownloads = remember(downloadsMap) {
-        val active = downloadsMap.values.filter {
-            it.status == OfflineDownloadState.DOWNLOADING.name || it.status == OfflineDownloadState.QUEUED.name
-        }
-        active.filter { it.downloadKey !in downloadOrder }.sortedBy { it.updatedAtMs }
-            .forEach { downloadOrder[it.downloadKey] = downloadOrder.size }
-        active.sortedBy { downloadOrder[it.downloadKey] }
+    val favouriteArtistIds by viewModel.favouriteArtistIds.collectAsStateWithLifecycle()
+    val songFeatures by viewModel.songFeatures.collectAsStateWithLifecycle()
+    val similarArtistIds by viewModel.similarArtistIds.collectAsStateWithLifecycle()
+    // Artist pages on screen (id → portrait); during a page change two can briefly overlap, and
+    // the one shown last decides.
+    val shownPortraits = remember { mutableStateListOf<Pair<String, String?>>() }
+    val artistExtras = remember(favouriteArtistIds, similarArtistIds, allArtists) {
+        ArtistExtras(
+            favourites = favouriteArtistIds,
+            similar = similarArtistIds,
+            allArtists = allArtists,
+            onToggleFavourite = viewModel::toggleFavouriteArtist,
+            onOpenArtist = viewModel::openArtistDetail,
+            onShowPortrait = { id, url -> shownPortraits.removeAll { it.first == id }; shownPortraits += id to url },
+            onHidePortrait = { id -> shownPortraits.removeAll { it.first == id } }
+        )
     }
-    val failedDownloads = remember(downloadsMap) { downloadsMap.values.count { it.status == OfflineDownloadState.FAILED.name } }
+    // One fixed order for every downloads list: rows never trade places as they progress.
+    val tracksById = remember(allServerTracks) { allServerTracks.associateBy { it.id } }
+    val downloadOrder = remember { DownloadOrder() }
+    val downloadComparator = remember(tracksById) { downloadOrder.comparator { tracksById[it]?.trackNumber ?: 0 } }
+    val activeDownloads = remember(downloadsMap, downloadComparator) {
+        downloadOrder.place(downloadsMap.values)
+        downloadsMap.values.filter {
+            it.status == OfflineDownloadState.DOWNLOADING.name || it.status == OfflineDownloadState.QUEUED.name
+        }.sortedWith(downloadComparator)
+    }
     var showDownloads by remember { mutableStateOf(false) }
+    // Failures after the downloads sheet was last seen keep the activity button up, in red.
+    var downloadsSeenAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val unseenDownloadFailures = remember(downloadsMap, downloadsSeenAt) {
+        downloadsMap.values.any { it.status == OfflineDownloadState.FAILED.name && it.updatedAtMs > downloadsSeenAt }
+    }
 
     val anyModalOpen = isPlayerExpanded || isSonicLabOpen || isSpeedPitchOpen ||
         isSleepTimerOpen || isUserServerOpen || isAppIconSettingsOpen || showServerOnboarding
@@ -448,12 +483,22 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
         LocalHapticFeedbackManager provides hapticManager,
         LocalTrackActions provides trackActions,
         LocalTrackSelection provides trackSelection,
-        LocalDownloads provides downloadsMap
+        LocalDownloads provides downloadsMap,
+        LocalArtistExtras provides artistExtras
     ) {
         val artworkPalette = rememberArtworkPalette(currentTrack)
+        // On an artist page the app takes the portrait's colours; the full player, and every other
+        // page, keep the playing song's. Playing a song from the page doesn't change them.
+        val portraitUrl = shownPortraits.lastOrNull()?.second
+        val portraitPalette by produceState(portraitUrl?.let { ArtworkPaletteCache.peek(it) }, portraitUrl) {
+            value = portraitUrl?.let { ArtworkPaletteCache.peek(it) ?: ArtworkPaletteCache.load(context, it) }
+        }
+        val portraitTheme = portraitPalette?.takeIf { portraitUrl != null && !isPlayerExpanded }
         CompositionLocalProvider(LocalArtworkPalette provides artworkPalette) {
         OndaluneExpressiveTheme(
-            seedHex = artworkPalette.seedHex,
+            seedHex = portraitTheme?.seedHex ?: artworkPalette.seedHex,
+            // A change of where the colours come from fades; a new song on the same source doesn't.
+            transitionKey = if (portraitTheme != null) "artist:$portraitUrl" else "song",
             accentHex = currentTrack?.accentHex ?: "#70F5FF",
             themeMode = customizationSettings.themeMode,
             useMaterialYouDynamic = customizationSettings.useMaterialYouDynamicColor,
@@ -478,6 +523,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     containerColor = MaterialTheme.colorScheme.background,
                     topBar = {
+                        // Artist pages show their portrait up to the top instead (selection still gets its bar).
+                        AnimatedVisibility(
+                            visible = shownPortraits.isEmpty() || trackSelection.active,
+                            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                        ) {
                         if (trackSelection.active) {
                             SelectionTopBar(selection = trackSelection, onMore = { selectionSheetOpen = true })
                         } else {
@@ -485,18 +536,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             title = currentDestination.label,
                             searchQuery = searchQuery,
                             statusBanner = statusBanner,
-                            activeDownloads = activeDownloads,
                             filtersActive = libraryFilters.active,
                             isSettingsActive = currentDestination == PrimaryDestination.SETTINGS,
                             bannerBusy = isCutoutSyncActive,
                             onQueryChange = viewModel::updateSearchQuery,
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
-                            failedDownloads = failedDownloads,
-                            onOpenDownloads = { showDownloads = true },
                             onDismissBanner = viewModel::dismissBanner
                         )
                         }
+                        }
+                    },
+                    floatingActionButton = {
+                        // An album page already shows its own download in place.
+                        val shownInPlace = selectedAlbumId != null &&
+                            activeDownloads.isNotEmpty() && activeDownloads.all { it.albumId == selectedAlbumId }
+                        DownloadActivityButton(
+                            visible = (activeDownloads.isNotEmpty() || unseenDownloadFailures) &&
+                                !showDownloads && !isPlayerExpanded && !shownInPlace,
+                            active = activeDownloads,
+                            hasUnseenFailures = unseenDownloadFailures,
+                            onClick = { showDownloads = true }
+                        )
                     },
                     bottomBar = {
                         if (!isExpandedScreen) {
@@ -678,7 +739,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             availableUpdate = availableUpdate,
                                             onViewUpdate = { showUpdateNotes = true },
                                             onLaterUpdate = viewModel::dismissUpdate,
-                                            listState = homeListState
+                                            listState = homeListState,
+                                            heroLaunch = heroLaunch,
+                                            onPlayMix = viewModel::playMix
                                         )
                                     }
 
@@ -856,6 +919,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSelectReverbPreset = viewModel::selectReverbPreset,
                                             onSetCrossfadeSeconds = viewModel::setCrossfadeSeconds,
                                             onSetGapless = viewModel::setGaplessPlayback,
+                                            onSetAutoplay = viewModel::setAutoplaySimilar,
+                                            onSetSongAnalysis = viewModel::setSongAnalysis,
+                                            songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted }} downloaded songs analysed",
                                             onSetReplayGain = viewModel::setReplayGainMode,
                                             onSetAutoScrobble = viewModel::setAutoScrobble,
                                             onSetPauseOnHeadphoneDisconnect = viewModel::setPauseOnHeadphoneDisconnect,
@@ -924,6 +990,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         .padding(top = 84.dp)
                 )
 
+                // The Your Mix zoom again, above the app bars: Home's button is clipped to its list,
+                // which left the bars (and, once they moved, the shelf behind the dock) showing at
+                // the end. Same centre, curve and progress, so it is the same circle, swallowing the
+                // top bar, dock and rail as it reaches them. Drawn from 0.25, when the play arrow
+                // inside the button has faded and the two are indistinguishable.
+                val heroZoomColor = MaterialTheme.colorScheme.primaryContainer
+                var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
+                Canvas(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { overlayOrigin = it.positionInRoot() }
+                ) {
+                    val t = heroLaunch.progress
+                    val centre = heroLaunch.centre
+                    if (t < 0.25f || centre.isUnspecified) return@Canvas
+                    drawCircle(
+                        color = heroZoomColor,
+                        radius = HeroButtonRadius.toPx() * heroZoom(t, heroLaunch.maxZoom),
+                        center = centre - overlayOrigin
+                    )
+                }
+
                 // Full-Screen Opaque Material 3 Expressive Now Playing Studio Sheet
                 AnimatedVisibility(
                     visible = isPlayerExpanded && currentTrack != null,
@@ -976,6 +1064,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         state = downloadsMap[activeTrack.id],
                                         onDownload = { viewModel.downloadTrackForOffline(activeTrack) },
                                         onCancel = { viewModel.cancelOfflineDownload(activeTrack.id) },
+                                        onResume = { viewModel.resumeOfflineDownloads(listOf(activeTrack.id)) },
                                         onRemove = { viewModel.removeOfflineDownload(activeTrack.id) }
                                     )
                                 },
@@ -1031,7 +1120,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     SpeedPitchStudioModal(
                         state = speedPitchState,
                         reverbState = reverbState,
-                        currentTrackBpm = currentTrack?.bpm ?: 120,
+                        // The analysed tempo when song analysis knows it; otherwise as before.
+                        currentTrackBpm = currentTrack?.let { t -> songFeatures[t.id]?.bpm?.roundToInt() ?: t.bpm } ?: 120,
                         onSetSpeed = viewModel::setPlaybackSpeed,
                         onSetPitchMode = viewModel::setPitchCorrectionMode,
                         onSetIndependentSemitones = viewModel::setIndependentSemitones,
@@ -1206,13 +1296,38 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     WhatsNewDialog(notes, onDismiss = viewModel::dismissWhatsNew)
                 }
 
+                // Once the library has mixes, and after setup and any "What's new".
+                val homeIntroSeen by viewModel.homeIntroSeen.collectAsStateWithLifecycle()
+                if (!homeIntroSeen && !showServerOnboarding && whatsNew == null && homeShelves.mixes.isNotEmpty() && !isPlayerExpanded) {
+                    HomeIntro(
+                        mixes = homeShelves.mixes,
+                        autoplay = customizationSettings.autoplaySimilar,
+                        onAutoplayChange = viewModel::setAutoplaySimilar,
+                        songAnalysis = customizationSettings.songAnalysis,
+                        onSongAnalysisChange = viewModel::setSongAnalysis,
+                        onDone = viewModel::dismissHomeIntro
+                    )
+                }
+
                 if (showDownloads) {
                     DownloadsSheet(
                         downloads = downloadsMap.values,
+                        order = downloadComparator,
+                        trackFor = tracksById::get,
                         onCancel = viewModel::cancelOfflineDownloads,
+                        onPause = viewModel::pauseOfflineDownloads,
+                        onResume = viewModel::resumeOfflineDownloads,
                         onRetry = viewModel::retryOfflineDownloads,
                         onRemove = viewModel::removeOfflineDownload,
-                        onDismiss = { showDownloads = false }
+                        onOpenTrack = { trackId ->
+                            showDownloads = false
+                            downloadsSeenAt = System.currentTimeMillis()
+                            viewModel.openAndPlayDownloadedTrack(trackId)
+                        },
+                        onDismiss = {
+                            showDownloads = false
+                            downloadsSeenAt = System.currentTimeMillis()
+                        }
                     )
                 }
 

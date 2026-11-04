@@ -67,6 +67,14 @@ private val releaseNotes = mapOf(
         "Download the playing song from the player; a tick shows it's on your phone",
         "Fresher shuffle: fewer repeats of the same favourites",
         "Fixes & improvements, including two songs playing at once"
+    ),
+    "1.4" to listOf(
+        "Artist pages: a full-size portrait, and the app takes on its colours",
+        "Mixes for you on Home, made from your genres, artists and favourites",
+        "Smarter autoplay when your queue ends; turn it off in Settings → Playback",
+        "Optional song analysis for Upbeat and Calm mixes (off until you turn it on)",
+        "Downloads: the cloud becomes a progress ring, with pause and resume",
+        "Fixes & improvements, including Home sections that wouldn't switch off"
     )
 )
 
