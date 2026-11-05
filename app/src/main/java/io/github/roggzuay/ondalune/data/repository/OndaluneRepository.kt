@@ -19,7 +19,14 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
 import io.github.roggzuay.ondalune.data.model.SourceType
 import io.github.roggzuay.ondalune.data.model.isLocalSource
-import io.github.roggzuay.ondalune.data.source.LocalMusicSource
+import io.github.roggzuay.ondalune.data.model.LocalFileRecord
+import kotlinx.coroutines.ensureActive
+import io.github.roggzuay.ondalune.data.model.LocalFolder
+import io.github.roggzuay.ondalune.data.source.FolderPermissions
+import io.github.roggzuay.ondalune.data.source.FolderReader
+import io.github.roggzuay.ondalune.data.source.folderLocation
+import io.github.roggzuay.ondalune.data.source.folderTrackFrom
+import io.github.roggzuay.ondalune.data.source.isInside
 import io.github.roggzuay.ondalune.data.source.MusicSource
 import io.github.roggzuay.ondalune.data.source.OpenSubsonicSource
 import io.github.roggzuay.ondalune.data.network.JellyfinClient
@@ -32,8 +39,8 @@ class OndaluneRepository(
     val client: OpenSubsonicClient,
     /** The source behind a library row; Subsonic for every row unless told otherwise (tests). */
     private val sourceFor: (SubsonicServerConfig) -> MusicSource = { OpenSubsonicSource(client) },
-    /** Reads this phone's music; null where there is no phone (tests). */
-    private val phone: LocalMusicSource? = null,
+    /** Gives back a picked folder's read permission when it is removed; null in tests. */
+    private val folderPermissions: FolderPermissions? = null,
     /** Signs in to Jellyfin servers; null in tests. */
     private val jellyfin: JellyfinClient? = null
 ) {
@@ -264,32 +271,115 @@ class OndaluneRepository(
         return row.copy(id = dao.insertServer(row))
     }
 
+    fun observeLocalFolders() = dao.observeLocalFolders()
+
+    suspend fun localFolders() = dao.getLocalFoldersOnce()
+
+    /** What adding a picked folder did. */
+    enum class FolderAdd { ADDED, ALREADY_INCLUDED, REPLACED_INNER }
+
     /**
-     * Reads this phone's music into the library. Hearts, ratings and play counts given in the app
-     * survive a rescan; songs no longer on the phone are removed. Returns how many songs the library has from the phone.
+     * Adds a picked folder ([treeUri], already granted). A folder inside one already picked adds
+     * nothing; one that holds picked folders takes their place, so no song is listed twice.
      */
-    suspend fun scanPhoneMusic(source: SubsonicServerConfig): Int {
-        // Without the permission nothing can be read: keep the songs rather than drop them all.
-        val scanned = phone?.scan(source.id) ?: return dao.getTracksForServerOnce(source.id).size
+    suspend fun addLocalFolder(treeUri: String, treeDocId: String, name: String): FolderAdd {
+        val existing = dao.getLocalFoldersOnce()
+        fun docId(f: LocalFolder) = runCatching { android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(f.treeUri)) }.getOrDefault("")
+        if (existing.any { it.treeUri == treeUri || isInside(treeDocId, docId(it)) }) return FolderAdd.ALREADY_INCLUDED
+        val inner = existing.filter { isInside(docId(it), treeDocId) }
+        inner.forEach { removeLocalFolder(it, keepPermission = false) }
+        dao.upsertLocalFolder(LocalFolder(treeUri = treeUri, name = name, location = folderLocation(treeDocId)))
+        return if (inner.isEmpty()) FolderAdd.ADDED else FolderAdd.REPLACED_INNER
+    }
+
+    /** Forgets a folder and its songs (the files stay on the phone). */
+    suspend fun removeLocalFolder(folder: LocalFolder, keepPermission: Boolean = false) {
+        val source = dao.getAllServersOnce().firstOrNull { it.isLocalSource }
+        val ids = dao.getLocalFiles(folder.treeUri).map { it.trackId }
+        if (source != null) ids.chunked(500).forEach { dao.deleteTracks(source.id, it) }
+        ids.chunked(500).forEach { dao.deleteLocalFiles(it) }
+        dao.deleteLocalFolder(folder.treeUri)
+        if (!keepPermission) folderPermissions?.release(folder.treeUri)
+    }
+
+    /**
+     * Brings one picked folder's songs up to date. Unchanged files (same size and date) keep their
+     * row without being read again; changed and new ones have their tags read; songs whose files
+     * are gone are removed, but only after a complete walk of a folder that could be read. A folder
+     * that can't be read keeps its songs and is marked inaccessible. Hearts, play counts and edits
+     * given in the app survive. Returns the folder as it stands after the scan.
+     */
+    suspend fun scanLocalFolder(
+        folder: LocalFolder,
+        reader: FolderReader,
+        onProgress: (found: Int, read: Int) -> Unit = { _, _ -> }
+    ): LocalFolder {
+        val source = phoneSource()
+        val uri = android.net.Uri.parse(folder.treeUri)
+        if (!reader.canRead(uri)) {
+            return folder.copy(accessible = false).also { dao.upsertLocalFolder(it) }
+        }
+        val files = runCatching { reader.listMusic(uri) { onProgress(it, 0) } }.getOrElse { e ->
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return folder.copy(accessible = false).also { dao.upsertLocalFolder(it) }
+        }
+        val records = dao.getLocalFiles(folder.treeUri).associateBy { it.trackId }
         val existing = dao.getTracksForServerOnce(source.id).associateBy { it.id }
-        val merged = scanned.map { fresh ->
-            val old = existing[fresh.id] ?: return@map fresh
-            fresh.copy(
+        val fresh = ArrayList<SubsonicTrack>()
+        val freshRecords = ArrayList<LocalFileRecord>()
+        val albumCovers = HashMap<String, String>()
+        var read = 0
+        for (file in files) {
+            kotlin.coroutines.coroutineContext.ensureActive()
+            val id = LOCAL_TRACK_PREFIX + file.documentId
+            val record = records[id]
+            val old = existing[id]
+            if (old != null && record != null && record.size == file.size && record.modifiedMs == file.modifiedMs) continue
+            val (tags, picture) = reader.readTags(uri, file.documentId) ?: continue
+            read++
+            onProgress(files.size, read)
+            var track = folderTrackFrom(file, tags, source.id, coverArtUrl = file.coverUri.orEmpty())
+            if (track.coverArtUrl.isBlank()) {
+                track = track.copy(coverArtUrl = albumCovers[track.albumId] ?: picture?.let { reader.saveCover(track.albumId, it) }.orEmpty())
+                if (track.coverArtUrl.isNotBlank()) albumCovers[track.albumId] = track.coverArtUrl
+            }
+            fresh += if (old == null) track else track.copy(
                 starred = old.starred,
-                userRating = old.userRating,
                 playCount = old.playCount,
                 artistBio = old.artistBio,
                 artistImageUrl = old.artistImageUrl
             )
+            freshRecords += LocalFileRecord(id, folder.treeUri, file.size, file.modifiedMs)
+            if (fresh.size >= 200) {
+                dao.insertTracks(fresh); dao.upsertLocalFiles(freshRecords)
+                fresh.clear(); freshRecords.clear()
+            }
         }
-        merged.chunked(500).forEach { dao.insertTracks(it) }
-        val live = merged.mapTo(HashSet()) { it.id }
-        existing.keys.filterNot { it in live }.chunked(500).forEach { dao.deleteTracks(source.id, it) }
-        return merged.size
+        if (fresh.isNotEmpty()) {
+            dao.insertTracks(fresh); dao.upsertLocalFiles(freshRecords)
+        }
+        // The walk was complete: songs whose files are gone go too.
+        val live = files.mapTo(HashSet()) { LOCAL_TRACK_PREFIX + it.documentId }
+        val gone = records.keys.filterNot { it in live }
+        gone.chunked(500).forEach { dao.deleteTracks(source.id, it); dao.deleteLocalFiles(it) }
+        return folder.copy(trackCount = live.size, lastScanMs = System.currentTimeMillis(), accessible = true)
+            .also { dao.upsertLocalFolder(it) }
     }
 
-    /** Forgets this phone's music (the files stay on the phone). */
+    /**
+     * Removes songs added by the old whole-phone scan (1.5.0), whose ids are MediaStore numbers:
+     * music on this phone now comes only from folders picked in Settings. Returns how many went.
+     */
+    suspend fun removeWholePhoneScanSongs(): Int {
+        val source = dao.getAllServersOnce().firstOrNull { it.isLocalSource } ?: return 0
+        val legacy = dao.getTrackIdsForServer(source.id).filter { it.removePrefix(LOCAL_TRACK_PREFIX).all(Char::isDigit) }
+        legacy.chunked(500).forEach { dao.deleteTracks(source.id, it) }
+        return legacy.size
+    }
+
+    /** Forgets this phone's music and every picked folder (the files stay on the phone). */
     suspend fun removePhoneSource(source: SubsonicServerConfig) {
+        dao.getLocalFoldersOnce().forEach { removeLocalFolder(it) }
         dao.getTracksForServerOnce(source.id).map { it.id }.chunked(500).forEach { dao.deleteTracks(source.id, it) }
         dao.deleteServer(source.id)
     }

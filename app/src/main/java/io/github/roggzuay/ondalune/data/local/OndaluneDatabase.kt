@@ -290,6 +290,9 @@ interface OndaluneDao {
     @Query("DELETE FROM local_files WHERE trackId IN (:trackIds)")
     suspend fun deleteLocalFiles(trackIds: List<String>)
 
+    @Query("SELECT folderUri FROM local_files WHERE trackId = :trackId")
+    suspend fun folderOfTrack(trackId: String): String?
+
     @Query("SELECT * FROM subsonic_downloads WHERE serverId = :serverId ORDER BY updatedAtMs DESC")
     fun observeDownloadsForServer(serverId: Long): Flow<List<SubsonicDownloadEntity>>
 

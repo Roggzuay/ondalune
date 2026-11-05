@@ -53,11 +53,6 @@ import io.github.roggzuay.ondalune.data.model.isLocalSource
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import io.github.roggzuay.ondalune.data.source.LocalMusicSource
 import io.github.roggzuay.ondalune.data.source.MusicSources
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
-import android.provider.MediaStore
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import io.github.roggzuay.ondalune.playback.PlaybackEngine
 import io.github.roggzuay.ondalune.playback.PlaybackHost
@@ -117,6 +112,12 @@ import kotlin.random.Random
 import io.github.roggzuay.ondalune.data.model.TempoInfo
 import io.github.roggzuay.ondalune.data.model.tempoOf
 import io.github.roggzuay.ondalune.data.local.AnalysisState
+import android.net.Uri
+import android.provider.DocumentsContract
+import io.github.roggzuay.ondalune.data.model.LocalFolder
+import io.github.roggzuay.ondalune.data.source.FolderReader
+import io.github.roggzuay.ondalune.data.source.FolderPermissions
+import io.github.roggzuay.ondalune.data.source.folderLocation
 
 enum class PrimaryDestination(val index: Int, val route: String, val label: String) {
     HOME(0, "home", "Home"),
@@ -151,7 +152,7 @@ enum class NowPlayingSheetTab(val label: String) {
 /** How long a confirmation banner stays up before it clears itself. */
 private const val BannerTimeoutMs = 3200L
 
-@OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class OndaluneViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("ondalune_prefs", android.content.Context.MODE_PRIVATE)
@@ -163,7 +164,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         database.dao(),
         client,
         sourceFor = { MusicSources.forServer(application, client, it) },
-        phone = LocalMusicSource(application, client::parseLrcString),
+        folderPermissions = FolderPermissions(application),
         jellyfin = MusicSources.jellyfin(application)
     )
     val audioEngine: OndaluneAudioEngine = OndalunePlaybackRuntime.getOrCreateEngine(application, client)
@@ -218,8 +219,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         .map { list -> list.firstOrNull { it.isLocalSource } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val _isScanningPhone = MutableStateFlow(false)
-    val isScanningPhone: StateFlow<Boolean> = _isScanningPhone.asStateFlow()
 
     /** The library row [track] belongs to: its server, or this phone. */
     private fun serverFor(track: SubsonicTrack): SubsonicServerConfig =
@@ -843,12 +842,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             }
         }
         viewModelScope.launch {
-            // Songs added or removed while the app was closed.
-            sources.first { it.isNotEmpty() }.firstOrNull { it.isLocalSource }?.let { scanPhone(it) }
-            getApplication<Application>().contentResolver.registerContentObserver(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, phoneMediaObserver
-            )
-            phoneMediaChanged.drop(1).debounce(3_000L).collect { rescanPhoneMusic() }
+            // 1.5.0 added every audio file on the phone; now only picked folders count.
+            if (repository.removeWholePhoneScanSongs() > 0) {
+                _statusBanner.value = "Music on this phone now comes from folders you pick: add them in Settings → Music sources"
+            }
+            // Songs added, changed or removed while the app was closed.
+            if (settings.customization.value.rescanFoldersOnLaunch) scanFolders(repository.localFolders())
         }
         viewModelScope.launch {
             tracks.collect { list ->
@@ -1590,7 +1589,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 combine(phoneSource, allServerTracks) { phone, all ->
                     if (phone == null) emptyList()
                     else all.filter { it.isOnDevice }.map { t ->
-                        AnalysisInput("${phone.id}_${t.id}", Long.MAX_VALUE) { LocalMusicSource.filePath(getApplication(), t) }
+                        AnalysisInput("${phone.id}_${t.id}", Long.MAX_VALUE) { LocalMusicSource.documentUri(getApplication(), t) }
                     }
                 },
                 playback.currentTrack.map { it?.analysisKey }.distinctUntilChanged()
@@ -2068,36 +2067,83 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ---- Music on this phone -------------------------------------------------------------
+    // ---- Music folders on this phone -----------------------------------------------------
 
-    /** Adds this phone's music to the library (the app must hold the audio permission), or removes it. */
-    fun setPhoneMusicEnabled(enabled: Boolean) {
+    /** Folders picked in Settings → Music sources; only their music joins the library. */
+    val localFolders: StateFlow<List<LocalFolder>> = repository.observeLocalFolders()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** A folder scan under way: which folder, how many songs found and read. */
+    data class FolderScan(val folderName: String, val found: Int, val read: Int)
+
+    private val _folderScan = MutableStateFlow<FolderScan?>(null)
+    val folderScan: StateFlow<FolderScan?> = _folderScan.asStateFlow()
+    private var folderScanJob: Job? = null
+    private val folderReader by lazy { FolderReader(getApplication()) }
+    private val folderPermissions by lazy { FolderPermissions(getApplication()) }
+
+    /** Adds a folder picked in Android's folder picker, keeps access to it, and reads its music. */
+    fun addMusicFolder(treeUri: Uri) {
         viewModelScope.launch {
-            if (enabled) scanPhone(repository.phoneSource())
-            else phoneSource.value?.let { repository.removePhoneSource(it) }
+            if (runCatching { folderPermissions.take(treeUri) }.isFailure) {
+                _statusBanner.value = "Ondalune couldn't keep access to that folder"
+                return@launch
+            }
+            val docId = DocumentsContract.getTreeDocumentId(treeUri)
+            val name = docId.substringAfter(':').substringAfterLast('/').ifBlank { folderLocation(docId).substringAfterLast(" › ") }
+            val alreadyPicked = localFolders.value.any { it.treeUri == treeUri.toString() }
+            when (repository.addLocalFolder(treeUri.toString(), docId, name)) {
+                OndaluneRepository.FolderAdd.ALREADY_INCLUDED -> {
+                    if (!alreadyPicked) folderPermissions.release(treeUri.toString())
+                    _statusBanner.value = "\"$name\" is already in your music folders"
+                }
+                OndaluneRepository.FolderAdd.REPLACED_INNER -> {
+                    _statusBanner.value = "\"$name\" replaces the folders inside it"
+                    scanFolders(repository.localFolders().filter { it.treeUri == treeUri.toString() })
+                }
+                OndaluneRepository.FolderAdd.ADDED ->
+                    scanFolders(repository.localFolders().filter { it.treeUri == treeUri.toString() })
+            }
         }
     }
 
-    fun rescanPhoneMusic() {
-        val source = phoneSource.value ?: return
-        viewModelScope.launch { scanPhone(source) }
-    }
-
-    private suspend fun scanPhone(source: SubsonicServerConfig) {
-        if (_isScanningPhone.value) return
-        _isScanningPhone.value = true
-        try {
-            withContext(Dispatchers.IO) { repository.scanPhoneMusic(source) }
-        } finally {
-            _isScanningPhone.value = false
+    /** Forgets a folder and its songs; the files stay on the phone. */
+    fun removeMusicFolder(folder: LocalFolder) {
+        viewModelScope.launch {
+            if (_folderScan.value?.folderName == folder.name) folderScanJob?.cancel()
+            repository.removeLocalFolder(folder)
         }
     }
 
-    /** New or deleted audio files: rescan a few seconds after the last change. */
-    private val phoneMediaChanged = MutableStateFlow(0)
-    private val phoneMediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) {
-            if (phoneSource.value != null) phoneMediaChanged.value++
+    fun rescanMusicFolder(folder: LocalFolder) = scanFolders(listOf(folder))
+
+    fun rescanAllMusicFolders() = scanFolders(localFolders.value)
+
+    fun cancelFolderScan() {
+        folderScanJob?.cancel()
+    }
+
+    fun setRescanFoldersOnLaunch(enabled: Boolean) = settings.setRescanFoldersOnLaunch(enabled)
+
+    /** Scans [folders] one after another, after any scan already running; never on the main thread. */
+    private fun scanFolders(folders: List<LocalFolder>) {
+        if (folders.isEmpty()) return
+        val before = folderScanJob
+        folderScanJob = viewModelScope.launch(Dispatchers.IO) {
+            before?.join()
+            try {
+                for (folder in folders) {
+                    _folderScan.value = FolderScan(folder.name, 0, 0)
+                    val result = repository.scanLocalFolder(folder, folderReader) { found, read ->
+                        _folderScan.value = FolderScan(folder.name, found, read)
+                    }
+                    if (!result.accessible) {
+                        _statusBanner.value = "Can't open \"${folder.name}\". Its songs stay; allow it again in Settings → Music sources"
+                    }
+                }
+            } finally {
+                _folderScan.value = null
+            }
         }
     }
 
@@ -2117,7 +2163,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         playback.release()
-        getApplication<Application>().contentResolver.unregisterContentObserver(phoneMediaObserver)
         // These handlers launch in viewModelScope, which is cancelled now: left attached they
         // swallowed every notification command, so music playing on could not be paused or
         // seeked. Detached, the bridge drives the engine directly. A newer screen's handlers stay.

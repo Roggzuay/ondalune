@@ -15,15 +15,9 @@
     <!-- In-app updates: hands a downloaded release to Android's installer, which asks the user
          to allow it once and to confirm every update. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Music on this phone (optional, asked for only when switched on in Settings). -->
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-
-    <!-- requestLegacyExternalStorage: on Android 10, songs on the phone play from their file paths. -->
+    <!-- Music on this phone needs no storage permission: each folder picked in Settings grants
+         read access to that folder alone (Storage Access Framework). -->
     <application
-        android:requestLegacyExternalStorage="true"
         android:name=".OndaluneApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
