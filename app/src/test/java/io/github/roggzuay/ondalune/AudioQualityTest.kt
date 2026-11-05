@@ -18,6 +18,14 @@ class AudioQualityTest {
         OpenedStream(mime, rate, channels, kbps * 1000, 0, ownPipeline = true, outputSampleRate = rate)
 
     @Test
+    fun `a FLAC file opened as raw PCM is still the FLAC file, not a conversion`() {
+        val q = audioQualityOf(song("FLAC", 16, 44100), opened("audio/raw"), null, emptyList(), null)!!
+        assertEquals("FLAC · 16-bit / 44.1 kHz", q.label)
+        assertEquals("Lossless", q.tag)
+        assertTrue(q.stream.contains("Codec" to "FLAC"))
+    }
+
+    @Test
     fun `untouched 16-bit FLAC is lossless`() {
         val q = audioQualityOf(song("FLAC", 16, 44100, 900), opened("audio/flac"), null, emptyList(), "Phone speaker")!!
         assertEquals("FLAC · 16-bit / 44.1 kHz", q.label)

@@ -43,11 +43,11 @@ private fun versionNumbers(version: String): List<Int> {
 
 /**
  * A release body as plain lines for the update dialog: bullets and sentences without Markdown,
- * dropping bold section headers ("**New**") and the checksum hint.
+ * dropping bold section headers ("**New**") and the checksum lines.
  */
 fun releaseNoteItems(body: String): List<String> = body.lines()
     .map { it.trim() }
-    .filter { it.isNotEmpty() && !boldHeader.matches(it) && !it.startsWith("Verify the download") }
+    .filter { it.isNotEmpty() && !boldHeader.matches(it) && !it.startsWith("Verify the download") && !it.startsWith("SHA-256 of") }
     .map { it.removePrefix("- ").removePrefix("* ").replace("**", "").trim() }
 
 private val boldHeader = Regex("""\*\*[^*]+\*\*""")

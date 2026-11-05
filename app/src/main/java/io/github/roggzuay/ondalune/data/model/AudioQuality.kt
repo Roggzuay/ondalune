@@ -33,7 +33,8 @@ private val losslessSuffixes = setOf("FLAC", "ALAC", "WAV", "AIFF", "AIF", "APE"
 
 /** The decoder types a file with this extension can hold; null when the extension says too little. */
 private fun mimesFor(suffix: String): Set<String>? = when (suffix) {
-    "FLAC" -> setOf("audio/flac")
+    // Android's FLAC extractor decodes as it reads, so a FLAC file opens as raw PCM.
+    "FLAC" -> setOf("audio/flac", "audio/raw")
     "MP3" -> setOf("audio/mpeg")
     "M4A", "AAC", "MP4" -> setOf("audio/mp4a-latm", "audio/alac")
     "ALAC" -> setOf("audio/alac")
@@ -83,7 +84,10 @@ fun audioQualityOf(
 ): AudioQuality? {
     val suffix = track.suffix.uppercase()
     val sourceLossless = suffix in losslessSuffixes || (suffix == "M4A" && track.bitDepth > 0)
-    val streamCodec = opened?.mime?.takeIf { it.isNotBlank() }?.let(::codecName)
+    val streamCodec = opened?.mime?.takeIf { it.isNotBlank() }?.let { mime ->
+        // Raw PCM straight from a lossless file is that file, decoded while it was read.
+        if (mime == "audio/raw" && sourceLossless && suffix.isNotBlank()) suffix else codecName(mime)
+    }
     // The decoder's word beats the server's: a codec the file can't hold means a converted copy.
     val expected = mimesFor(suffix)
     val converted = convertedBy != null || (opened != null && expected != null && opened.mime.isNotBlank() && opened.mime.lowercase() !in expected)
@@ -121,7 +125,9 @@ fun audioQualityOf(
         if (track.bitRate > 0) add("Bitrate" to "${track.bitRate} kbps")
         add("Kind" to if (sourceLossless) "Lossless" else if (suffix.isBlank()) "Not reported" else "Lossy")
     }
-    val stream = if (opened == null) listOf("Playing" to "Not opened yet") else buildList {
+    val stream = if (opened == null) listOf("Playing" to "Not opened yet")
+    else if (!opened.ownPipeline && opened.mime.isBlank()) listOf("Playing" to "Android's media player decodes this song; it doesn't report the format")
+    else buildList {
         add("Codec" to (streamCodec ?: "Not reported"))
         if (opened.sampleRate > 0) add("Sample rate" to khz(opened.sampleRate))
         if (opened.channels > 0) add("Channels" to channelName(opened.channels))
