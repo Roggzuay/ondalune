@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 7,
-    "identityHash": "42894c1c80309bbb3ab432dd0407d59f",
+    "identityHash": "41c073f4c789916d69a36d71e8ee4cbf",
     "entities": [
       {
         "tableName": "subsonic_servers",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `baseUrl` TEXT NOT NULL, `username` TEXT NOT NULL, `passwordOrToken` TEXT NOT NULL, `useTokenAuth` INTEGER NOT NULL, `transcodeFormat` TEXT NOT NULL, `maxBitRate` INTEGER NOT NULL, `isDemoServer` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `serverSoftware` TEXT NOT NULL, `extensionsCsv` TEXT NOT NULL, `lastPingMs` INTEGER NOT NULL, `sourceType` TEXT NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `baseUrl` TEXT NOT NULL, `username` TEXT NOT NULL, `passwordOrToken` TEXT NOT NULL, `useTokenAuth` INTEGER NOT NULL, `transcodeFormat` TEXT NOT NULL, `maxBitRate` INTEGER NOT NULL, `isDemoServer` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, `serverSoftware` TEXT NOT NULL, `extensionsCsv` TEXT NOT NULL, `lastPingMs` INTEGER NOT NULL, `sourceType` TEXT NOT NULL, `remoteUserId` TEXT NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -89,6 +89,12 @@
           {
             "fieldPath": "sourceType",
             "columnName": "sourceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteUserId",
+            "columnName": "remoteUserId",
             "affinity": "TEXT",
             "notNull": true
           }
@@ -461,11 +467,56 @@
             "downloadKey"
           ]
         }
+      },
+      {
+        "tableName": "track_overrides",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `trackId` TEXT NOT NULL, `title` TEXT, `artist` TEXT, `genre` TEXT, `year` INTEGER, PRIMARY KEY(`serverId`, `trackId`))",
+        "fields": [
+          {
+            "fieldPath": "serverId",
+            "columnName": "serverId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "genre",
+            "columnName": "genre",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "serverId",
+            "trackId"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '42894c1c80309bbb3ab432dd0407d59f')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '41c073f4c789916d69a36d71e8ee4cbf')"
     ]
   }
 }

@@ -1,5 +1,9 @@
 package io.github.roggzuay.ondalune.ui.viewmodel
 
+import io.github.roggzuay.ondalune.data.model.overrideFor
+import io.github.roggzuay.ondalune.data.model.withOverride
+import io.github.roggzuay.ondalune.data.model.source
+import io.github.roggzuay.ondalune.data.model.SourceType
 import kotlinx.coroutines.withTimeoutOrNull
 import android.app.Application
 import android.os.SystemClock
@@ -156,7 +160,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         database.dao(),
         client,
         sourceFor = { MusicSources.forServer(application, client, it) },
-        phone = LocalMusicSource(application, client::parseLrcString)
+        phone = LocalMusicSource(application, client::parseLrcString),
+        jellyfin = MusicSources.jellyfin(application)
     )
     val audioEngine: OndaluneAudioEngine = OndalunePlaybackRuntime.getOrCreateEngine(application, client)
 
@@ -249,7 +254,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** Every synced track on the active server, before [libraryFilters]. */
-    val allServerTracks: StateFlow<List<SubsonicTrack>> = combine(
+    /** The synced songs as their source has them, before edits made in the app. */
+    private val syncedTracks: StateFlow<List<SubsonicTrack>> = combine(
         _activeServerId,
         phoneSource.map { it?.id }.distinctUntilChanged()
     ) { active, phone -> active to phone }
@@ -259,6 +265,20 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             else combine(server, repository.observeTracksForServer(phone)) { remote, local -> remote + local }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allServerTracks: StateFlow<List<SubsonicTrack>> = combine(syncedTracks, repository.overridesFlow) { list, edits ->
+        if (edits.isEmpty()) list else list.map { it.withOverride(edits[it.serverId to it.id]) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** [track] as its source has it, without edits made in the app. */
+    fun originalOf(track: SubsonicTrack): SubsonicTrack =
+        syncedTracks.value.firstOrNull { it.id == track.id && it.serverId == track.serverId } ?: track
+
+    /** Saves edited details for [track]; details equal to the source's drop the edit. Never sent to the server. */
+    fun saveTrackDetails(track: SubsonicTrack, title: String, artist: String, genre: String, year: Int) {
+        val original = originalOf(track)
+        viewModelScope.launch { repository.setOverride(original, overrideFor(original, title, artist, genre, year)) }
+    }
 
     // Only completed ids matter for filtering, so progress ticks don't re-filter the library.
     private val downloadedIds = downloadsMap
@@ -653,7 +673,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun refreshHomeShelves(server: SubsonicServerConfig = activeServer()) {
-        if (server.isDemoServer) return
+        if (server.isDemoServer || server.source != SourceType.SUBSONIC) return
         viewModelScope.launch {
             val fetched = listOf("newest", "recent", "frequent").associateWith { type ->
                 repository.client.fetchAlbumListIds(server, type, size = 500)
@@ -1057,7 +1077,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         remoteSearchJob?.cancel()
         val trimmed = query.trim()
         val server = activeServer()
-        if (!server.isDemoServer && trimmed.length >= 2) {
+        if (!server.isDemoServer && server.source == SourceType.SUBSONIC && trimmed.length >= 2) {
             remoteSearchJob = viewModelScope.launch {
                 delay(220L)
                 val remoteHits = client.searchRemote(server, trimmed)
@@ -1103,7 +1123,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         val named = tracks.value.filter { it.artist.equals(artist.name, ignoreCase = true) }
         if (named.isNotEmpty() && named.all { it.isOnDevice }) return // only on this phone: the heart stays in the app
         val rawId = named.firstOrNull { !it.isOnDevice }?.artistId?.ifBlank { null } ?: artist.id
-        viewModelScope.launch { repository.client.setStarredRemote(server, rawId, favourite, idParam = "artistId") }
+        viewModelScope.launch { repository.setArtistFavourite(server, rawId, favourite) }
     }
 
     fun openArtistDetail(artistId: String?) {
@@ -1218,7 +1238,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         baseUrl: String,
         username: String,
         passwordOrToken: String,
-        useTokenAuth: Boolean
+        useTokenAuth: Boolean,
+        sourceType: SourceType = SourceType.SUBSONIC
     ) {
         if (_onboardingSync.value?.phase == OnboardingSync.Phase.CONNECTING ||
             _onboardingSync.value?.phase == OnboardingSync.Phase.SYNCING
@@ -1236,10 +1257,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 transcodeFormat = current.transcodeFormat,
                 maxBitRate = current.maxBitRate,
                 isDemoServer = false,
-                isActive = true
+                isActive = true,
+                sourceType = sourceType.name
             )
             OndaluneMediaBridge.clearRemoteArtworkCache()
-            val total = async { repository.client.fetchLibrarySongCount(config) }
+            // Only Subsonic servers say up front how many songs there are.
+            val total = async { if (sourceType == SourceType.SUBSONIC) repository.client.fetchLibrarySongCount(config) else null }
             // Pages arrive in bursts; the pacer turns them into a steady climb.
             val found = java.util.concurrent.atomic.AtomicInteger(0)
             val pacer = SyncCountPacer(SystemClock.uptimeMillis())
@@ -1255,7 +1278,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             val (saved, diag) = repository.saveAndActivateServer(config) { n -> found.set(n) }
-            _activeServerId.value = saved.id
+            if (saved.id != 0L) _activeServerId.value = saved.id
             _pingDiagnostic.value = diag
             if (!diag.success) {
                 counter.cancel()
@@ -1969,7 +1992,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         passwordOrToken: String,
         useTokenAuth: Boolean,
         transcodeFormat: String,
-        maxBitRate: Int
+        maxBitRate: Int,
+        sourceType: SourceType = SourceType.SUBSONIC
     ) {
         viewModelScope.launch {
             _isSyncing.value = true
@@ -1982,11 +2006,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 transcodeFormat = transcodeFormat,
                 maxBitRate = maxBitRate,
                 isDemoServer = false,
-                isActive = true
+                isActive = true,
+                sourceType = sourceType.name
             )
             OndaluneMediaBridge.clearRemoteArtworkCache()
             val (saved, diag) = repository.saveAndActivateServer(config)
-            _activeServerId.value = saved.id
+            if (saved.id != 0L) _activeServerId.value = saved.id
             if (diag.success) {
                 markFullSync(saved)
                 refreshHomeShelves(saved)

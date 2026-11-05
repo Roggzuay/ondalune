@@ -911,16 +911,14 @@ class OpenSubsonicClient {
      * Streams a track from `/rest/download.view` (or `/rest/stream.view` fallback) into [targetFile]
      * while honoring [speedLimit] bandwidth throttling and reporting progress via [onProgress].
      */
+    /** Downloads [track] from [candidateUrl] (its source's download address) into [targetFile]. */
     suspend fun downloadAudioStreamToFile(
-        server: SubsonicServerConfig,
+        candidateUrl: String,
         track: SubsonicTrack,
         targetFile: File,
         speedLimit: DownloadSpeedLimit = DownloadSpeedLimit.UNLIMITED,
         onProgress: suspend (bytesRead: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        val primaryUrl = buildDownloadUrl(server, track.id)
-        val fallbackUrl = buildStreamUrl(server, track.id)
-        val candidateUrl = primaryUrl.ifBlank { fallbackUrl }
         if (candidateUrl.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Invalid server URL or credentials"))
         }

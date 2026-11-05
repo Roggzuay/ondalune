@@ -21,6 +21,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicGenre
 import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.data.model.TrackOverride
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -178,13 +179,13 @@ object OndaluneCredentialSecurity {
     }
 
     /**
-     * Redacts sensitive OpenSubsonic query parameters (`p`, `t`, `s`, `apiKey`, `password`, `token`)
+     * Redacts sensitive OpenSubsonic query parameters (`p`, `t`, `s`, `apiKey`, `password`, `token`, Jellyfin's `api_key`)
      * from URLs so credentials are never exposed in logs or error messages.
      */
     fun redactSensitiveUrl(url: String): String {
         if (url.isBlank()) return url
         return url.replace(
-            Regex("([?&](?:p|t|s|apiKey|password|token)=)([^&#\\s]+)", RegexOption.IGNORE_CASE),
+            Regex("([?&](?:p|t|s|apiKey|api_key|password|token)=)([^&#\\s]+)", RegexOption.IGNORE_CASE),
             "$1[REDACTED]"
         )
     }
@@ -219,6 +220,15 @@ interface OndaluneDao {
     @Transaction
     @Query("SELECT * FROM subsonic_tracks WHERE serverId = :serverId ORDER BY albumId ASC, trackNumber ASC")
     fun observeTracksForServer(serverId: Long): Flow<List<SubsonicTrack>>
+
+    @Query("SELECT * FROM track_overrides")
+    fun observeOverrides(): Flow<List<TrackOverride>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertOverride(override: TrackOverride)
+
+    @Query("DELETE FROM track_overrides WHERE serverId = :serverId AND trackId = :trackId")
+    suspend fun deleteOverride(serverId: Long, trackId: String)
 
     @Transaction
     @Query("SELECT * FROM subsonic_tracks WHERE serverId = :serverId")
@@ -281,7 +291,8 @@ interface OndaluneDao {
         SubsonicServerConfig::class,
         SubsonicTrack::class,
         SubsonicPlaylist::class,
-        SubsonicDownloadEntity::class
+        SubsonicDownloadEntity::class,
+        TrackOverride::class
     ],
     version = 7,
     exportSchema = true
@@ -379,12 +390,22 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
-        /** Sources other than Subsonic servers (this phone's music); existing rows stay servers. */
+        /**
+         * Sources other than Subsonic servers (Jellyfin, this phone's music; existing rows stay
+         * Subsonic servers), and song details edited in the app.
+         */
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 if (!hasColumn(db, "subsonic_servers", "sourceType")) {
                     db.execSQL("ALTER TABLE subsonic_servers ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'SUBSONIC'")
                 }
+                if (!hasColumn(db, "subsonic_servers", "remoteUserId")) {
+                    db.execSQL("ALTER TABLE subsonic_servers ADD COLUMN remoteUserId TEXT NOT NULL DEFAULT ''")
+                }
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `track_overrides` (`serverId` INTEGER NOT NULL, `trackId` TEXT NOT NULL, " +
+                        "`title` TEXT, `artist` TEXT, `genre` TEXT, `year` INTEGER, PRIMARY KEY(`serverId`, `trackId`))"
+                )
             }
         }
 

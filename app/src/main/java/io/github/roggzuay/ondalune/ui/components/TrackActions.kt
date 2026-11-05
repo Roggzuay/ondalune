@@ -1,5 +1,8 @@
 package io.github.roggzuay.ondalune.ui.components
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -92,6 +95,10 @@ interface TrackActions {
     fun openAlbum(track: SubsonicTrack)
     fun openArtist(track: SubsonicTrack)
     fun openArtist(artistId: String, name: String)
+    /** [track] as its source has it, without edits made in the app. */
+    fun originalOf(track: SubsonicTrack): SubsonicTrack
+    /** Saves details edited in the app (kept on the phone, never sent to the server). */
+    fun saveDetails(track: SubsonicTrack, title: String, artist: String, genre: String, year: Int)
 }
 
 val LocalTrackActions = staticCompositionLocalOf<TrackActions?> { null }
@@ -147,6 +154,7 @@ fun TrackOptionsSheet(
     val single = tracks.singleOrNull()
     var showPlaylists by remember { mutableStateOf(false) }
     var newPlaylistDialog by remember { mutableStateOf(false) }
+    var editDialog by remember { mutableStateOf(false) }
     val allFavourite = tracks.all { it.starred }
     fun run(action: () -> Unit) {
         action()
@@ -216,6 +224,7 @@ fun TrackOptionsSheet(
                 }
             }
             if (single != null) {
+                SheetItem(Icons.Filled.Edit, "Edit details", "option_edit_details") { editDialog = true }
                 SheetItem(Icons.Filled.Album, "Go to album", "option_go_album") { run { actions.openAlbum(single) } }
                 SheetItem(Icons.Filled.Person, "Go to artist", "option_go_artist") { run { actions.openArtist(single) } }
             }
@@ -223,6 +232,18 @@ fun TrackOptionsSheet(
                 SheetItem(Icons.Filled.SelectAll, "Select", "option_select") { run(onSelect) }
             }
         }
+    }
+
+    if (editDialog && single != null) {
+        EditDetailsDialog(
+            track = single,
+            original = remember(single) { actions.originalOf(single) },
+            onSave = { title, artist, genre, year ->
+                editDialog = false
+                run { actions.saveDetails(single, title, artist, genre, year) }
+            },
+            onDismiss = { editDialog = false }
+        )
     }
 
     if (newPlaylistDialog) {
@@ -242,6 +263,63 @@ fun TrackOptionsSheet(
             dismissButton = { TextButton(onClick = { newPlaylistDialog = false }) { Text("Cancel") } }
         )
     }
+}
+
+/**
+ * Title, artist, genre and year of one song, changed for this app only: the server's library
+ * stays as it is, and a sync never undoes the change. "Use original" puts the source's details back.
+ */
+@Composable
+private fun EditDetailsDialog(
+    track: SubsonicTrack,
+    original: SubsonicTrack,
+    onSave: (title: String, artist: String, genre: String, year: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var title by remember { mutableStateOf(track.title) }
+    var artist by remember { mutableStateOf(track.artist) }
+    var genre by remember { mutableStateOf(track.genre) }
+    var year by remember { mutableStateOf(track.year.takeIf { it > 0 }?.toString().orEmpty()) }
+    val edited = title != original.title || artist != original.artist || genre != original.genre ||
+        (year.toIntOrNull() ?: 0) != original.year
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Changes stay in Ondalune on this phone; your music files and server are not changed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text("Title") }, modifier = Modifier.testTag("edit_title"))
+                OutlinedTextField(value = artist, onValueChange = { artist = it }, singleLine = true, label = { Text("Artist") })
+                OutlinedTextField(value = genre, onValueChange = { genre = it }, singleLine = true, label = { Text("Genre") })
+                OutlinedTextField(
+                    value = year,
+                    onValueChange = { v -> year = v.filter(Char::isDigit).take(4) },
+                    singleLine = true,
+                    label = { Text("Year") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                if (edited) {
+                    TextButton(onClick = {
+                        title = original.title
+                        artist = original.artist
+                        genre = original.genre
+                        year = original.year.takeIf { it > 0 }?.toString().orEmpty()
+                    }) { Text("Use original") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = title.isNotBlank() && artist.isNotBlank(),
+                onClick = { onSave(title, artist, genre, year.toIntOrNull() ?: 0) }
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable

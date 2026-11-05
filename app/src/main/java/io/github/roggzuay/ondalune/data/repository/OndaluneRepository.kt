@@ -1,5 +1,7 @@
 package io.github.roggzuay.ondalune.data.repository
 
+import kotlinx.coroutines.flow.map
+import io.github.roggzuay.ondalune.data.model.TrackOverride
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
 import io.github.roggzuay.ondalune.data.local.OndaluneDao
@@ -18,7 +20,8 @@ import io.github.roggzuay.ondalune.data.model.isLocalSource
 import io.github.roggzuay.ondalune.data.source.LocalMusicSource
 import io.github.roggzuay.ondalune.data.source.MusicSource
 import io.github.roggzuay.ondalune.data.source.OpenSubsonicSource
-import io.github.roggzuay.ondalune.data.source.SourceCapability
+import io.github.roggzuay.ondalune.data.network.JellyfinClient
+import io.github.roggzuay.ondalune.data.model.source
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -28,12 +31,23 @@ class OndaluneRepository(
     /** The source behind a library row; Subsonic for every row unless told otherwise (tests). */
     private val sourceFor: (SubsonicServerConfig) -> MusicSource = { OpenSubsonicSource(client) },
     /** Reads this phone's music; null where there is no phone (tests). */
-    private val phone: LocalMusicSource? = null
+    private val phone: LocalMusicSource? = null,
+    /** Signs in to Jellyfin servers; null in tests. */
+    private val jellyfin: JellyfinClient? = null
 ) {
     val serversFlow: Flow<List<SubsonicServerConfig>> = dao.observeServers()
 
     fun observeTracksForServer(serverId: Long): Flow<List<SubsonicTrack>> =
         dao.observeTracksForServer(serverId)
+
+    /** Song details edited in the app, by (server id, track id). */
+    val overridesFlow: Flow<Map<Pair<Long, String>, TrackOverride>> =
+        dao.observeOverrides().map { list -> list.associateBy { it.serverId to it.trackId } }
+
+    /** Saves [override] for its song, or forgets the song's edits when [override] is null. */
+    suspend fun setOverride(track: SubsonicTrack, override: TrackOverride?) {
+        if (override == null) dao.deleteOverride(track.serverId, track.id) else dao.upsertOverride(override)
+    }
 
     fun observePlaylistsForServer(serverId: Long): Flow<List<SubsonicPlaylist>> =
         dao.observePlaylistsForServer(serverId)
@@ -61,15 +75,25 @@ class OndaluneRepository(
         return active
     }
 
-    suspend fun pingAndInspect(server: SubsonicServerConfig): PingDiagnosticResult {
-        return client.pingAndInspectServer(server)
-    }
+    suspend fun pingAndInspect(server: SubsonicServerConfig): PingDiagnosticResult = sourceFor(server).ping(server)
 
+    /**
+     * Saves [server] as the active library and syncs it. A Jellyfin server signs in first with the
+     * password in `passwordOrToken`, which is then replaced by the access token; if sign-in fails
+     * nothing is saved and the returned server has id 0.
+     */
     suspend fun saveAndActivateServer(
         server: SubsonicServerConfig,
         onSyncProgress: (Int) -> Unit = {}
     ): Pair<SubsonicServerConfig, PingDiagnosticResult> {
-        val diag = client.pingAndInspectServer(server)
+        @Suppress("NAME_SHADOWING")
+        val server = if (server.source == SourceType.JELLYFIN) {
+            val login = (jellyfin ?: return server to PingDiagnosticResult(false, "Jellyfin isn't available"))
+                .login(server.baseUrl, server.username, server.passwordOrToken)
+                .getOrElse { return server to PingDiagnosticResult(false, it.message ?: "Couldn't sign in") }
+            server.copy(passwordOrToken = login.token, remoteUserId = login.userId)
+        } else server
+        val diag = sourceFor(server).ping(server)
         val updated = OndaluneCredentialSecurity.encryptServerConfig(
             server.copy(
                 isActive = true,
@@ -99,7 +123,7 @@ class OndaluneRepository(
 
     suspend fun switchActiveServer(server: SubsonicServerConfig): PingDiagnosticResult {
         dao.setActiveServer(server.id)
-        val diag = client.pingAndInspectServer(server)
+        val diag = sourceFor(server).ping(server)
         if (!server.isDemoServer && diag.success) {
             val existing = dao.getTracksForServerOnce(server.id)
             if (existing.isEmpty()) {
@@ -131,7 +155,7 @@ class OndaluneRepository(
      * every page of the walk succeeded.
      */
     private suspend fun syncFullLibrary(server: SubsonicServerConfig, onProgress: (Int) -> Unit = {}): Int {
-        val snapshot = client.fetchFullLibrary(server, onProgress)
+        val snapshot = sourceFor(server).fetchLibrary(server, onProgress) ?: return 0
         if (snapshot.tracks.isEmpty()) return 0
         val existing = dao.getTracksForServerOnce(server.id).associateBy { it.id }
         val merged = snapshot.tracks.map { fresh ->
@@ -153,24 +177,18 @@ class OndaluneRepository(
     suspend fun toggleStarTrack(server: SubsonicServerConfig, track: SubsonicTrack) {
         val newStarred = !track.starred
         dao.updateTrackStarred(track.id, newStarred)
-        if (SourceCapability.SYNC_FAVOURITES in sourceFor(server).capabilities) {
-            client.setStarredRemote(server, track.id, newStarred)
-        }
+        sourceFor(server).setFavourite(server, track.id, newStarred)
     }
 
     suspend fun setTrackRating(server: SubsonicServerConfig, track: SubsonicTrack, rating: Int) {
         val clamped = rating.coerceIn(0, 5)
         dao.updateTrackRating(track.id, clamped)
-        if (SourceCapability.SYNC_FAVOURITES in sourceFor(server).capabilities) {
-            client.setRatingRemote(server, track.id, clamped)
-        }
+        sourceFor(server).setRating(server, track, clamped)
     }
 
     suspend fun recordPlay(server: SubsonicServerConfig, track: SubsonicTrack) {
         dao.incrementPlayCount(track.id)
-        if (SourceCapability.SCROBBLE in sourceFor(server).capabilities) {
-            client.scrobbleRemote(server, track.id, submission = true)
-        }
+        sourceFor(server).reportPlayed(server, track)
     }
 
     suspend fun fetchLyricsResult(
@@ -279,6 +297,9 @@ class OndaluneRepository(
     ): List<SubsonicArtist> =
         DemoSubsonicCatalog.deriveArtistsFromTracks(tracks, fallbackToAlbumArt)
 
+    suspend fun setArtistFavourite(server: SubsonicServerConfig, artistId: String, favourite: Boolean) =
+        sourceFor(server).setFavourite(server, artistId, favourite, isArtist = true)
+
     /** Stores the artist's portrait and bio; returns the server's similar artists' ids. */
     suspend fun enrichArtistMetadata(
         server: SubsonicServerConfig,
@@ -286,7 +307,7 @@ class OndaluneRepository(
         artistName: String
     ): List<String> {
         if (server.isDemoServer || artistId.isBlank()) return emptyList()
-        val info2 = if (SourceCapability.ARTIST_INFO in sourceFor(server).capabilities) client.fetchArtistInfo2(server, artistId) else null
+        val info2 = sourceFor(server).artistInfo(server, artistId)
         // Server bio first; Wikipedia only fills what the server left empty.
         val wiki = if (info2?.bio.isNullOrBlank()) client.fetchWikipediaArtistSummary(artistName) else null
         val image = info2?.imageUrl?.takeIf { it.isNotBlank() } ?: wiki?.imageUrl.orEmpty()
