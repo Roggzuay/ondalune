@@ -45,7 +45,7 @@ import io.github.roggzuay.ondalune.data.model.ReverbProcessingMode
 import io.github.roggzuay.ondalune.data.model.ReverbState
 import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
-import io.github.roggzuay.ondalune.data.model.similarTracks
+import io.github.roggzuay.ondalune.data.model.yourMix
 import io.github.roggzuay.ondalune.playback.PlaybackCoordinator
 import io.github.roggzuay.ondalune.data.local.AnalysisInput
 import io.github.roggzuay.ondalune.data.local.analysisInputs
@@ -609,7 +609,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         HomeShelves(
             jumpBackIn = recentIds.take(40).mapNotNull { tracksById[it] },
             recentlyAdded = serverOrdered("newest").ifEmpty { albumsByYear },
-            favouriteTracks = trackList.filter { it.starred }.sortedByDescending { it.userRating },
+            favouriteTracks = trackList.filter { it.starred }.sortedByDescending { it.playCount },
             mostPlayed = trackList.filter { it.playCount > 0 }.sortedByDescending { it.playCount }
                 .ifEmpty { serverOrdered("frequent").flatMap { tracksByAlbum[it.id].orEmpty() } }
                 .take(200),
@@ -1020,7 +1020,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             LibrarySortOption.NAME_DESC -> false
             LibrarySortOption.YEAR_NEWEST,
             LibrarySortOption.MOST_PLAYED,
-            LibrarySortOption.TOP_RATED,
             LibrarySortOption.TRACK_COUNT,
             LibrarySortOption.ALBUM_COUNT,
             LibrarySortOption.DATE_MODIFIED -> false
@@ -1724,23 +1723,15 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Plays a fresh Your Mix; every call draws a new one (see [yourMix]). */
     fun playYourMix(startAfter: Job? = null): Job? {
-        val shelves = homeShelves.value
-        val seeds = (shelves.favouriteTracks.take(25) + shelves.mostPlayed.take(25) + shelves.jumpBackIn.take(15))
-            .distinctBy { it.id }
         val library = allServerTracks.value
         if (library.isEmpty()) return null
+        val recent = _recentTrackIds.value
         return viewModelScope.launch {
             // Scoring the whole library is too slow for the main thread on big libraries; it
             // would stall the hero's launch animation.
-            val picks = withContext(Dispatchers.Default) {
-                if (seeds.isEmpty()) {
-                    library.shuffled().take(60)
-                } else {
-                    val core = seeds.shuffled().take(20)
-                    (core + similarTracks(core, library, core.map { it.id }.toSet(), 40)).shuffled()
-                }
-            }
+            val picks = withContext(Dispatchers.Default) { yourMix(library, recent) }
             if (picks.isEmpty()) return@launch
             // The player opens on the first song: start decoding its cover now, during the zoom,
             // so the player shows the cover rather than an empty tile while it loads.
@@ -1768,16 +1759,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.toggleStarTrack(serverFor(track), track)
             playback.reshuffleIfSmart()
-        }
-    }
-
-    fun setTrackRating(track: SubsonicTrack, rating: Int) {
-        val clamped = rating.coerceIn(0, 5)
-        playback.updateCurrent(track.id) { it.copy(userRating = clamped) }
-        viewModelScope.launch {
-            repository.setTrackRating(serverFor(track), track, clamped)
-            playback.reshuffleIfSmart()
-            _statusBanner.value = "Rated \"${track.title}\" ${clamped}★ — Smart Shuffle affinity updated"
         }
     }
 

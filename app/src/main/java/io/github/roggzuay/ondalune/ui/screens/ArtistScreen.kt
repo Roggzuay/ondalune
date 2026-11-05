@@ -143,7 +143,7 @@ internal fun ArtistDetailSubScreen(
     onOpenAlbum: (String) -> Unit,
     onPlayAlbum: (String) -> Unit
 ) {
-    val popular = remember(tracks) { tracks.sortedWith(compareByDescending<SubsonicTrack> { it.playCount }.thenByDescending { it.userRating }) }
+    val popular = remember(tracks) { tracks.sortedWith(compareByDescending<SubsonicTrack> { it.playCount }.thenByDescending { it.starred }) }
     SelectableTracks(popular)
     val byNewest = remember(albums) { albums.sortedWith(compareByDescending<SubsonicAlbum> { it.year }.thenBy { it.name }) }
     val fullAlbums = remember(byNewest) { byNewest.filterNot { it.isShortRelease() } }

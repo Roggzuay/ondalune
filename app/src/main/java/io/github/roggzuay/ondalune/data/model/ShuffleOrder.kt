@@ -8,7 +8,7 @@ import kotlin.random.Random
 private const val SPREAD_LOOKAHEAD = 12
 
 /**
- * Smart shuffle order (weighted random, `u^(1 / weight)`). Favourites, high ratings and much-played
+ * Smart shuffle order (weighted random, `u^(1 / weight)`). Favourites and much-played
  * songs still come up sooner, but only gently (the square root of their weight), and songs among
  * the last plays ([recentIds], most recent first) move towards the back. Without that, every
  * shuffle opened with the same few favourites, whose play counts then grew and made it worse.

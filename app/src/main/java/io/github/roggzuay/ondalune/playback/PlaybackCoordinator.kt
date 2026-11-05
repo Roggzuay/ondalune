@@ -203,7 +203,7 @@ class PlaybackCoordinator(
         _playbackQueue.value = smartQueue
         startPlayback(lead)
         host.showBanner(
-            "Smart Shuffle (${profile.label}): Playing \"${lead.title}\" (${lead.userRating}★ • ${lead.playCount} plays • ${lead.smartAffinityPercent(profile)}% match)"
+            "Smart Shuffle (${profile.label}): playing \"${lead.title}\""
         )
     }
 
@@ -377,7 +377,7 @@ class PlaybackCoordinator(
         _repeatOneEnabled.value = !_repeatOneEnabled.value
     }
 
-    /** Re-deals a Smart Shuffle queue after ratings or favourites change what it favours. */
+    /** Re-deals a Smart Shuffle queue after favourites change what it favours. */
     fun reshuffleIfSmart(profile: SmartShuffleProfile = host.settings.smartShuffleProfile) {
         if (_shuffleMode.value != ShuffleMode.SMART) return
         val base = host.library
@@ -388,7 +388,7 @@ class PlaybackCoordinator(
 
     // ---- Current song and library changes ------------------------------------------------
 
-    /** Applies [transform] to the current song when it is [trackId] (a new rating, a heart). */
+    /** Applies [transform] to the current song when it is [trackId] (a heart, an edit). */
     fun updateCurrent(trackId: String, transform: (SubsonicTrack) -> SubsonicTrack) {
         val current = _currentTrack.value ?: return
         if (current.id == trackId) _currentTrack.value = transform(current)

@@ -136,34 +136,18 @@ data class SubsonicTrack(
     val rgAlbumPeak: Float? = null
 ) {
     /**
-     * Computes the personalized Smart Shuffle priority weight combining:
-     * - User star rating (1..5★)
-     * - Starred/Favourite flag
-     * - Play frequency (logarithmic curve so heavy-rotation tracks lead without starving deep cuts)
+     * How strongly Smart Shuffle favours this song: a heart, and how much it is played (on a log
+     * curve, so much-played songs lead without starving the rest). Ratings play no part.
      */
     fun smartShuffleWeight(profile: SmartShuffleProfile = SmartShuffleProfile.BALANCED): Double {
-        val ratingNorm = (userRating.coerceIn(0, 5) / 5.0)
-        val starBonus = if (starred) 1.0 else 0.0
-        val playFreqNorm = (ln(1.0 + playCount.coerceAtLeast(0).toDouble()) / ln(80.0)).coerceIn(0.0, 1.35)
-
-        val (ratingMult, starMult, freqMult) = when (profile) {
-            SmartShuffleProfile.BALANCED -> Triple(3.8, 2.6, 3.4)
-            SmartShuffleProfile.TOP_RATED -> Triple(5.5, 3.8, 1.6)
-            SmartShuffleProfile.MOST_PLAYED -> Triple(2.0, 1.8, 5.6)
+        val heart = if (starred) 1.0 else 0.0
+        val plays = (ln(1.0 + playCount.coerceAtLeast(0).toDouble()) / ln(80.0)).coerceIn(0.0, 1.35)
+        val (heartMult, playsMult) = when (profile) {
+            SmartShuffleProfile.BALANCED -> 2.6 to 3.4
+            SmartShuffleProfile.FAVOURITES -> 4.5 to 1.6
+            SmartShuffleProfile.MOST_PLAYED -> 1.8 to 5.6
         }
-
-        return (1.0 + (ratingNorm * ratingMult) + (starBonus * starMult) + (playFreqNorm * freqMult))
-            .coerceAtLeast(0.5)
-    }
-
-    /**
-     * Returns a 55%..99% personalized affinity match score for UI badges in Smart Shuffle mode.
-     */
-    fun smartAffinityPercent(profile: SmartShuffleProfile = SmartShuffleProfile.BALANCED): Int {
-        val weight = smartShuffleWeight(profile)
-        // Typical weight range is 1.0 .. 11.2
-        val normalized = ((weight - 1.0) / 9.2).coerceIn(0.0, 1.0)
-        return (58 + (normalized * 41.0).toInt()).coerceIn(58, 99)
+        return 1.0 + heart * heartMult + plays * playsMult
     }
 }
 
@@ -291,7 +275,6 @@ enum class LibrarySortOption(val label: String, val shortLabel: String) {
     YEAR_NEWEST("Release Year", "Year"),
     RECENTLY_ADDED("Recently Added", "Added"),
     MOST_PLAYED("Play Count", "Plays"),
-    TOP_RATED("Star Rating", "Rating"),
     DURATION("Duration", "Length"),
     TRACK_NUMBER("Track Number", "Track #"),
     TRACK_COUNT("Song Count", "Songs"),
@@ -349,7 +332,7 @@ data class TabDisplayPreference(
             )
             "FAVOURITES" -> TabDisplayPreference(
                 viewMode = LibraryViewMode.LIST,
-                sortOption = LibrarySortOption.TOP_RATED,
+                sortOption = LibrarySortOption.MOST_PLAYED,
                 ascending = false,
                 gridColumns = 2
             )
@@ -387,8 +370,7 @@ data class TabDisplayPreference(
                 LibrarySortOption.DURATION,
                 LibrarySortOption.TRACK_NUMBER,
                 LibrarySortOption.YEAR_NEWEST,
-                LibrarySortOption.MOST_PLAYED,
-                LibrarySortOption.TOP_RATED
+                LibrarySortOption.MOST_PLAYED
             )
             "PLAYLISTS" -> listOf(
                 LibrarySortOption.NAME_ASC,
@@ -411,9 +393,9 @@ enum class ShuffleMode(val label: String, val shortLabel: String, val descriptio
 }
 
 enum class SmartShuffleProfile(val label: String, val description: String) {
-    BALANCED("Balanced Affinity", "Blends 4–5★ ratings, starred favourites, and play frequency"),
-    TOP_RATED("High-Rated & Starred", "Strongly prioritizes 4–5★ rated and starred tracks"),
-    MOST_PLAYED("Heavy Rotation", "Strongly prioritizes your most frequently played tracks")
+    BALANCED("Balanced", "Favourites and much-played songs come up a little more often"),
+    FAVOURITES("Favourites first", "Songs with a heart come up more often"),
+    MOST_PLAYED("Heavy Rotation", "Your most-played songs come up more often")
 }
 
 enum class DockStyle(val label: String, val description: String) {
@@ -754,7 +736,6 @@ data class PlayerCustomizationSettings(
     /** The mini player slides away while scrolling down a list and returns on a scroll up. */
     val hideMiniPlayerOnScroll: Boolean = true,
     val showCodecBadgesInLists: Boolean = true,
-    val showStarRatingsInLists: Boolean = true,
     val fallbackArtistToAlbumArt: Boolean = false,
     val defaultGridColumns: Int = 2,
     val resumePlaybackOnLaunch: Boolean = true,

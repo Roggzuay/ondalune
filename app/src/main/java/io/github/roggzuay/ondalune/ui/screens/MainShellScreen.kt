@@ -1078,7 +1078,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onToggleShuffle = viewModel.playback::toggleShuffle,
                                 onToggleRepeatOne = viewModel.playback::toggleRepeatOne,
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
-                                onSetTrackRating = viewModel::setTrackRating,
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                 onResetSpeedPitch = {
                                     viewModel.resetSpeedAndPitch()
