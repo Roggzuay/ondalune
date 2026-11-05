@@ -842,7 +842,7 @@ fun SettingsCustomizationScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     val wifiProfiles = listOf(
-                        Triple("RAW", 0, "Lossless Bit-Perfect (RAW FLAC / ALAC)"),
+                        Triple("RAW", 0, "Original file, not converted"),
                         Triple("OPUS", 320, "Opus 320 kbps Studio Transparent"),
                         Triple("MP3", 256, "MP3 256 kbps High Compatibility"),
                         Triple("MP3", 192, "MP3 192 kbps Balanced")
@@ -3283,7 +3283,7 @@ fun SonicLabModalOverlay(
     BackHandler(onBack = onClose)
     val bandLabels = listOf("60Hz", "230Hz", "910Hz", "3.6kHz", "14kHz")
     val bitrateProfiles = listOf(
-        Triple("RAW", 0, "FLAC Lossless • Bit-Perfect"),
+        Triple("RAW", 0, "Original file • not converted"),
         Triple("OPUS", 320, "OPUS • 320 kbps Studio"),
         Triple("OPUS", 192, "OPUS • 192 kbps Balanced"),
         Triple("MP3", 320, "MP3 • 320 kbps High")

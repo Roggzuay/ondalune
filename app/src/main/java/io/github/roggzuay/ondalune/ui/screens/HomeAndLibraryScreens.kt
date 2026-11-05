@@ -153,6 +153,7 @@ import kotlinx.coroutines.Job
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.Refresh
 import io.github.roggzuay.ondalune.ui.components.DownloadsHint
+import io.github.roggzuay.ondalune.data.model.compactQuality
 
 /**
  * Home ("Listen Now") Screen with Pull-Down Quick Sync (popping a Material 3 Expressive morphing
@@ -864,7 +865,7 @@ fun TrackExpressiveRow(
                         ) {
                             Text(
                                 // Songs on the phone don't know their sample format: just the file type.
-                                text = if (track.samplingRate > 0) "${track.suffix} ${track.bitDepth}/${track.samplingRate / 1000}k" else track.suffix,
+                                text = track.compactQuality(),
                                 style = monoLabelSmall(),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

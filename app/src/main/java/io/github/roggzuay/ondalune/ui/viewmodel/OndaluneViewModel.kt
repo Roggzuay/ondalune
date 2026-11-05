@@ -120,6 +120,16 @@ import io.github.roggzuay.ondalune.data.source.FolderPermissions
 import io.github.roggzuay.ondalune.data.source.folderLocation
 import io.github.roggzuay.ondalune.data.model.OfflineSummary
 import io.github.roggzuay.ondalune.data.model.offlineSummaryOf
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import io.github.roggzuay.ondalune.audio.AudioCapabilities
+import io.github.roggzuay.ondalune.data.model.AudioQuality
+import io.github.roggzuay.ondalune.data.model.OpenedStream
+import io.github.roggzuay.ondalune.data.model.audioQualityOf
+import io.github.roggzuay.ondalune.data.model.ReplayGainMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onEach
 
 enum class PrimaryDestination(val index: Int, val route: String, val label: String) {
     HOME(0, "home", "Home"),
@@ -621,6 +631,67 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TempoInfo.Unknown)
     }
 
+    // ---- Audio quality ------------------------------------------------------------------
+
+    private val audioCapabilities by lazy { AudioCapabilities(getApplication()) }
+    private val _outputDevice = MutableStateFlow<String?>(null)
+    private val outputDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refreshOutputDevice()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refreshOutputDevice()
+    }
+
+    private fun refreshOutputDevice() {
+        _outputDevice.value = audioCapabilities.deviceName(audioEngine.routedOutput())
+    }
+
+    /** What changes the sound right now, in words; empty when nothing does. */
+    private val activeProcessing: Flow<List<String>> by lazy {
+        combine(speedPitchState, reverbState, equalizerPreset, settings.customization) { sp, reverb, eq, prefs ->
+            buildList {
+                if (sp.speed != 1f) add("Speed ${"%.2f".format(sp.speed)}× (${sp.pitchMode.label.substringBefore(" (")})")
+                if (sp.pitchMode == PitchCorrectionMode.INDEPENDENT_SEMITONES && sp.independentPitchRatio != 1f) {
+                    add("Pitch ×${"%.2f".format(sp.independentPitchRatio)}")
+                }
+                if (reverb.enabled && reverb.preset != ReverbPreset.OFF) add("Reverb: ${reverb.preset.label}")
+                if (eq != EqualizerPreset.FLAT_STUDIO) add("EQ: ${eq.label}")
+                if (prefs.replayGainMode != ReplayGainMode.OFF) add("Volume levelling: ${prefs.replayGainMode.label.substringBefore(" (")}")
+            }
+        }
+    }
+
+    /**
+     * The quality line under the cover and its details, from what is actually playing: the song's
+     * own details, what the engine opened, any conversion by the server, the processing that is
+     * on, and the output device.
+     */
+    val audioQuality: StateFlow<AudioQuality?> by lazy {
+        combine(playback.currentTrack, audioEngine.playingStream, activeProcessing, _outputDevice, isPlayingOfflineFile) { track, playing, processing, device, offline ->
+            track ?: return@combine null
+            val server = serverFor(track)
+            val convertedBy = server.takeUnless { offline || track.isOnDevice || it.isDemoServer || it.transcodeFormat == "RAW" }
+                ?.let { s -> listOfNotNull(s.transcodeFormat, s.maxBitRate.takeIf { it > 0 }?.let { "up to $it kbps" }).joinToString(", ") }
+            val opened = playing?.let { p ->
+                OpenedStream(
+                    mime = p.decoded?.mime.orEmpty(),
+                    sampleRate = p.decoded?.sampleRate ?: 0,
+                    channels = p.decoded?.channels ?: 0,
+                    bitrate = p.decoded?.bitrate ?: 0,
+                    bitsPerSample = p.decoded?.bitsPerSample ?: 0,
+                    ownPipeline = p.ownPipeline,
+                    outputSampleRate = p.outputSampleRate
+                )
+            }
+            audioQualityOf(track, opened, convertedBy, processing, device)
+        }.onEach { refreshOutputDevice() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }
+
+    /** The Dolby formats this phone decodes (none is used by Ondalune's stereo engine). */
+    val dolbyDecoders: List<String> get() = audioCapabilities.dolbyDecoders
+
+    /** Whether Android's spatial audio applies to Ondalune's output now; null where there is none. */
+    fun spatialAudioActive(): Boolean? = audioCapabilities.spatialAudioActive()
+
     // ---- Home shelves -------------------------------------------------------------------
     /** Server-side album orderings keyed by getAlbumList2 type (newest / recent / frequent). */
     private val _serverAlbumOrder = MutableStateFlow<Map<String, List<String>>>(emptyMap())
@@ -864,6 +935,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 triggerQuickSync(activeServer)
             }
         }
+        // The quality details name the output device; follow headphones and speakers coming and going.
+        getApplication<Application>().getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(outputDeviceCallback, null)
         viewModelScope.launch {
             // 1.5.0 added every audio file on the phone; now only picked folders count.
             if (repository.removeWholePhoneScanSongs() > 0) {
@@ -1938,7 +2011,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             database.dao().updateServer(updated)
-            _statusBanner.value = "Wi-Fi Streaming set to $format • ${if (maxBitRate == 0) "Lossless Bit-Perfect" else "${maxBitRate}kbps"}"
+            _statusBanner.value = "Wi-Fi Streaming set to $format • ${if (maxBitRate == 0) "no bitrate limit" else "${maxBitRate}kbps"}"
         }
     }
 
@@ -2185,6 +2258,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
+        getApplication<Application>().getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(outputDeviceCallback)
         playback.release()
         // These handlers launch in viewModelScope, which is cancelled now: left attached they
         // swallowed every notification command, so music playing on could not be paused or

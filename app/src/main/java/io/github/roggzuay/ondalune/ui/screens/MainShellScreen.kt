@@ -236,6 +236,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isRefreshingPlaylists by viewModel.isRefreshingPlaylists.collectAsStateWithLifecycle()
     val currentTempo by viewModel.currentTempo.collectAsStateWithLifecycle()
     val offlineSummary by viewModel.offlineSummary.collectAsStateWithLifecycle()
+    val audioQuality by viewModel.audioQuality.collectAsStateWithLifecycle()
     val showDownloadsHint by viewModel.showDownloadsHint.collectAsStateWithLifecycle()
     // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
     val heroLaunch = remember { HeroLaunch() }
@@ -1045,6 +1046,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         PlaybackPosition(viewModel) { positionMs, durationMs ->
                             NowPlayingStudioOverlay(
                                 sheet = playerSheet,
+                                audioQuality = audioQuality.takeIf { customizationSettings.showTechnicalFormatBadge },
+                                spatialAudio = viewModel::spatialAudioActive,
+                                dolbyDecoders = viewModel.dolbyDecoders,
                                 track = activeTrack,
                                 server = activeServer,
                                 isPlaying = isPlaying,
@@ -1060,7 +1064,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 repeatOneEnabled = repeatOneEnabled,
                                 animatedWaveEnabled = customizationSettings.animatedSquigglyWave,
                                 showRemainingTime = customizationSettings.showRemainingTime,
-                                showTechnicalFormatBadge = customizationSettings.showTechnicalFormatBadge,
                                 showPlayerStarButton = customizationSettings.showPlayerStarButton,
                                 unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                 backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,

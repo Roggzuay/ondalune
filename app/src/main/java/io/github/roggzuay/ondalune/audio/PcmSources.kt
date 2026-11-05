@@ -22,6 +22,8 @@ import kotlin.math.sin
  */
 internal interface PcmSource {
     val sampleRate: Int
+    /** What was opened, as the container and decoder report it (for the player's quality details). */
+    val stream: DecodedStream get() = DecodedStream("", 0, 0, 0, 0, "")
     /** Frames in the whole song, or 0 when the container doesn't say. */
     val durationFrames: Long
     /** Song position of the next frame [read] returns. */
@@ -34,6 +36,7 @@ internal interface PcmSource {
 
 /** 16-bit PCM WAV file (offline demo masters). */
 internal class WavPcmSource(file: File) : PcmSource {
+    override val stream get() = DecodedStream("audio/wav", sampleRate, channels = 2, bitrate = 0, bitsPerSample = 16, decoder = "")
     private val raf = RandomAccessFile(file, "r")
     private val channels: Int
     override val sampleRate: Int
@@ -89,7 +92,8 @@ internal class CodecPcmSource private constructor(
     private val codec: MediaCodec,
     rate: Int,
     channelCount: Int,
-    private val durationUs: Long
+    private val durationUs: Long,
+    override val stream: DecodedStream
 ) : PcmSource {
     override var sampleRate = rate
         private set
@@ -221,7 +225,8 @@ internal class CodecPcmSource private constructor(
                     codec,
                     if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100,
                     if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1) else 2,
-                    if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+                    if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L,
+                    DecodedStream.of(format, codec.name)
                 )
                 var attempts = 0
                 while (source.size == 0 && !source.outputEos && attempts++ < 400) source.pump()
@@ -376,4 +381,39 @@ internal fun replayGainLinear(track: SubsonicTrack, mode: ReplayGainMode): Float
     var linear = 10f.pow(gainDb / 20f)
     if (peak != null && peak > 0f) linear = min(linear, 1f / peak)
     return linear.coerceIn(0.05f, 4f)
+}
+
+/**
+ * One opened song as Android's extractor and decoder describe it. Read-only facts for the player's
+ * quality details; nothing here changes how the audio is decoded or processed.
+ */
+data class DecodedStream(
+    val mime: String,
+    val sampleRate: Int,
+    val channels: Int,
+    /** Bits per second from the container; 0 when it doesn't say. */
+    val bitrate: Int,
+    /** Bits per sample when the container says (raw PCM, some FLAC); 0 otherwise. */
+    val bitsPerSample: Int,
+    /** The decoder Android picked, e.g. "c2.android.flac.decoder". */
+    val decoder: String
+) {
+    companion object {
+        fun of(format: MediaFormat, decoder: String) = DecodedStream(
+            mime = format.getString(MediaFormat.KEY_MIME).orEmpty(),
+            sampleRate = format.intOr(MediaFormat.KEY_SAMPLE_RATE),
+            channels = format.intOr(MediaFormat.KEY_CHANNEL_COUNT),
+            bitrate = format.intOr(MediaFormat.KEY_BIT_RATE),
+            bitsPerSample = when (format.intOr(MediaFormat.KEY_PCM_ENCODING)) {
+                android.media.AudioFormat.ENCODING_PCM_8BIT -> 8
+                android.media.AudioFormat.ENCODING_PCM_16BIT -> 16
+                android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 24
+                android.media.AudioFormat.ENCODING_PCM_32BIT, android.media.AudioFormat.ENCODING_PCM_FLOAT -> 32
+                else -> format.intOr("bits-per-sample")
+            },
+            decoder = decoder
+        )
+
+        private fun MediaFormat.intOr(key: String) = if (containsKey(key)) runCatching { getInteger(key) }.getOrDefault(0) else 0
+    }
 }
