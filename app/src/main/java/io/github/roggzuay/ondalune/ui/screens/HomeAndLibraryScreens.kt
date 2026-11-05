@@ -152,6 +152,7 @@ import io.github.roggzuay.ondalune.ui.viewmodel.LibraryQueries
 import kotlinx.coroutines.Job
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.Refresh
+import io.github.roggzuay.ondalune.ui.components.DownloadsHint
 
 /**
  * Home ("Listen Now") Screen with Pull-Down Quick Sync (popping a Material 3 Expressive morphing
@@ -190,6 +191,9 @@ fun ListenNowHomeScreen(
     availableUpdate: AppUpdate? = null,
     onViewUpdate: () -> Unit = {},
     onLaterUpdate: () -> Unit = {},
+    showDownloadsHint: Boolean = false,
+    onShowDownloads: () -> Unit = {},
+    onDismissDownloadsHint: () -> Unit = {},
     /** Pass a state held above the tab's content to come back to the same scroll position. */
     listState: LazyListState = rememberLazyListState(),
     onPlayMix: (LibraryMix) -> Unit = {},
@@ -326,6 +330,9 @@ fun ListenNowHomeScreen(
                 onLater = onLaterUpdate,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
+        }
+        if (showDownloadsHint) item(key = "downloads_hint") {
+            DownloadsHint(onShow = onShowDownloads, onDismiss = onDismissDownloadsHint, modifier = Modifier.padding(horizontal = 12.dp))
         }
         sections.forEach { section ->
             when (section) {
@@ -995,12 +1002,13 @@ private fun TrackSwipeBackground(direction: SwipeToDismissBoxValue, starred: Boo
     }
 }
 
-internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit) = CollectionEntry(
+/** [offline]: (downloaded, total) for an album only partly downloaded, shown while filtering to downloads. */
+internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit, offline: Pair<Int, Int>? = null) = CollectionEntry(
     key = "alb_$id",
     title = name,
     subtitle = artist,
-    detail = listOfNotNull(year.takeIf { it > 0 }?.toString(), "$songCount tracks", genre.takeIf { it.isNotBlank() })
-        .joinToString(" • "),
+    detail = offline?.let { (have, total) -> "Partly downloaded: $have of $total songs" }
+        ?: listOfNotNull(year.takeIf { it > 0 }?.toString(), "$songCount tracks", genre.takeIf { it.isNotBlank() }).joinToString(" • "),
     coverArtUrl = coverArtUrl,
     seedHex = paletteSeedHex,
     accentHex = accentHex,
@@ -1139,6 +1147,8 @@ internal fun DeletePlaylistDialog(playlist: SubsonicPlaylist, serverName: String
 fun LibraryCollectionScreen(
     /** The active server's name, for "On Navidrome" playlist labels. */
     serverName: String = "",
+    /** Partly downloaded albums (downloaded, total), labelled while filtering to downloads. */
+    partialAlbums: Map<String, Pair<Int, Int>> = emptyMap(),
     albums: List<SubsonicAlbum>,
     artists: List<SubsonicArtist>,
     tracks: List<SubsonicTrack>,
@@ -1429,7 +1439,7 @@ fun LibraryCollectionScreen(
 
         when (activeTab) {
             LibraryFilterTab.ALBUMS -> collectionEntries(
-                sortedAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }) },
+                sortedAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }, partialAlbums[album.id]) },
                 effectiveViewMode, gridCols
             )
 

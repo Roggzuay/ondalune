@@ -118,6 +118,8 @@ import io.github.roggzuay.ondalune.data.model.LocalFolder
 import io.github.roggzuay.ondalune.data.source.FolderReader
 import io.github.roggzuay.ondalune.data.source.FolderPermissions
 import io.github.roggzuay.ondalune.data.source.folderLocation
+import io.github.roggzuay.ondalune.data.model.OfflineSummary
+import io.github.roggzuay.ondalune.data.model.offlineSummaryOf
 
 enum class PrimaryDestination(val index: Int, val route: String, val label: String) {
     HOME(0, "home", "Home"),
@@ -296,6 +298,27 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val offlineStorageSummary: StateFlow<OfflineStorageSummary> = downloadManager.storageSummary
+
+    /** What plays without a connection, for the Downloaded filter. */
+    val offlineSummary: StateFlow<OfflineSummary> by lazy {
+        combine(allServerTracks, downloadedIds, playlists) { all, ids, lists -> offlineSummaryOf(all, ids, lists) }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), OfflineSummary())
+    }
+
+    private val _downloadsHintSeen = MutableStateFlow(prefs.getBoolean(PREF_DOWNLOADS_HINT_SEEN, false))
+
+    /**
+     * Once there is downloaded music, a one-time note says where to find it: after the first
+     * download, or on Home for someone who downloaded before the note existed.
+     */
+    val showDownloadsHint: StateFlow<Boolean> = combine(_downloadsHintSeen, downloadedIds) { seen, ids -> !seen && ids.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun dismissDownloadsHint() {
+        _downloadsHintSeen.value = true
+        prefs.edit().putBoolean(PREF_DOWNLOADS_HINT_SEEN, true).apply()
+    }
 
     private val _currentDestination = MutableStateFlow(PrimaryDestination.HOME)
     val currentDestination: StateFlow<PrimaryDestination> = _currentDestination.asStateFlow()
@@ -2184,6 +2207,7 @@ data class LibraryFilters(
     val active: Boolean get() = downloadedOnly || hideShortTracks || losslessOnly
 }
 private const val PREF_FULL_SYNC_AT = "full_library_sync_at_"
+private const val PREF_DOWNLOADS_HINT_SEEN = "hint_downloads_seen"
 private const val PREF_UPDATE_CHECKED_AT = "update_checked_at"
 private const val PREF_UPDATE_VERSION = "update_latest_version"
 private const val PREF_UPDATE_NOTES = "update_latest_notes"

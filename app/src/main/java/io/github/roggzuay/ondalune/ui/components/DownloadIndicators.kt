@@ -43,6 +43,13 @@ import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
 import kotlinx.coroutines.delay
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 
 /** Where a song (or every song of an album) stands on its way to the phone. */
 enum class DownloadPhase { IDLE, QUEUED, DOWNLOADING, PAUSED, FAILED, SAVED }
@@ -241,6 +248,36 @@ fun DownloadActivityButton(
                     contentDescription = null,
                     modifier = Modifier.size(if (failedOnly) 24.dp else 18.dp)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Shown once, after the first download finishes (or on Home for someone who already has
+ * downloads): where downloaded music is found. [onShow] opens the filter; either button retires it.
+ */
+@Composable
+fun DownloadsHint(onShow: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier.fillMaxWidth().testTag("downloads_hint")
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.DownloadDone, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "Your downloads are ready! Find your downloaded music with the filter button at the top of Home.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(Modifier.align(Alignment.End)) {
+                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Got it") }
+                androidx.compose.material3.TextButton(onClick = onShow, modifier = Modifier.testTag("downloads_hint_show")) { Text("Show me") }
             }
         }
     }

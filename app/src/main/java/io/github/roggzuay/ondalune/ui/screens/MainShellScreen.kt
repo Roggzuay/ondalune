@@ -235,6 +235,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
     val isRefreshingPlaylists by viewModel.isRefreshingPlaylists.collectAsStateWithLifecycle()
     val currentTempo by viewModel.currentTempo.collectAsStateWithLifecycle()
+    val offlineSummary by viewModel.offlineSummary.collectAsStateWithLifecycle()
+    val showDownloadsHint by viewModel.showDownloadsHint.collectAsStateWithLifecycle()
     // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
     val heroLaunch = remember { HeroLaunch() }
     // How far the player is open; the mini player and the full player share it.
@@ -737,6 +739,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             availableUpdate = availableUpdate,
                                             onViewUpdate = { showUpdateNotes = true },
                                             onLaterUpdate = viewModel::dismissUpdate,
+                                            showDownloadsHint = showDownloadsHint,
+                                            onShowDownloads = {
+                                                viewModel.dismissDownloadsHint()
+                                                filterSheetOpen = true
+                                            },
+                                            onDismissDownloadsHint = viewModel::dismissDownloadsHint,
                                             listState = homeListState,
                                             heroLaunch = heroLaunch,
                                             onPlayMix = viewModel::playMix
@@ -746,6 +754,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     PrimaryDestination.LIBRARY -> {
                                         LibraryCollectionScreen(
                                             serverName = activeServer.name,
+                                            partialAlbums = if (libraryFilters.downloadedOnly) offlineSummary.partialAlbums else emptyMap(),
                                             albums = albums,
                                             artists = artists,
                                             tracks = tracks,
@@ -792,6 +801,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         val artistsKey = LibraryFilterTab.ARTISTS.name
                                         LibraryCollectionScreen(
                                             serverName = activeServer.name,
+                                            partialAlbums = if (libraryFilters.downloadedOnly) offlineSummary.partialAlbums else emptyMap(),
                                             albums = albums,
                                             artists = artists,
                                             tracks = tracks,
@@ -1213,6 +1223,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 if (filterSheetOpen) {
                     LibraryFilterSheet(
                         filters = libraryFilters,
+                        offline = offlineSummary,
                         serverName = activeServer.name,
                         trackCount = allServerTracks.size,
                         isSyncing = isSyncing,
