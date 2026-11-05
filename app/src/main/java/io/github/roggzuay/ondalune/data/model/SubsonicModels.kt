@@ -928,3 +928,42 @@ fun SubsonicTrack.genreTokens(): Set<String> = genreList().flatMapTo(HashSet()) 
     val lower = g.lowercase()
     listOfNotNull(lower, lower.substringAfterLast(' ').takeIf { ' ' in lower && it.length > 2 })
 }
+
+/** What plays without a connection: downloaded songs and songs on this phone. */
+data class OfflineSummary(
+    val songs: Int = 0,
+    val wholeAlbums: Int = 0,
+    /** Albums with some but not all songs offline, by album id: (offline, total). */
+    val partialAlbums: Map<String, Pair<Int, Int>> = emptyMap(),
+    /** Playlists whose every song is offline. */
+    val playlists: Int = 0
+) {
+    /** "12 songs, 2 albums, 1 partly downloaded album, 1 playlist", or null with nothing offline. */
+    val description: String?
+        get() = if (songs == 0) null else listOfNotNull(
+            plural(songs, "song"),
+            wholeAlbums.takeIf { it > 0 }?.let { plural(it, "album") },
+            partialAlbums.size.takeIf { it > 0 }?.let { if (it == 1) "1 partly downloaded album" else "$it partly downloaded albums" },
+            playlists.takeIf { it > 0 }?.let { plural(it, "playlist") }
+        ).joinToString(", ")
+
+    private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
+}
+
+/** Counts what is offline in [library], given the ids of completed downloads. Incomplete downloads don't count. */
+fun offlineSummaryOf(library: List<SubsonicTrack>, downloadedIds: Set<String>, playlists: List<SubsonicPlaylist>): OfflineSummary {
+    fun offline(t: SubsonicTrack) = t.isOnDevice || t.id in downloadedIds
+    val offlineIds = library.filter(::offline).mapTo(HashSet()) { it.id }
+    if (offlineIds.isEmpty()) return OfflineSummary()
+    var whole = 0
+    val partial = HashMap<String, Pair<Int, Int>>()
+    library.groupBy { it.albumId }.forEach { (albumId, songs) ->
+        val n = songs.count { it.id in offlineIds }
+        when {
+            n == songs.size -> whole++
+            n > 0 -> partial[albumId] = n to songs.size
+        }
+    }
+    val fullPlaylists = playlists.count { p -> p.trackIds.isNotEmpty() && p.trackIds.all { it in offlineIds } }
+    return OfflineSummary(offlineIds.size, whole, partial, fullPlaylists)
+}

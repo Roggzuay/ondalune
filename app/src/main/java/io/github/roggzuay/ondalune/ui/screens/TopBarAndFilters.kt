@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilters
+import io.github.roggzuay.ondalune.data.model.OfflineSummary
 
 /**
  * Minimal app bar: the tab's title on the left, icon actions on the right. Search
@@ -256,6 +257,8 @@ private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onClose: (
 @Composable
 fun LibraryFilterSheet(
     filters: LibraryFilters,
+    /** What plays without a connection, for the Downloaded switch. */
+    offline: OfflineSummary,
     serverName: String,
     trackCount: Int,
     isSyncing: Boolean,
@@ -279,7 +282,11 @@ fun LibraryFilterSheet(
 
             Surface(shape = cornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                 Column {
-                    FilterSwitchRow("Only downloaded music", "Show what plays without a connection", filters.downloadedOnly) {
+                    FilterSwitchRow(
+                        "Downloaded",
+                        offline.description?.let { "Plays without a connection: $it" } ?: "Nothing downloaded yet: tap the cloud on a song or album",
+                        filters.downloadedOnly
+                    ) {
                         onChange(filters.copy(downloadedOnly = it))
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainer)
