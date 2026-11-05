@@ -139,6 +139,23 @@ class OndaluneAudioEngine(
     private val _realtimeProcessedFrames = MutableStateFlow(0L)
     val realtimeProcessedFrames: StateFlow<Long> = _realtimeProcessedFrames.asStateFlow()
 
+    /**
+     * What is playing as it was opened and decoded, and which way it goes out. Read-only facts for
+     * the player's quality details; setting them changes nothing about playback.
+     */
+    data class PlayingStream(
+        val decoded: DecodedStream?,
+        /** True: Ondalune's own pipeline (16-bit stereo PCM to an AudioTrack); false: Android's MediaPlayer. */
+        val ownPipeline: Boolean,
+        val outputSampleRate: Int
+    )
+
+    private val _playingStream = MutableStateFlow<PlayingStream?>(null)
+    val playingStream: StateFlow<PlayingStream?> = _playingStream.asStateFlow()
+
+    /** The output device Android routes this engine's audio to right now, when it says. */
+    fun routedOutput(): android.media.AudioDeviceInfo? = audioTrack?.routedDevice ?: mediaPlayer?.routedDevice
+
     var onTrackEnded: (() -> Unit)? = null
 
     // ---- Transitions: gapless hand-over, crossfade and ReplayGain ------------------------------
@@ -394,6 +411,7 @@ class OndaluneAudioEngine(
                 }.getOrNull()
 
                 audioTrack = trackOut
+                _playingStream.value = PlayingStream(first.source.stream, ownPipeline = true, outputSampleRate = sampleRate)
                 trackOut?.let { at ->
                     applySpeedAndPitchToAudioTrack(at, _playbackSpeed.value, _playbackPitch.value)
                     runCatching { at.play() }
@@ -444,6 +462,7 @@ class OndaluneAudioEngine(
 
                     if (result.advanced) {
                         val now = mixer.current
+                        _playingStream.value = PlayingStream(now.source.stream, ownPipeline = true, outputSampleRate = sampleRate)
                         _durationMs.value = now.durationMs().takeIf { it > 1000L } ?: (now.track.durationSec * 1000L)
                         _isPlayingOfflineFile.value = findOfflineTrackFile(now.track.serverId, now.track.id) != null
                         withContext(Dispatchers.Main) { onTrackAdvanced?.invoke(now.track) }
@@ -546,6 +565,8 @@ class OndaluneAudioEngine(
             setDataSourceOf(context, dataSourcePath)
             setOnPreparedListener { mp ->
                 _isBuffering.value = false
+                val audio = runCatching { mp.trackInfo.firstOrNull { it.trackType == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO }?.format }.getOrNull()
+                _playingStream.value = PlayingStream(audio?.let { DecodedStream.of(it, "MediaPlayer") }, ownPipeline = false, outputSampleRate = 0)
                 val actualDur = mp.duration.toLong()
                 if (actualDur > 1000L) {
                     _durationMs.value = actualDur

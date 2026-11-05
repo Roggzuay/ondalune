@@ -775,7 +775,7 @@ enum class EqualizerPreset(
     val description: String,
     val bandsDb: List<Float> // 60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz (-10f..+10f)
 ) {
-    FLAT_STUDIO("Bit-Perfect Reference", "Uncolored OpenSubsonic direct studio path", listOf(0f, 0f, 0f, 0f, 0f)),
+    FLAT_STUDIO("Flat", "No EQ: every band at 0 dB", listOf(0f, 0f, 0f, 0f, 0f)),
     WARM_ANALOG("Warm Analog Vinyl", "Lush low-mids and silky high-frequency roll-off", listOf(3.5f, 4.2f, 1.0f, -1.2f, -2.0f)),
     DEEP_SUB("Sub-Bass Kinetic", "Punchy 60Hz sub-bass shelf with crisp air", listOf(6.8f, 4.0f, -1.0f, 2.5f, 4.5f)),
     VOCAL_PRISM("Vocal & Acoustic Prism", "Forward midrange presence and acoustic detail", listOf(-1.5f, 1.2f, 4.8f, 4.0f, 2.0f)),
@@ -895,12 +895,12 @@ data class OfflineStorageSummary(
  */
 enum class ReverbProcessingMode(val label: String, val detail: String) {
     CUSTOM_REALTIME_PCM_DSP(
-        "Live Stereo PCM Freeverb DSP",
-        "Real-time 64-bit internal Schroeder/Freeverb stereo PCM pipeline active on audio stream"
+        "Live reverb",
+        "Reverb is added to the audio as it plays"
     ),
     BYPASSED_DRY(
-        "Bit-Perfect Dry Path",
-        "Direct uncompressed PCM output with zero reverberation coloration"
+        "Dry (no reverb)",
+        "No reverb is added"
     ),
     HARDWARE_AUX_FALLBACK(
         "Platform Auxiliary Effect",

@@ -181,6 +181,9 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.gestures.animateScrollBy
+import io.github.roggzuay.ondalune.data.model.AudioQuality
+import io.github.roggzuay.ondalune.ui.components.AudioQualityChip
+import io.github.roggzuay.ondalune.ui.components.AudioDetailsSheet
 
 /**
  * Floating Pill/Squircle Mini-Player docked above the bottom navigation dock.
@@ -408,6 +411,10 @@ fun FloatingExpressiveMiniPlayer(
 @Composable
 fun NowPlayingStudioOverlay(
     sheet: PlayerSheetState,
+    /** The quality line under the cover; null hides it (setting off, or nothing known). */
+    audioQuality: AudioQuality? = null,
+    spatialAudio: () -> Boolean? = { null },
+    dolbyDecoders: List<String> = emptyList(),
     track: SubsonicTrack,
     server: SubsonicServerConfig,
     isPlaying: Boolean,
@@ -459,7 +466,6 @@ fun NowPlayingStudioOverlay(
     onMoveQueueTrack: (Int, Int) -> Unit = { _, _ -> },
     reverbState: io.github.roggzuay.ondalune.data.model.ReverbState = io.github.roggzuay.ondalune.data.model.ReverbState(),
     showRemainingTime: Boolean = false,
-    showTechnicalFormatBadge: Boolean = true,
     showPlayerStarButton: Boolean = true,
     shuffleMode: ShuffleMode = if (shuffleEnabled) ShuffleMode.SMART else ShuffleMode.OFF,
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
@@ -467,6 +473,10 @@ fun NowPlayingStudioOverlay(
     unifiedMaterialYouColor: Boolean = false,
 ) {
     val isUpNextBottomSheetOpen = activeTab == NowPlayingSheetTab.QUEUE
+    var showAudioDetails by remember { mutableStateOf(false) }
+    if (showAudioDetails && audioQuality != null) {
+        AudioDetailsSheet(audioQuality, remember { spatialAudio() }, dolbyDecoders, onDismiss = { showAudioDetails = false })
+    }
     BackHandler {
         if (isUpNextBottomSheetOpen) {
             onSelectTab(NowPlayingSheetTab.COVER)
@@ -562,7 +572,6 @@ fun NowPlayingStudioOverlay(
                         track = track,
                         activeTab = activeTab,
                         eqPreset = eqPreset,
-                        showTechnicalFormatBadge = showTechnicalFormatBadge,
                         playingFromPlaylist = playingFromPlaylist,
                         onCollapse = onCollapse,
                         onSelectTab = onSelectTab,
@@ -589,6 +598,8 @@ fun NowPlayingStudioOverlay(
                         ) {
                             NowPlayingCenterStage(
                                 sheet = sheet,
+                                quality = audioQuality,
+                                onShowQuality = { showAudioDetails = true },
                                 activeTab = activeTab,
                                 track = track,
                                 artworkShapeMode = artworkShapeMode,
@@ -675,6 +686,8 @@ fun NowPlayingStudioOverlay(
                     ) {
                         NowPlayingCenterStage(
                             sheet = sheet,
+                            quality = audioQuality,
+                            onShowQuality = { showAudioDetails = true },
                             activeTab = activeTab,
                             track = track,
                             artworkShapeMode = artworkShapeMode,
@@ -801,19 +814,12 @@ private fun NowPlayingTopHeaderBar(
     track: SubsonicTrack,
     activeTab: NowPlayingSheetTab,
     eqPreset: EqualizerPreset,
-    showTechnicalFormatBadge: Boolean,
     playingFromPlaylist: SubsonicPlaylist?,
     onCollapse: () -> Unit,
     onSelectTab: (NowPlayingSheetTab) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onOpenSonicLab: () -> Unit
 ) {
-    val codecLabel = if (server.transcodeFormat == "RAW" || server.maxBitRate == 0) {
-        track.suffix.uppercase()
-    } else {
-        server.transcodeFormat.uppercase()
-    }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -919,11 +925,7 @@ private fun NowPlayingTopHeaderBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (showTechnicalFormatBadge) {
-                        "Now Playing • $codecLabel ${track.bitRate}k"
-                    } else {
-                        "Now Playing"
-                    },
+                    text = "Now Playing",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
@@ -951,22 +953,10 @@ private fun NowPlayingTopHeaderBar(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Equalizer,
-                    contentDescription = "Bitrate Performance & Equalizer ($codecLabel)",
+                    contentDescription = "Sonic Lab: equalizer",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
-                if (showTechnicalFormatBadge) {
-                    Text(
-                        text = codecLabel.take(4),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 8.5.sp,
-                            lineHeight = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
             }
         }
     }
@@ -975,6 +965,8 @@ private fun NowPlayingTopHeaderBar(
 @Composable
 private fun NowPlayingCenterStage(
     sheet: PlayerSheetState,
+    quality: AudioQuality?,
+    onShowQuality: () -> Unit,
     activeTab: NowPlayingSheetTab,
     track: SubsonicTrack,
     artworkShapeMode: ArtworkShapeMode,
@@ -1084,9 +1076,10 @@ private fun NowPlayingCenterStage(
                     sheet.coverInPlayer = true
                     onDispose { sheet.coverInPlayer = false }
                 }
-                Box(
+                Column(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // The outer box takes the gestures and stays put; the inner one moves, so
                     // finger positions are never measured in a moving frame.
@@ -1204,6 +1197,10 @@ private fun NowPlayingCenterStage(
                                 )
                             }
                         }
+                    }
+                    if (quality != null) {
+                        Spacer(Modifier.height(12.dp))
+                        AudioQualityChip(quality, onClick = onShowQuality, modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha })
                     }
                 }
             }
