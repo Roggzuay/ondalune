@@ -16,9 +16,9 @@ Repo: https://github.com/Roggzuay/ondalune.git
 Binaries: https://github.com/Roggzuay/ondalune/releases/download/v%v/Ondalune-%v-fdroid.apk
 
 Builds:
-  - versionName: 1.6.0
-    versionCode: 450000
-    commit: TODO_full_40_char_sha_of_tag_v1.6.0
+  - versionName: X.Y.Z
+    versionCode: 0
+    commit: TODO_full_40_char_sha_of_the_first_tag_submitted
     subdir: app
     sudo:
       - apt-get update
@@ -33,5 +33,5 @@ AllowedAPKSigningKeys: 2b4608125f8267852d26c80bc65690a1fe4255de5beca9f4b7afa5f75
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+$
-CurrentVersion: 1.6.0
-CurrentVersionCode: 450000
+CurrentVersion: X.Y.Z
+CurrentVersionCode: 0

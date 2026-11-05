@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 (2026-11-05)
 
 - **Your server's playlists:** Navidrome and other OpenSubsonic playlists appear in Playlists, marked as the server's, with their songs and covers, and refresh with the library or the refresh button. Your own server playlists can be added to and deleted from Ondalune; playlists shared with you are read-only. Playlists made in Ondalune stay separate.
 - **Music folders on this phone:** pick the folders your music is in (Settings → Music sources); only those are read, with no storage permission. Add, remove and rescan them, and Ondalune looks for changes when it opens. Ringtones, recordings and other sounds stay out.
