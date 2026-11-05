@@ -89,6 +89,14 @@ private val releaseNotes = mapOf(
         "The player grows out of the mini player and follows your finger when you drag it",
         "Covers and colours fade into the next song, and lyrics glide line by line",
         "Fixes & improvements, including Sonic Lab's mood cards"
+    ),
+    "1.6" to listOf(
+        "Your server's playlists, next to the ones you make in Ondalune",
+        "Music folders: only the folders you pick on your phone join your library. Settings → Music sources",
+        "Your Mix is fresh every time; ratings are gone and hearts stay",
+        "The real audio quality under the cover, and a song's real tempo in the speed controls",
+        "Update notices, and an easy way to find your downloads",
+        "Fixes & improvements, including details that were made up when the server didn't send them"
     )
 )
 
