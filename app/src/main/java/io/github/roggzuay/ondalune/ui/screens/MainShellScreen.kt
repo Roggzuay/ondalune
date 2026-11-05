@@ -235,6 +235,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
     val isRefreshingPlaylists by viewModel.isRefreshingPlaylists.collectAsStateWithLifecycle()
+    val currentTempo by viewModel.currentTempo.collectAsStateWithLifecycle()
     // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
     val heroLaunch = remember { HeroLaunch() }
     // How far the player is open; the mini player and the full player share it.
@@ -1116,8 +1117,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     SpeedPitchStudioModal(
                         state = speedPitchState,
                         reverbState = reverbState,
-                        // The analysed tempo when song analysis knows it; otherwise as before.
-                        currentTrackBpm = currentTrack?.let { t -> songFeatures[t.id]?.bpm?.roundToInt() ?: t.bpm } ?: 120,
+                        tempo = currentTempo,
                         onSetSpeed = viewModel::setPlaybackSpeed,
                         onSetPitchMode = viewModel::setPitchCorrectionMode,
                         onSetIndependentSemitones = viewModel::setIndependentSemitones,

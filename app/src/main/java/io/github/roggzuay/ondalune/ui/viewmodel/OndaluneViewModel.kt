@@ -114,6 +114,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import io.github.roggzuay.ondalune.data.model.TempoInfo
+import io.github.roggzuay.ondalune.data.model.tempoOf
+import io.github.roggzuay.ondalune.data.local.AnalysisState
 
 enum class PrimaryDestination(val index: Int, val route: String, val label: String) {
     HOME(0, "home", "Home"),
@@ -583,6 +586,18 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             prefixes.firstOrNull { key.startsWith(it) }?.let { key.removePrefix(it) to value }
         }.toMap()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /**
+     * The playing song's tempo: its tag, or a confident analysis; while analysis is on and the song
+     * is stored on the phone, whether it is waiting or being analysed. Never a made-up number.
+     */
+    val currentTempo: StateFlow<TempoInfo> by lazy {
+        // Lazy: [playback] is set up further down.
+        combine(playback.currentTrack, songFeatures, songAnalysis.states) { track, features, states ->
+            val state = track?.let { states[it.analysisKey] }
+            tempoOf(track, track?.let { features[it.id] }, state == AnalysisState.ANALYSING, state == AnalysisState.QUEUED)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TempoInfo.Unknown)
+    }
 
     // ---- Home shelves -------------------------------------------------------------------
     /** Server-side album orderings keyed by getAlbumList2 type (newest / recent / frequent). */
@@ -1569,7 +1584,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         if (songAnalysisJob?.isActive == true) return
         songAnalysisJob = viewModelScope.launch {
             songAnalysis.load()
-            // Downloads, then this phone's own songs.
+            // The playing song first, then downloads, then this phone's own songs.
             combine(
                 downloadsMap.map { map -> map.values.analysisInputs() },
                 combine(phoneSource, allServerTracks) { phone, all ->
@@ -1577,9 +1592,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                     else all.filter { it.isOnDevice }.map { t ->
                         AnalysisInput("${phone.id}_${t.id}", Long.MAX_VALUE) { LocalMusicSource.filePath(getApplication(), t) }
                     }
-                }
-            ) { downloads, phoneSongs -> downloads + phoneSongs }
-                .distinctUntilChangedBy { list -> list.map { it.key }.toSet() }
+                },
+                playback.currentTrack.map { it?.analysisKey }.distinctUntilChanged()
+            ) { downloads, phoneSongs, playing ->
+                (downloads + phoneSongs).map { if (it.key == playing) AnalysisInput(it.key, Long.MIN_VALUE, it.path) else it }
+            }
+                .distinctUntilChangedBy { list -> list.map { it.key to it.order }.toSet() }
                 .collectLatest { inputs -> songAnalysis.analysePending(inputs) }
         }
     }
@@ -2167,3 +2185,6 @@ data class HomeShelves(
         else -> emptyList()
     }
 }
+
+/** The key song analysis files a song's result under ("serverId_trackId"). */
+private val SubsonicTrack.analysisKey: String get() = "${serverId}_$id"
