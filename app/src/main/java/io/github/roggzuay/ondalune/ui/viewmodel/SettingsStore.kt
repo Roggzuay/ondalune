@@ -122,6 +122,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(autoScrobble = enabled) }
     }
 
+    fun setRescanFoldersOnLaunch(enabled: Boolean) {
+        update { it.copy(rescanFoldersOnLaunch = enabled) }
+    }
+
     fun setAnimatedSquigglyWave(enabled: Boolean) {
         update {
             it.copy(
@@ -211,6 +215,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             songAnalysis = prefs.getBoolean("cfg_song_analysis", defaults.songAnalysis),
             replayGainMode = ReplayGainMode.entries.find { it.name == prefs.getString("cfg_replay_gain", defaults.replayGainMode.name) } ?: defaults.replayGainMode,
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
+            rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
             pauseOnHeadphoneDisconnect = prefs.getBoolean("cfg_pause_noisy", defaults.pauseOnHeadphoneDisconnect),
             animatedSquigglyWave = prefs.getBoolean("cfg_squiggly_wave", defaults.animatedSquigglyWave),
@@ -264,6 +269,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_song_analysis", s.songAnalysis)
             .putString("cfg_replay_gain", s.replayGainMode.name)
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)
+            .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)
             .putBoolean("cfg_pause_noisy", s.pauseOnHeadphoneDisconnect)
             .putBoolean("cfg_squiggly_wave", s.animatedSquigglyWave)

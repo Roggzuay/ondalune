@@ -447,9 +447,7 @@ fun SettingsCustomizationScreen(
     onBack: () -> Unit = {},
     onActivateServer: (SubsonicServerConfig) -> Unit,
     onTestAndSaveServer: (String, String, String, String, Boolean, String, Int, SourceType) -> Unit,
-    phoneMusic: PhoneMusicState = PhoneMusicState(),
-    onSetPhoneMusic: (Boolean) -> Unit = {},
-    onRescanPhoneMusic: () -> Unit = {}
+    musicFolders: MusicFolders = MusicFolders()
 ) {
     val context = LocalContext.current
     var serverName by remember { mutableStateOf("") }
@@ -2022,7 +2020,7 @@ fun SettingsCustomizationScreen(
                         }
                     }
 
-                    PhoneMusicCard(state = phoneMusic, onSetEnabled = onSetPhoneMusic, onRescan = onRescanPhoneMusic)
+                    MusicFoldersCard(musicFolders)
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 

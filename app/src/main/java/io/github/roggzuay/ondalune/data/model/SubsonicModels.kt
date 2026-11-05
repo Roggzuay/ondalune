@@ -756,6 +756,8 @@ data class PlayerCustomizationSettings(
     val songAnalysis: Boolean = false,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,
     val autoScrobble: Boolean = true,
+    /** Look through the picked music folders for changes each time Ondalune opens. */
+    val rescanFoldersOnLaunch: Boolean = true,
     val animatedSquigglyWave: Boolean = true,
     val hapticWobbleButtons: Boolean = true,
     val highRefreshRate120Hz: Boolean = true,

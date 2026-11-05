@@ -118,7 +118,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import kotlin.math.roundToInt
 import androidx.compose.ui.geometry.isUnspecified
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -273,8 +272,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val eqPreset by viewModel.equalizerPreset.collectAsStateWithLifecycle()
     val customEqBands by viewModel.customEqBands.collectAsStateWithLifecycle()
     val customizationSettings by viewModel.customizationSettings.collectAsStateWithLifecycle()
-    val phoneSource by viewModel.phoneSource.collectAsStateWithLifecycle()
-    val isScanningPhone by viewModel.isScanningPhone.collectAsStateWithLifecycle()
+    val localFolders by viewModel.localFolders.collectAsStateWithLifecycle()
+    val folderScan by viewModel.folderScan.collectAsStateWithLifecycle()
 
     val selectedAlbumId by viewModel.selectedAlbumDetailId.collectAsStateWithLifecycle()
     val selectedArtistId by viewModel.selectedArtistDetailId.collectAsStateWithLifecycle()
@@ -925,7 +924,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetGapless = viewModel.settings::setGaplessPlayback,
                                             onSetAutoplay = viewModel.settings::setAutoplaySimilar,
                                             onSetSongAnalysis = viewModel::setSongAnalysis,
-                                            songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + (if (phoneSource != null) allServerTracks.count { it.isOnDevice } else 0)} songs on this phone analysed",
+                                            songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + allServerTracks.count { it.isOnDevice }} songs on this phone analysed",
                                             onSetReplayGain = viewModel.settings::setReplayGainMode,
                                             onSetAutoScrobble = viewModel.settings::setAutoScrobble,
                                             onSetPauseOnHeadphoneDisconnect = viewModel::setPauseOnHeadphoneDisconnect,
@@ -959,13 +958,17 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onBack = { viewModel.selectDestination(PrimaryDestination.HOME) },
                                             onActivateServer = viewModel::activateExistingServer,
                                             onTestAndSaveServer = viewModel::testAndSaveServer,
-                                            phoneMusic = PhoneMusicState(
-                                                enabled = phoneSource != null,
-                                                songCount = remember(allServerTracks) { allServerTracks.count { it.isOnDevice } },
-                                                scanning = isScanningPhone
-                                            ),
-                                            onSetPhoneMusic = viewModel::setPhoneMusicEnabled,
-                                            onRescanPhoneMusic = viewModel::rescanPhoneMusic
+                                            musicFolders = MusicFolders(
+                                                folders = localFolders,
+                                                scan = folderScan,
+                                                rescanOnLaunch = customizationSettings.rescanFoldersOnLaunch,
+                                                onAdd = viewModel::addMusicFolder,
+                                                onRemove = viewModel::removeMusicFolder,
+                                                onRescan = viewModel::rescanMusicFolder,
+                                                onRescanAll = viewModel::rescanAllMusicFolders,
+                                                onCancelScan = viewModel::cancelFolderScan,
+                                                onSetRescanOnLaunch = viewModel::setRescanFoldersOnLaunch
+                                            )
                                         )
                                     }
                                 }
