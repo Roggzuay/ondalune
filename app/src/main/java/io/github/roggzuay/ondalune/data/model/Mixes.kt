@@ -147,3 +147,36 @@ fun autoplayPicks(
         .map { it.first }
     return spreadOut(picks, after = seeds.last()).take(count)
 }
+
+/**
+ * Songs from [library] that sound like the [seeds]: shared genres first, then the same artists and
+ * nearby years. A weighted shuffle, so strong matches lead without the same order every time.
+ */
+fun similarTracks(
+    seeds: List<SubsonicTrack>,
+    library: List<SubsonicTrack>,
+    exclude: Set<String>,
+    count: Int,
+    random: Random = Random(System.nanoTime())
+): List<SubsonicTrack> {
+    val seedGenres = seeds.flatMap { it.genreTokens() }.toSet()
+    val seedArtists = seeds.map { it.artist.lowercase() }.toSet()
+    val seedYear = seeds.map { it.year }.filter { it > 0 }.average().takeIf { !it.isNaN() }
+    val scored = library.asSequence()
+        .filter { it.id !in exclude }
+        .map { t ->
+            val shared = t.genreTokens().count { it in seedGenres }
+            var score = shared * 3.0
+            if (t.artist.lowercase() in seedArtists) score += 2.0
+            if (seedYear != null && t.year > 0 && kotlin.math.abs(t.year - seedYear) <= 5) score += 1.0
+            t to score
+        }
+        .filter { it.second > 0.0 }
+        .toList()
+    // The jitter is drawn once per track; a random sort key breaks the sort contract.
+    return scored.map { (t, score) -> t to score + random.nextDouble() * 2.5 }
+        .sortedByDescending { it.second }
+        .distinctBy { it.first.albumId to it.first.title }
+        .take(count)
+        .map { it.first }
+}

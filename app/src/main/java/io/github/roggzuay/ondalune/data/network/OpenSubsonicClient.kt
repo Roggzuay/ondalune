@@ -1,13 +1,10 @@
 package io.github.roggzuay.ondalune.data.network
 
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
-import io.github.roggzuay.ondalune.data.model.AlbumListType
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricsAvailability
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
-import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
-import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
@@ -28,7 +25,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -909,21 +905,6 @@ class OpenSubsonicClient {
             plainLyrics = "",
             sourceLabel = ""
         )
-    }
-
-    /**
-     * Returns only time-synced lyrics when genuinely available; never fabricates timestamps.
-     */
-    suspend fun fetchSyncedLyrics(
-        server: SubsonicServerConfig,
-        track: SubsonicTrack
-    ): List<LyricLine> {
-        val result = fetchTrackLyrics(server, track)
-        return if (result.availability == LyricsAvailability.SYNCED) {
-            result.syncedLines
-        } else {
-            emptyList()
-        }
     }
 
     /**

@@ -1,5 +1,8 @@
 package io.github.roggzuay.ondalune.widget
 
+import android.graphics.drawable.BitmapDrawable
+import coil.request.ImageRequest
+import coil.imageLoader
 import android.net.wifi.WifiManager
 import android.os.PowerManager
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPaletteCache
@@ -55,9 +58,6 @@ import io.github.roggzuay.ondalune.ui.theme.DynamicSurfacePalette
 import io.github.roggzuay.ondalune.ui.theme.resolveDynamicSurfacePalette
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -485,7 +485,7 @@ object OndaluneMediaBridge {
         lastDurationMs = resolvedDuration
         lastPlaybackSpeed = playbackSpeed.coerceIn(0.5f, 2.5f)
 
-        if (track != null && track.coverArtUrl.startsWith("http", ignoreCase = true)) {
+        if (track != null && (track.coverArtUrl.startsWith("http", ignoreCase = true) || track.coverArtUrl.startsWith("content://"))) {
             prefetchRemoteArtworkIfNeeded(appContext, track.serverId, track.coverArtUrl)
         }
 
@@ -602,6 +602,30 @@ object OndaluneMediaBridge {
         }
         bridgeScope.launch {
             try {
+                // Songs on the phone: the cover is MediaStore's album thumbnail, which the image loader reads.
+                val local = if (url.startsWith("content://")) {
+                    (context.imageLoader.execute(
+                        ImageRequest.Builder(context).data(url).size(720).allowHardware(false).build()
+                    ).drawable as? BitmapDrawable)?.bitmap
+                } else null
+                if (local != null) {
+                    remoteArtworkCache.put(key, squareCover(local, 720))
+                    val current = lastTrack
+                    if (current?.coverArtUrl == url && current.serverId == serverId) {
+                        syncPlaybackAndThemeState(
+                            context = context,
+                            track = current,
+                            isPlaying = lastIsPlaying,
+                            settings = lastSettings,
+                            positionMs = lastPositionMs,
+                            durationMs = lastDurationMs,
+                            playbackSpeed = lastPlaybackSpeed,
+                            isBuffering = lastIsBuffering
+                        )
+                    }
+                    return@launch
+                }
+                if (url.startsWith("content://")) return@launch
                 val req = Request.Builder().url(url).get().build()
                 imageHttpClient.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {

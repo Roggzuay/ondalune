@@ -19,8 +19,22 @@ data class SubsonicServerConfig(
     val isActive: Boolean = false,
     val serverSoftware: String = "OpenSubsonic 1.16.1",
     val extensionsCsv: String = "songLyrics,transcodeOffset,formPost,apiKeyAuthentication",
-    val lastPingMs: Long = 0L
+    val lastPingMs: Long = 0L,
+    /** [SourceType] name: a Subsonic server, or the music stored on this phone. */
+    val sourceType: String = SourceType.SUBSONIC.name
 )
+
+/** Where a library comes from. Stored by name on [SubsonicServerConfig.sourceType]. */
+enum class SourceType { SUBSONIC, LOCAL }
+
+/** The music stored on this phone, rather than a server. */
+val SubsonicServerConfig.isLocalSource: Boolean get() = sourceType == SourceType.LOCAL.name
+
+/** Track ids from this phone's music start with this, so they never clash with a server's ids. */
+const val LOCAL_TRACK_PREFIX = "local:"
+
+/** A song from this phone's own storage (always playable offline, never downloaded). */
+val SubsonicTrack.isOnDevice: Boolean get() = id.startsWith(LOCAL_TRACK_PREFIX)
 
 @Entity(tableName = "subsonic_tracks")
 data class SubsonicTrack(
@@ -668,7 +682,7 @@ data class PlayerCustomizationSettings(
     val gaplessPlayback: Boolean = true,
     /** When the queue runs out, keep playing songs like the last ones (see autoplayPicks). */
     val autoplaySimilar: Boolean = true,
-    /** Optional on-device analysis of downloaded songs (tempo, energy); off until switched on. */
+    /** Optional on-device analysis of songs stored on the phone (tempo, energy); off until switched on. */
     val songAnalysis: Boolean = false,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,
     val autoScrobble: Boolean = true,

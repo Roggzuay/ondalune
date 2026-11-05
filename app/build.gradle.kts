@@ -101,6 +101,9 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  // Exported Room schemas, so migration tests (Robolectric reads the debug assets) can build each old
+  // version of the database. Debug builds only; release builds never carry them.
+  sourceSets { getByName("debug").assets.srcDir("$projectDir/schemas") }
   // No Google-encrypted dependency blob in the APK (F-Droid and IzzyOnDroid require this).
   dependenciesInfo {
     includeInApk = false
@@ -141,6 +144,7 @@ dependencies {
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
+  testImplementation(libs.androidx.room.testing)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)

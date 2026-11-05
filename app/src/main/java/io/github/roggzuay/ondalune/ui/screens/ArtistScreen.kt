@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.isOnDevice
 import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.WindowInsets
@@ -59,12 +60,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -361,14 +362,16 @@ private fun ArtistActions(
                 tint = if (favourite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (actions != null && tracks.isNotEmpty()) {
-            val status = remember(tracks, downloads) { downloadStatusOf(tracks.map { downloads[it.id] }) }
+        // Songs already on the phone (its own music) have nothing to download.
+        val remoteTracks = remember(tracks) { tracks.filterNot { it.isOnDevice } }
+        if (actions != null && remoteTracks.isNotEmpty()) {
+            val status = remember(remoteTracks, downloads) { downloadStatusOf(remoteTracks.map { downloads[it.id] }) }
             DownloadButton(
                 status = status,
-                onDownload = { actions.download(tracks) },
-                onCancel = { actions.cancelDownloads(tracks) },
-                onResume = { actions.resumeDownloads(tracks) },
-                onRemove = { actions.removeDownloads(tracks) }
+                onDownload = { actions.download(remoteTracks) },
+                onCancel = { actions.cancelDownloads(remoteTracks) },
+                onResume = { actions.resumeDownloads(remoteTracks) },
+                onRemove = { actions.removeDownloads(remoteTracks) }
             ) { onClick, content ->
                 IconButton(onClick = onClick, modifier = Modifier.testTag("artist_download")) { content() }
             }

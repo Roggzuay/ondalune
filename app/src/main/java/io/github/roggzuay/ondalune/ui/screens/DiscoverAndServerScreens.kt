@@ -33,20 +33,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
-import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
-import io.github.roggzuay.ondalune.ui.components.MorphShape
-import androidx.compose.material3.MaterialShapes
 import androidx.graphics.shapes.Morph
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,6 +58,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -83,8 +77,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
@@ -98,7 +90,6 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -109,19 +100,16 @@ import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.ui.text.style.TextAlign
 import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -146,7 +134,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
@@ -169,16 +156,13 @@ import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
+import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.WidgetLayoutMode
 import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
-import io.github.roggzuay.ondalune.ui.components.AppIconLauncherManager
-import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
-import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
 import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
-import io.github.roggzuay.ondalune.ui.components.rememberHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.FavouritesFilterTab
 import io.github.roggzuay.ondalune.widget.OndaluneMediaBridge
@@ -210,7 +194,7 @@ enum class SettingsExpandableSection(
     ),
     PLAYBACK_DSP(
         title = "Playback",
-        subtitle = "Speed & pitch, shuffle, refresh rate, haptics",
+        subtitle = "Speed & pitch, shuffle, autoplay, song analysis, refresh rate, haptics",
         icon = Icons.Filled.Tune
     ),
     WIDGET_NOTIFICATION(
@@ -219,8 +203,8 @@ enum class SettingsExpandableSection(
         icon = Icons.Filled.Widgets
     ),
     SERVER_HUB(
-        title = "Servers",
-        subtitle = "Connection, library sync, add a server",
+        title = "Music sources",
+        subtitle = "Servers, music on this phone, library sync",
         icon = Icons.Filled.Dns
     )
 }
@@ -420,7 +404,7 @@ fun SettingsCustomizationScreen(
     onSetGapless: (Boolean) -> Unit,
     onSetAutoplay: (Boolean) -> Unit = {},
     onSetSongAnalysis: (Boolean) -> Unit = {},
-    /** "12 of 40 downloaded songs analysed", while song analysis is on. */
+    /** "12 of 40 songs on this phone analysed", while song analysis is on. */
     songAnalysisStatus: String? = null,
     onSetReplayGain: (ReplayGainMode) -> Unit,
     onSetAutoScrobble: (Boolean) -> Unit,
@@ -455,7 +439,10 @@ fun SettingsCustomizationScreen(
     onClearTempAudioCache: () -> Unit = {},
     onBack: () -> Unit = {},
     onActivateServer: (SubsonicServerConfig) -> Unit,
-    onTestAndSaveServer: (String, String, String, String, Boolean, String, Int) -> Unit
+    onTestAndSaveServer: (String, String, String, String, Boolean, String, Int) -> Unit,
+    phoneMusic: PhoneMusicState = PhoneMusicState(),
+    onSetPhoneMusic: (Boolean) -> Unit = {},
+    onRescanPhoneMusic: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var serverName by remember { mutableStateOf("") }
@@ -1709,7 +1696,7 @@ fun SettingsCustomizationScreen(
 
                     SettingsToggleRow(
                         title = "Song analysis",
-                        subtitle = "Off unless you turn it on. Reads up to 45 seconds of each song you've downloaded, on this phone, to estimate tempo and energy for mood mixes and smoother autoplay. Nothing is uploaded, and turning it off deletes the results.",
+                        subtitle = "Off unless you turn it on. Reads up to 45 seconds of each song stored on this phone (downloads and your own music), on the phone, to estimate tempo and energy for mood mixes and smoother autoplay. Nothing is uploaded, and turning it off deletes the results.",
                         checked = settings.songAnalysis,
                         onCheckedChange = onSetSongAnalysis,
                         testTag = "toggle_song_analysis"
@@ -2026,6 +2013,8 @@ fun SettingsCustomizationScreen(
                             }
                         }
                     }
+
+                    PhoneMusicCard(state = phoneMusic, onSetEnabled = onSetPhoneMusic, onRescan = onRescanPhoneMusic)
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
@@ -3252,7 +3241,8 @@ fun SleepTimerModal(
  */
 @Composable
 fun SonicLabModalOverlay(
-    tracks: List<SubsonicTrack>,
+    moodMixes: List<LibraryMix>,
+    songAnalysisOn: Boolean,
     activePreset: EqualizerPreset,
     customBandsDb: List<Float>,
     activeTranscodeFormat: String = "RAW",
@@ -3260,7 +3250,8 @@ fun SonicLabModalOverlay(
     onUpdateTranscodeProfile: (String, Int) -> Unit = { _, _ -> },
     onSelectPreset: (EqualizerPreset) -> Unit,
     onUpdateBand: (Int, Float) -> Unit,
-    onPlayMoodMix: (List<SubsonicTrack>) -> Unit,
+    onPlayMix: (LibraryMix) -> Unit,
+    onEnableSongAnalysis: () -> Unit,
     onClose: () -> Unit
 ) {
     BackHandler(onBack = onClose)
@@ -3521,67 +3512,81 @@ fun SonicLabModalOverlay(
                 }
 
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "Instant Sonic Mood Mixes",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            SpringPressableSurface(
-                                onClick = {
-                                    onPlayMoodMix(tracks.shuffled())
-                                    onClose()
-                                },
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                cornerRadius = 24.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("mood_mix_kinetic")
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Kinetic Night Drive", style = MaterialTheme.typography.titleMedium)
-                                    Text(
-                                        "High-BPM synthwave & post-rock",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            SpringPressableSurface(
-                                onClick = {
-                                    onPlayMoodMix(tracks.sortedBy { it.bpm })
-                                    onClose()
-                                },
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                cornerRadius = 24.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("mood_mix_botanical")
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Botanical Focus", style = MaterialTheme.typography.titleMedium)
-                                    Text(
-                                        "Warm ambient & nu-jazz grooves",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    MoodMixesPanel(
+                        moodMixes = moodMixes,
+                        songAnalysisOn = songAnalysisOn,
+                        onPlayMix = { onPlayMix(it); onClose() },
+                        onEnableSongAnalysis = onEnableSongAnalysis
+                    )
                 }
 
                 item { Spacer(modifier = Modifier.height(40.dp)) }
             }
         }
+}
+
+/**
+ * Mood mixes made by song analysis (Upbeat, Calm). With analysis off, one card offers to switch it
+ * on; with it on but too few songs analysed yet, a line says the mixes are on their way.
+ */
+@Composable
+private fun MoodMixesPanel(
+    moodMixes: List<LibraryMix>,
+    songAnalysisOn: Boolean,
+    onPlayMix: (LibraryMix) -> Unit,
+    onEnableSongAnalysis: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = "Mood mixes", style = MaterialTheme.typography.titleLarge)
+        when {
+            !songAnalysisOn -> SpringPressableSurface(
+                onClick = onEnableSongAnalysis,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                cornerRadius = 24.dp,
+                modifier = Modifier.fillMaxWidth().testTag("mood_mix_enable_analysis")
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Get mood mixes", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Turn on song analysis to sort the songs on this phone into upbeat and calm. It runs on this phone, and nothing is uploaded.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            moodMixes.isEmpty() -> Text(
+                "Mood mixes appear once enough songs on this phone are analysed. Downloading more songs, or adding the phone's own music, gets them sooner.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            else -> Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                moodMixes.forEachIndexed { i, mix ->
+                    val container = if (i % 2 == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+                    SpringPressableSurface(
+                        onClick = { onPlayMix(mix) },
+                        color = container,
+                        cornerRadius = 24.dp,
+                        modifier = Modifier.weight(1f).testTag("mood_mix_${mix.key.substringAfter(':')}")
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            MixCollage(mix.covers, Modifier.fillMaxWidth().aspectRatio(1f))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(mix.title, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${mix.tracks.size} songs",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
