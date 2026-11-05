@@ -16,11 +16,10 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
-import io.github.roggzuay.ondalune.ui.components.UpdateDialog
+import io.github.roggzuay.ondalune.ui.components.UpdateDetailsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadActivityButton
 import io.github.roggzuay.ondalune.ui.components.DownloadOrder
-import io.github.roggzuay.ondalune.data.network.LATEST_RELEASE_PAGE
 import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
 import io.github.roggzuay.ondalune.data.local.UpdateInstallState
 import io.github.roggzuay.ondalune.BuildConfig
@@ -256,7 +255,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val availableUpdate by viewModel.availableUpdate.collectAsStateWithLifecycle()
     val updateInstall by viewModel.updateInstall.collectAsStateWithLifecycle()
     val updateCheckStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
-    var showUpdateNotes by remember { mutableStateOf(false) }
+    val updateDetailsOpen by viewModel.updateDetailsOpen.collectAsStateWithLifecycle()
+    val updateBannerFolded by viewModel.updateBannerFolded.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
@@ -738,8 +738,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenShelf = viewModel::openHomeShelf,
                                             onPlayTrackFrom = { track, queue -> viewModel.playback.playTrack(track, queue) },
                                             availableUpdate = availableUpdate,
-                                            onViewUpdate = { showUpdateNotes = true },
+                                            onViewUpdate = viewModel::showUpdateDetails,
                                             onLaterUpdate = viewModel::dismissUpdate,
+                                            updateFolded = updateBannerFolded,
                                             showDownloadsHint = showDownloadsHint,
                                             onShowDownloads = {
                                                 viewModel.dismissDownloadsHint()
@@ -953,7 +954,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             availableUpdate = availableUpdate,
                                             updateCheckStatus = updateCheckStatus,
                                             onCheckForUpdatesNow = viewModel::checkForUpdatesNow,
-                                            onViewUpdate = { showUpdateNotes = true },
+                                            onSetUpdateNotifications = viewModel::setUpdateNotifications,
+                                            onSetUpdatePrereleases = viewModel::setUpdatePrereleases,
+                                            onViewUpdate = viewModel::showUpdateDetails,
                                             onRestoreDefaults = viewModel::restoreDefaultCustomizationSettings,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
@@ -1342,20 +1345,18 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     )
                 }
 
-                availableUpdate?.takeIf { showUpdateNotes }?.let { update ->
-                    UpdateDialog(
+                availableUpdate?.takeIf { updateDetailsOpen }?.let { update ->
+                    UpdateDetailsSheet(
                         update,
+                        installedVersion = BuildConfig.VERSION_NAME,
+                        source = viewModel.installSource,
                         install = updateInstall,
-                        inAppInstall = BuildConfig.BUILD_TYPE == "release",
                         onUpdate = viewModel::startUpdate,
                         onAllowInstalls = { runCatching { context.startActivity(AppUpdateInstaller.allowInstallsIntent(context)) } },
                         onInstall = { apk -> runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, apk)) } },
                         onCancel = viewModel::cancelUpdate,
-                        onOpenReleasePage = {
-                            runCatching { uriHandler.openUri(LATEST_RELEASE_PAGE) }
-                            showUpdateNotes = false
-                        },
-                        onDismiss = { showUpdateNotes = false }
+                        onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
+                        onDismiss = viewModel::closeUpdateDetails
                     )
                 }
                 // Downloaded and allowed: open Android's installer, which asks to confirm.

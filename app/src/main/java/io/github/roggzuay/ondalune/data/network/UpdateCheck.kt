@@ -1,8 +1,5 @@
 package io.github.roggzuay.ondalune.data.network
 
-/** GitHub's newest published release (drafts and pre-releases excluded). */
-const val LATEST_RELEASE_API = "https://api.github.com/repos/Roggzuay/ondalune/releases/latest"
-
 /** Where people download it: the release page with the APK and its checksum. */
 const val LATEST_RELEASE_PAGE = "https://github.com/Roggzuay/ondalune/releases/latest"
 
@@ -10,8 +7,15 @@ const val LATEST_RELEASE_PAGE = "https://github.com/Roggzuay/ondalune/releases/l
 fun updateApkUrl(version: String) =
     "https://github.com/Roggzuay/ondalune/releases/download/v$version/Ondalune-$version.apk"
 
-/** A release newer than the installed app, with its notes as plain lines. */
-data class AppUpdate(val version: String, val notes: List<String>)
+/** A release from GitHub, checked before use, with its notes as plain lines. */
+data class AppUpdate(
+    val version: String,
+    val notes: List<String>,
+    /** ISO date ("2026-11-05"), blank when GitHub didn't say. */
+    val publishedOn: String = "",
+    val pageUrl: String = LATEST_RELEASE_PAGE,
+    val prerelease: Boolean = false
+)
 
 /** Result of Settings → Updates → Check now; an available update shows as the update itself. */
 enum class UpdateCheckStatus { IDLE, CHECKING, UP_TO_DATE, FAILED }

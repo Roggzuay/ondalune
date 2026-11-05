@@ -1,26 +1,7 @@
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Properties
 
-/**
- * Minutes since 2026-01-01 UTC at build time. A ValueSource is re-read on every build (a plain
- * System call would be frozen by the configuration cache), so each APK gets a higher
- * versionCode and installs as an update instead of a reinstall.
- */
-abstract class BuildMinute : ValueSource<Int, ValueSourceParameters.None> {
-  override fun obtain(): Int = ((System.currentTimeMillis() / 1000L - 1_767_225_600L) / 60L).toInt()
-}
-
-val buildMinute: Int = providers.of(BuildMinute::class) {}.get()
-val buildStamp: String = Instant.ofEpochSecond(1_767_225_600L + buildMinute * 60L)
-  .atZone(ZoneId.systemDefault())
-  .format(DateTimeFormatter.ofPattern("yyyy.MM.dd.HHmm"))
-
-// Tagged releases pin both values (-Pondalune.versionCode / -Pondalune.versionName) so a rebuild
-// of the same tag, e.g. by F-Droid, produces the same version.
-val pinnedVersionCode: Int? = providers.gradleProperty("ondalune.versionCode").orNull?.toInt()
-val pinnedVersionName: String? = providers.gradleProperty("ondalune.versionName").orNull
+// F-Droid builds pass -Pondalune.selfUpdate=false: no GitHub update check and no APK installer.
+val selfUpdate: Boolean = providers.gradleProperty("ondalune.selfUpdate").orNull?.toBoolean() ?: true
 
 /**
  * Release signing, never committed. Locally it comes from `keystore.properties` in the project
@@ -56,10 +37,12 @@ android {
     applicationId = "io.github.roggzuay.ondalune"
     minSdk = 24
     targetSdk = 36
-    versionCode = pinnedVersionCode ?: buildMinute
-    versionName = pinnedVersionName ?: buildStamp
+    // Bumped in each release commit. F-Droid reads these two lines as written (no Gradle code runs).
+    versionCode = 444250
+    versionName = "1.5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField("boolean", "SELF_UPDATE", selfUpdate.toString())
   }
 
   signingConfigs {
@@ -103,7 +86,10 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
   // Exported Room schemas, so migration tests (Robolectric reads the debug assets) can build each old
   // version of the database. Debug builds only; release builds never carry them.
-  sourceSets { getByName("debug").assets.srcDir("$projectDir/schemas") }
+  sourceSets {
+    getByName("debug").assets.srcDir("$projectDir/schemas")
+    if (!selfUpdate) getByName("release").manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
+  }
   // No Google-encrypted dependency blob in the APK (F-Droid and IzzyOnDroid require this).
   dependenciesInfo {
     includeInApk = false
@@ -116,6 +102,7 @@ ksp {
 }
 
 dependencies {
+  implementation(libs.androidx.work.runtime.ktx)
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)

@@ -233,7 +233,9 @@ class SettingsStore(private val prefs: SharedPreferences) {
             widgetShowArtwork = prefs.getBoolean("cfg_widget_artwork", defaults.widgetShowArtwork),
             widgetShowFavoriteButton = prefs.getBoolean("cfg_widget_fav", defaults.widgetShowFavoriteButton),
             widgetShowLyrics = prefs.getBoolean("cfg_widget_lyrics", defaults.widgetShowLyrics),
-            checkForUpdates = prefs.getBoolean("cfg_check_updates", defaults.checkForUpdates)
+            checkForUpdates = prefs.getBoolean("cfg_check_updates", defaults.checkForUpdates),
+            updateNotifications = prefs.getBoolean("cfg_update_notifications", defaults.updateNotifications),
+            updatePrereleases = prefs.getBoolean("cfg_update_prereleases", defaults.updatePrereleases)
         )
     }
 
@@ -288,6 +290,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_widget_fav", s.widgetShowFavoriteButton)
             .putBoolean("cfg_widget_lyrics", s.widgetShowLyrics)
             .putBoolean("cfg_check_updates", s.checkForUpdates)
+            .putBoolean("cfg_update_notifications", s.updateNotifications)
+            .putBoolean("cfg_update_prereleases", s.updatePrereleases)
             .apply()
     }
 }

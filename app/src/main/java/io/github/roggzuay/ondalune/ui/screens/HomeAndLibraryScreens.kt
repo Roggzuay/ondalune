@@ -154,6 +154,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.filled.Refresh
 import io.github.roggzuay.ondalune.ui.components.DownloadsHint
 import io.github.roggzuay.ondalune.data.model.compactQuality
+import io.github.roggzuay.ondalune.ui.components.UpdateIndicator
 
 /**
  * Home ("Listen Now") Screen with Pull-Down Quick Sync (popping a Material 3 Expressive morphing
@@ -192,6 +193,8 @@ fun ListenNowHomeScreen(
     availableUpdate: AppUpdate? = null,
     onViewUpdate: () -> Unit = {},
     onLaterUpdate: () -> Unit = {},
+    /** "Later" was pressed: the update shows as a small indicator instead of the banner. */
+    updateFolded: Boolean = false,
     showDownloadsHint: Boolean = false,
     onShowDownloads: () -> Unit = {},
     onDismissDownloadsHint: () -> Unit = {},
@@ -325,7 +328,11 @@ fun ListenNowHomeScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
         if (availableUpdate != null) item(key = "update") {
-            UpdateBanner(
+            if (updateFolded) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    UpdateIndicator(availableUpdate, onClick = onViewUpdate)
+                }
+            } else UpdateBanner(
                 availableUpdate,
                 onView = onViewUpdate,
                 onLater = onLaterUpdate,

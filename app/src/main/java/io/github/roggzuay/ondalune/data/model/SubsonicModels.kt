@@ -748,6 +748,10 @@ data class PlayerCustomizationSettings(
     val widgetShowLyrics: Boolean = true,
     /** Once a day, ask GitHub whether a newer release is out and say so on Home. */
     val checkForUpdates: Boolean = true,
+    /** Tell about a new version with an Android notification (once per version). */
+    val updateNotifications: Boolean = true,
+    /** Offer pre-releases too; off: stable releases only. */
+    val updatePrereleases: Boolean = false,
     val crossfadeSeconds: Int = 4,
     val gaplessPlayback: Boolean = true,
     /** When the queue runs out, keep playing songs like the last ones (see autoplayPicks). */

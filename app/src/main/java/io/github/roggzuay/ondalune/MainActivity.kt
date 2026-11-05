@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
     private var preferMaxRefreshRateFlag: Boolean = true
     /** Bumped when the widget's lyric lines are tapped; the shell then opens the player on Lyrics. */
     private val openLyricsRequests = androidx.compose.runtime.mutableIntStateOf(0)
+    // Taps on the "update available" notification.
+    private val showUpdateRequests = androidx.compose.runtime.mutableIntStateOf(0)
     private var displayManager: DisplayManager? = null
 
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -149,6 +151,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val updateRequest = showUpdateRequests.intValue
+            LaunchedEffect(updateRequest) {
+                if (updateRequest > 0) ondaluneViewModel.showUpdateDetails()
+            }
+
             OndaluneMainShell(viewModel = ondaluneViewModel)
         }
     }
@@ -159,6 +166,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeOpenLyrics(intent: Intent?) {
+        if (intent?.getBooleanExtra(io.github.roggzuay.ondalune.data.update.UpdateNotifier.EXTRA_SHOW_UPDATE, false) == true) {
+            intent.removeExtra(io.github.roggzuay.ondalune.data.update.UpdateNotifier.EXTRA_SHOW_UPDATE)
+            showUpdateRequests.intValue++
+        }
         if (intent?.getBooleanExtra(io.github.roggzuay.ondalune.widget.OndaluneMediaBridge.EXTRA_OPEN_LYRICS, false) == true) {
             intent.removeExtra(io.github.roggzuay.ondalune.widget.OndaluneMediaBridge.EXTRA_OPEN_LYRICS)
             openLyricsRequests.intValue++
