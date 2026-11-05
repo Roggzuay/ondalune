@@ -1960,8 +1960,13 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun addTracksToPlaylist(list: List<SubsonicTrack>, playlist: SubsonicPlaylist) {
         viewModelScope.launch {
-            repository.addTracksToPlaylist(playlist, list.map { it.id })
-            _statusBanner.value = if (list.size == 1) "Added \"${list.first().title}\" to ${playlist.name}" else "Added ${list.size} tracks to ${playlist.name}"
+            _statusBanner.value = when {
+                !repository.addTracksToPlaylist(playlist, list.map { it.id }) ->
+                    if (list.any { it.isOnDevice }) "Songs on this phone can't go in a server playlist"
+                    else "${activeServer().name} didn't let Ondalune change \"${playlist.name}\""
+                list.size == 1 -> "Added \"${list.first().title}\" to ${playlist.name}"
+                else -> "Added ${list.size} tracks to ${playlist.name}"
+            }
         }
     }
 
@@ -1980,8 +1985,27 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun deletePlaylist(playlistId: String) {
+        val playlist = playlists.value.find { it.id == playlistId } ?: return
         viewModelScope.launch {
-            repository.deletePlaylist(playlistId)
+            if (!repository.deletePlaylist(playlist)) {
+                _statusBanner.value = "${activeServer().name} didn't let Ondalune delete \"${playlist.name}\""
+            }
+        }
+    }
+
+    private val _isRefreshingPlaylists = MutableStateFlow(false)
+    val isRefreshingPlaylists: StateFlow<Boolean> = _isRefreshingPlaylists.asStateFlow()
+
+    /** Reads the server's playlists again; the saved ones stay when it can't be reached. */
+    fun refreshServerPlaylists() {
+        val server = activeServer()
+        if (server.isDemoServer || _isRefreshingPlaylists.value) return
+        viewModelScope.launch {
+            _isRefreshingPlaylists.value = true
+            if (!repository.syncServerPlaylists(server)) {
+                _statusBanner.value = "Couldn't reach ${server.name}; showing the playlists saved on this phone"
+            }
+            _isRefreshingPlaylists.value = false
         }
     }
 

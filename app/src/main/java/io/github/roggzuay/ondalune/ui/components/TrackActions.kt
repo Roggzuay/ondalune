@@ -216,7 +216,8 @@ fun TrackOptionsSheet(
             AnimatedVisibility(visible = showPlaylists) {
                 Column(modifier = Modifier.padding(start = 24.dp)) {
                     SheetItem(Icons.Filled.Add, "New playlist…", "option_new_playlist") { newPlaylistDialog = true }
-                    actions.playlists.forEach { playlist ->
+                    // Playlists shared with you by others are read-only.
+                    actions.playlists.filterNot { it.readOnly }.forEach { playlist ->
                         SheetItem(Icons.AutoMirrored.Filled.QueueMusic, playlist.name, "option_playlist_${playlist.id}") {
                             run { actions.addToPlaylist(tracks, playlist) }
                         }

@@ -3,6 +3,7 @@ package io.github.roggzuay.ondalune.data.source
 import android.content.Context
 import io.github.roggzuay.ondalune.BuildConfig
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
+import io.github.roggzuay.ondalune.data.model.RemotePlaylist
 import io.github.roggzuay.ondalune.data.model.SourceType
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
@@ -44,6 +45,18 @@ interface MusicSource {
 
     /** An artist's photo, biography and similar artists, when the source knows them. */
     suspend fun artistInfo(server: SubsonicServerConfig, artistId: String): RemoteArtistMeta? = null
+
+    /** The server's playlists; null when it can't say (offline, refused, or no playlists here). */
+    suspend fun playlists(server: SubsonicServerConfig): List<RemotePlaylist>? = null
+
+    /** A server playlist's songs in order; null when they couldn't be read. */
+    suspend fun playlistSongs(server: SubsonicServerConfig, playlistId: String): List<SubsonicTrack>? = null
+
+    /** Adds songs to a server playlist the user owns; false when the server refused. */
+    suspend fun addToPlaylist(server: SubsonicServerConfig, playlistId: String, trackIds: List<String>): Boolean = false
+
+    /** Deletes a server playlist the user owns; false when the server refused. */
+    suspend fun deletePlaylist(server: SubsonicServerConfig, playlistId: String): Boolean = false
 }
 
 /** A Navidrome or other OpenSubsonic server. */
@@ -75,6 +88,17 @@ class OpenSubsonicSource(private val client: OpenSubsonicClient) : MusicSource {
     }
 
     override suspend fun artistInfo(server: SubsonicServerConfig, artistId: String) = client.fetchArtistInfo2(server, artistId)
+
+    override suspend fun playlists(server: SubsonicServerConfig) = client.fetchPlaylists(server)
+
+    override suspend fun playlistSongs(server: SubsonicServerConfig, playlistId: String) =
+        client.fetchPlaylistSongs(server, playlistId)
+
+    override suspend fun addToPlaylist(server: SubsonicServerConfig, playlistId: String, trackIds: List<String>) =
+        client.addToRemotePlaylist(server, playlistId, trackIds)
+
+    override suspend fun deletePlaylist(server: SubsonicServerConfig, playlistId: String) =
+        client.deleteRemotePlaylist(server, playlistId)
 }
 
 /** A Jellyfin server. Jellyfin has hearts but no star ratings, so ratings stay in the app. */
