@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Your server's playlists:** Navidrome and other OpenSubsonic playlists appear in Playlists, marked as the server's, with their songs and covers, and refresh with the library or the refresh button. Your own server playlists can be added to and deleted from Ondalune; playlists shared with you are read-only. Playlists made in Ondalune stay separate.
+- **Music folders on this phone:** pick the folders your music is in (Settings → Music sources); only those are read, with no storage permission. Add, remove and rescan them, and Ondalune looks for changes when it opens. Ringtones, recordings and other sounds stay out.
+- **Your Mix, freshly dealt:** every play draws a new mix from your whole library, favouring what you love without one artist taking over. A **New mix** button sits under it.
+- **Ratings are gone:** the stars are removed from the player and lists, and no longer weigh on Your Mix or Smart Shuffle. Hearts remain.
+- **Real tempo only:** the speed controls show a song's tempo only when it's known (its tag or a confident song analysis), and show when it's being analysed.
+- **Audio quality under the cover:** the file's format, what actually plays, how it goes out and what changes the sound, without claims the app can't back up.
+- **Downloads are easy to find:** a one-time hint after your first download, and the **Downloaded** filter says what plays offline, including partly downloaded albums.
+- **Update notices:** a background check once a day, a quiet notification once per version, and an indicator on Home until you update. Updates follow how Ondalune was installed.
+- **Fixes & improvements:**
+  - Songs no longer show made-up details when the server leaves them out (format, bit depth, tempo, year).
+  - "Bit-perfect" labels removed: Ondalune's engine outputs 16-bit PCM.
+
 ## 1.5.0 (2026-11-05)
 
 - **Music on this phone:** turn it on in Settings → Music sources and the songs stored on your phone join your library: Home, mixes, search and the queue. They play offline, show their embedded covers, read lyrics from a matching `.lrc` file, and update when you add or delete files.

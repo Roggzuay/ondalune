@@ -1,0 +1,50 @@
+# Scans the whole git history for secrets on every push and pull request, with a pinned,
+# checksum-verified Gitleaks release (no third-party action).
+name: Secret scan
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # SHA-256 of gitleaks_8.30.1_linux_x64.tar.gz, from the release's
+      # checksums.txt and the GitHub asset digest (both matched on 2026-11-05).
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # full history and tags, so every commit gets scanned
+
+      - name: Install Gitleaks (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          cd "$RUNNER_TEMP/gitleaks"
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+          echo "$RUNNER_TEMP/gitleaks" >> "$GITHUB_PATH"
+
+      # The repo is small (under a second for all history), so scan every
+      # fetched commit on every run instead of working out commit ranges.
+      - name: Scan git history
+        run: |
+          gitleaks git . --log-opts="--all" --redact --verbose --no-banner \
+            --report-format sarif --report-path gitleaks.sarif
+
+      - name: Keep the report when the scan fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          if-no-files-found: ignore
