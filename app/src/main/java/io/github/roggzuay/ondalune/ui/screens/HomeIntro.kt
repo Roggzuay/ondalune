@@ -41,11 +41,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -86,7 +86,7 @@ fun HomeIntro(
         ),
         IntroPage(
             "Optional song analysis",
-            "Let Ondalune listen to a short part of each song you've downloaded, on this phone, to tell calm songs from lively ones for mood mixes and autoplay. It stays off until you choose, nothing is uploaded, and turning it off deletes what it learned."
+            "Let Ondalune listen to a short part of each song stored on this phone, on the phone itself, to tell calm songs from lively ones for mood mixes and autoplay. It stays off until you choose, nothing is uploaded, and turning it off deletes what it learned."
         )
     )
     var page by rememberSaveable { mutableIntStateOf(0) }
@@ -147,7 +147,7 @@ fun HomeIntro(
                     )
                     if (index >= 2) {
                         val (label, checked, onChange) = if (index == 2) Triple("Autoplay similar songs", autoplay, onAutoplayChange)
-                        else Triple("Analyse downloaded songs", songAnalysis, onSongAnalysisChange)
+                        else Triple("Analyse songs on this phone", songAnalysis, onSongAnalysisChange)
                         Spacer(Modifier.height(24.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

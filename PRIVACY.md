@@ -17,7 +17,7 @@ Ondalune only connects to:
 | Where | When | What is sent |
 |---|---|---|
 | The music servers you add | While you browse, play, download or sync | Your username and an authentication token or password, and standard Subsonic API requests (for example, which song to stream or scrobble) |
-| `en.wikipedia.org` | When an artist page has no biography from your server | The artist's name |
+| `en.wikipedia.org` | When an artist page has no biography from your server (or, for music on your phone, no biography yet) | The artist's name |
 | `api.github.com` | At most once a day, to check for a newer Ondalune, and when you tap **Check now**. Turn the daily check off in **Settings → Updates → Check automatically** | A standard request for the latest release. Like any website, GitHub sees your IP address |
 | `github.com` (release downloads) | Only when you tap **Update** in the update notice | A standard download of the new version's APK |
 | `ko-fi.com` | Only if you tap **Buy me a coffee** | Nothing beyond opening the page in your browser |
@@ -28,8 +28,13 @@ Ondalune only connects to:
 - **Server details.** Passwords are encrypted with a key held in Android's Keystore, which never
   leaves the device.
 - **Your library cache, settings, queue, and downloaded songs.**
+- **Music on this phone, only if you turn it on** (Settings → Music sources → Music on this phone).
+  With the "Music and audio" permission, Ondalune reads Android's list of the audio files on your
+  phone (titles, artists, albums, covers) and plays them from where they are. It doesn't copy,
+  change or upload them. Turning the setting off removes them from Ondalune's library; the files
+  stay on your phone.
 - **Song analysis, only if you turn it on** (Settings → Playback → Song analysis). Ondalune reads up
-  to 45 seconds of songs you have downloaded and keeps an estimate of their tempo, energy, brightness
+  to 45 seconds of songs stored on your phone (your downloads, and your own music when that is on) and keeps an estimate of their tempo, energy, brightness
   and beat strength in its private storage. The audio never leaves the phone, and turning the setting
   off deletes the results.
 

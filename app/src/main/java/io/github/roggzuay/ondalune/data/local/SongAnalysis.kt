@@ -23,10 +23,17 @@ import java.nio.ByteOrder
 
 /**
  * Optional on-device song analysis (off by default). It reads up to 45 seconds from the middle of
- * songs already downloaded to the phone and estimates tempo, energy, brightness and how steady the
+ * songs stored on the phone (downloads and the phone's own music) and estimates tempo, energy, brightness and how steady the
  * beat is ([analyseSamples]). Nothing is streamed for it and nothing leaves the phone: results are
  * kept in one file in the app's private storage, removed by [clear] when the feature is switched off.
  */
+/** One song to analyse: its result key ("serverId_trackId"), its place in line, and where its file is. */
+class AnalysisInput(val key: String, val order: Long, val path: suspend () -> String?)
+
+/** Analysis inputs for completed downloads. */
+fun Collection<SubsonicDownloadEntity>.analysisInputs(): List<AnalysisInput> =
+    filter { it.isCompleted }.map { d -> AnalysisInput(d.downloadKey, d.updatedAtMs) { d.localFilePath } }
+
 class SongAnalysis(private val context: Context) {
     private val file = File(context.filesDir, "song_analysis_v1.json")
     private val _features = MutableStateFlow<Map<String, SongFeatures>>(emptyMap())
@@ -49,19 +56,19 @@ class SongAnalysis(private val context: Context) {
         }.toMap()
     }
 
-    /** Analyses the completed downloads that have no result yet, oldest first; returns how many it added. */
-    suspend fun analysePending(downloads: Collection<SubsonicDownloadEntity>): Int = withContext(worker) {
-        val pending = downloads.filter { it.isCompleted && it.downloadKey !in _features.value }.sortedBy { it.updatedAtMs }
+    /** Analyses the songs that have no result yet, in [AnalysisInput.order]; returns how many it added. */
+    suspend fun analysePending(inputs: Collection<AnalysisInput>): Int = withContext(worker) {
+        val pending = inputs.filter { it.key !in _features.value }.sortedBy { it.order }
         var added = 0
         val previousPriority = Process.getThreadPriority(Process.myTid())
         Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
         try {
-            for (download in pending) {
+            for (input in pending) {
                 currentCoroutineContext().ensureActive()
-                val audio = File(download.localFilePath).takeIf { it.exists() } ?: continue
+                val audio = input.path()?.let(::File)?.takeIf { it.exists() } ?: continue
                 val excerpt = runCatching { decodeExcerpt(audio) }.getOrNull() ?: continue
                 val result = analyseSamples(excerpt.first, excerpt.second) ?: continue
-                _features.value = _features.value + (download.downloadKey to result)
+                _features.value = _features.value + (input.key to result)
                 added++
                 if (added % 10 == 0) save()
             }

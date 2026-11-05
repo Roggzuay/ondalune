@@ -10,9 +10,8 @@ import io.github.roggzuay.ondalune.data.model.ReverbState
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
 import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.ui.components.computeArtistMonogram
-import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
+import io.github.roggzuay.ondalune.ui.viewmodel.LibraryQueries
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -67,27 +66,27 @@ class ExampleUnitTest {
         val albums = DemoSubsonicCatalog.deriveAlbumsFromTracks(tracks)
         val artists = DemoSubsonicCatalog.deriveArtistsFromTracks(tracks)
 
-        val albumsAsc = OndaluneViewModel.sortAlbums(
+        val albumsAsc = LibraryQueries.sortAlbums(
             albums,
             TabDisplayPreference(sortOption = LibrarySortOption.NAME_ASC, ascending = true)
         )
-        val albumsDesc = OndaluneViewModel.sortAlbums(
+        val albumsDesc = LibraryQueries.sortAlbums(
             albums,
             TabDisplayPreference(sortOption = LibrarySortOption.NAME_ASC, ascending = false)
         )
         assertEquals(albumsAsc.first().id, albumsDesc.last().id)
 
-        val artistsByTrackCount = OndaluneViewModel.sortArtists(
+        val artistsByTrackCount = LibraryQueries.sortArtists(
             artists,
             TabDisplayPreference(sortOption = LibrarySortOption.TRACK_COUNT, ascending = false)
         )
         assertTrue(artistsByTrackCount.first().trackCount >= artistsByTrackCount.last().trackCount)
 
-        val tracksByDurationAsc = OndaluneViewModel.sortTracks(
+        val tracksByDurationAsc = LibraryQueries.sortTracks(
             tracks,
             TabDisplayPreference(sortOption = LibrarySortOption.DURATION, ascending = true)
         )
-        val tracksByDurationDesc = OndaluneViewModel.sortTracks(
+        val tracksByDurationDesc = LibraryQueries.sortTracks(
             tracks,
             TabDisplayPreference(sortOption = LibrarySortOption.DURATION, ascending = false)
         )
@@ -112,18 +111,18 @@ class ExampleUnitTest {
         val albums = DemoSubsonicCatalog.deriveAlbumsFromTracks(tracks)
         val artists = DemoSubsonicCatalog.deriveArtistsFromTracks(tracks)
 
-        val matchedTracks = OndaluneViewModel.searchTracks(tracks, "Chrominance")
+        val matchedTracks = LibraryQueries.searchTracks(tracks, "Chrominance")
         assertTrue("Expected Chrominance query to find matching tracks", matchedTracks.isNotEmpty())
 
         // Typo-tolerant 1-edit-distance match ("Chrominancx" -> "Chrominance")
-        val fuzzyTracks = OndaluneViewModel.searchTracks(tracks, "Chrominancx")
+        val fuzzyTracks = LibraryQueries.searchTracks(tracks, "Chrominancx")
         assertTrue("Expected 1-edit typo query 'Chrominancx' to match 'Chrominance'", fuzzyTracks.isNotEmpty())
 
         // Non-existent query returns empty results across all categories
         val missingQuery = "zzzz_nonexistent_library_item_9999"
-        assertTrue(OndaluneViewModel.searchTracks(tracks, missingQuery).isEmpty())
-        assertTrue(OndaluneViewModel.searchAlbums(albums, missingQuery).isEmpty())
-        assertTrue(OndaluneViewModel.searchArtists(artists, missingQuery).isEmpty())
+        assertTrue(LibraryQueries.searchTracks(tracks, missingQuery).isEmpty())
+        assertTrue(LibraryQueries.searchAlbums(albums, missingQuery).isEmpty())
+        assertTrue(LibraryQueries.searchArtists(artists, missingQuery).isEmpty())
 
         // Theme animation labels do not mention official third-party app names
         assertEquals("Velvet Mesh", PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN.label)

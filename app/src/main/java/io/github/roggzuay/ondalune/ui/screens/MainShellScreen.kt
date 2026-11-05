@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.isOnDevice
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.runtime.withFrameNanos
@@ -38,7 +39,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.ContentTransform
-import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.LocalArtworkPalette
 import io.github.roggzuay.ondalune.ui.theme.rememberArtworkPalette
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPaletteCache
@@ -70,9 +70,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,47 +85,38 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.outlined.QueueMusic
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import kotlin.math.roundToInt
 import androidx.compose.ui.geometry.isUnspecified
@@ -139,20 +127,17 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.ui.components.PullSyncIndicator
-import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
 import io.github.roggzuay.ondalune.ui.components.ExpressiveNavItem
 import io.github.roggzuay.ondalune.ui.components.ExpressiveNavigationDock
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
@@ -171,8 +156,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.sin
 
 /**
  * Process-scoped tracker ensuring the Ondalune Animated Launch Intro runs at most once per cold
@@ -227,8 +210,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val favouritesFilterTab by viewModel.favouritesFilterTab.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
-    val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
-    val playbackQueue by viewModel.playbackQueue.collectAsStateWithLifecycle()
+    val currentTrack by viewModel.playback.currentTrack.collectAsStateWithLifecycle()
+    val playbackQueue by viewModel.playback.playbackQueue.collectAsStateWithLifecycle()
     val currentLyrics by viewModel.currentLyrics.collectAsStateWithLifecycle()
     val currentLyricsResult by viewModel.currentLyricsResult.collectAsStateWithLifecycle()
 
@@ -241,7 +224,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val speedPitchState by viewModel.speedPitchState.collectAsStateWithLifecycle()
     val reverbState by viewModel.reverbState.collectAsStateWithLifecycle()
-    val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
+    val sleepTimerState by viewModel.playback.sleepTimerState.collectAsStateWithLifecycle()
     val tabDisplayPreferences by viewModel.tabDisplayPreferences.collectAsStateWithLifecycle()
 
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
@@ -272,13 +255,15 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val nowPlayingTab by viewModel.nowPlayingTab.collectAsStateWithLifecycle()
     val artworkShapeMode by viewModel.artworkShapeMode.collectAsStateWithLifecycle()
-    val shuffleMode by viewModel.shuffleMode.collectAsStateWithLifecycle()
-    val shuffleEnabled by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
-    val repeatOneEnabled by viewModel.repeatOneEnabled.collectAsStateWithLifecycle()
+    val shuffleMode by viewModel.playback.shuffleMode.collectAsStateWithLifecycle()
+    val shuffleEnabled by viewModel.playback.shuffleEnabled.collectAsStateWithLifecycle()
+    val repeatOneEnabled by viewModel.playback.repeatOneEnabled.collectAsStateWithLifecycle()
 
     val eqPreset by viewModel.equalizerPreset.collectAsStateWithLifecycle()
     val customEqBands by viewModel.customEqBands.collectAsStateWithLifecycle()
     val customizationSettings by viewModel.customizationSettings.collectAsStateWithLifecycle()
+    val phoneSource by viewModel.phoneSource.collectAsStateWithLifecycle()
+    val isScanningPhone by viewModel.isScanningPhone.collectAsStateWithLifecycle()
 
     val selectedAlbumId by viewModel.selectedAlbumDetailId.collectAsStateWithLifecycle()
     val selectedArtistId by viewModel.selectedArtistDetailId.collectAsStateWithLifecycle()
@@ -333,8 +318,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val trackActions = remember(viewModel) {
         object : TrackActions {
             override val playlists get() = currentPlaylists
-            override fun playNext(tracks: List<SubsonicTrack>) = viewModel.playTracksNext(tracks)
-            override fun addToQueue(tracks: List<SubsonicTrack>) = viewModel.addTracksToQueue(tracks)
+            override fun playNext(tracks: List<SubsonicTrack>) = viewModel.playback.playTracksNext(tracks)
+            override fun addToQueue(tracks: List<SubsonicTrack>) = viewModel.playback.addTracksToQueue(tracks)
             override fun toggleFavourite(track: SubsonicTrack) = viewModel.toggleStarTrack(track)
             override fun setFavourite(tracks: List<SubsonicTrack>, favourite: Boolean) = viewModel.setTracksFavourite(tracks, favourite)
             override fun download(tracks: List<SubsonicTrack>) = viewModel.downloadTracks(tracks)
@@ -589,9 +574,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             positionMs = positionMs,
                                             durationMs = durationMs,
                                             unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
-                                            onTogglePlay = viewModel::togglePlayPause,
-                                            onSkipNext = viewModel::skipNext,
-                                            onSkipPrevious = { viewModel.skipPrevious(restartIfPlayed = false) },
+                                            onTogglePlay = viewModel.playback::togglePlayPause,
+                                            onSkipNext = viewModel.playback::skipNext,
+                                            onSkipPrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
                                             onExpand = { viewModel.setPlayerExpanded(true) }
                                         )
                                     }
@@ -690,14 +675,14 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         selectedFolderPath = selectedFolderPath,
                                         onUpdateQuery = viewModel::updateSearchQuery,
                                         onClearSearch = { viewModel.updateSearchQuery("") },
-                                        onPlayTrack = { track, queueCtx -> viewModel.playTrack(track, queueCtx) },
+                                        onPlayTrack = { track, queueCtx -> viewModel.playback.playTrack(track, queueCtx) },
                                         onToggleStarTrack = viewModel::toggleStarTrack,
                                         onOpenAlbum = viewModel::openAlbumDetail,
-                                        onPlayAlbum = viewModel::playAlbum,
+                                        onPlayAlbum = viewModel.playback::playAlbum,
                                         onOpenArtist = viewModel::openArtistDetail,
                                         onOpenGenre = viewModel::openGenreDetail,
                                         onOpenFolder = viewModel::openFolderDetail,
-                                        onPlayPlaylist = viewModel::playPlaylist
+                                        onPlayPlaylist = viewModel.playback::playPlaylist
                                     )
                                 } else when (destination) {
                                     PrimaryDestination.HOME -> {
@@ -717,8 +702,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCloseAlbumDetail = {
                                                 viewModel.openAlbumDetail(null)
                                             },
-                                            onPlayAlbum = viewModel::playAlbum,
-                                            onPlayTrack = { track -> viewModel.playTrack(track, tracks) },
+                                            onPlayAlbum = viewModel.playback::playAlbum,
+                                            onPlayTrack = { track -> viewModel.playback.playTrack(track, tracks) },
                                             onToggleStarTrack = viewModel::toggleStarTrack,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onStartSmartShuffle = viewModel::playYourMix,
@@ -727,15 +712,15 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                                 viewModel.setPlayerExpanded(true)
                                             },
                                             homeSections = customizationSettings.homeSections,
-                                            onSetHomeSections = viewModel::setHomeSections,
-                                            onResetHomeSections = viewModel::resetHomeSections,
+                                            onSetHomeSections = viewModel.settings::setHomeSections,
+                                            onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onPullProgressChange = { homePullProgress = it },
                                             onQuickSync = viewModel::triggerQuickSync,
                                             shelves = homeShelves,
                                             scrollToTopSignal = scrollToTopSignal,
                                             openShelf = openHomeShelf,
                                             onOpenShelf = viewModel::openHomeShelf,
-                                            onPlayTrackFrom = { track, queue -> viewModel.playTrack(track, queue) },
+                                            onPlayTrackFrom = { track, queue -> viewModel.playback.playTrack(track, queue) },
                                             availableUpdate = availableUpdate,
                                             onViewUpdate = { showUpdateNotes = true },
                                             onLaterUpdate = viewModel::dismissUpdate,
@@ -774,18 +759,18 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenArtist = viewModel::openArtistDetail,
                                             onOpenGenre = viewModel::openGenreDetail,
                                             onOpenFolder = viewModel::openFolderDetail,
-                                            onPlayAlbum = viewModel::playAlbum,
-                                            onPlayTrack = viewModel::playTrack,
+                                            onPlayAlbum = viewModel.playback::playAlbum,
+                                            onPlayTrack = viewModel.playback::playTrack,
                                             onToggleStarTrack = viewModel::toggleStarTrack,
-                                            onPlayPlaylist = viewModel::playPlaylist,
+                                            onPlayPlaylist = viewModel.playback::playPlaylist,
                                             onCreatePlaylist = viewModel::createPlaylist,
                                             onDeletePlaylist = viewModel::deletePlaylist,
                                             downloadsMap = downloadsMap,
                                             onDownloadTrack = viewModel::downloadTrackForOffline,
                                             onDownloadAlbum = viewModel::downloadAlbumForOffline,
                                             onRemoveDownload = viewModel::removeOfflineDownload,
-                                            onPlayTrackNext = viewModel::playTrackNext,
-                                            onAddTrackToQueue = viewModel::addTrackToQueue
+                                            onPlayTrackNext = viewModel.playback::playTrackNext,
+                                            onAddTrackToQueue = viewModel.playback::addTrackToQueue
                                         )
                                     }
 
@@ -820,18 +805,18 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenArtist = viewModel::openArtistDetail,
                                             onOpenGenre = viewModel::openGenreDetail,
                                             onOpenFolder = viewModel::openFolderDetail,
-                                            onPlayAlbum = viewModel::playAlbum,
-                                            onPlayTrack = viewModel::playTrack,
+                                            onPlayAlbum = viewModel.playback::playAlbum,
+                                            onPlayTrack = viewModel.playback::playTrack,
                                             onToggleStarTrack = viewModel::toggleStarTrack,
-                                            onPlayPlaylist = viewModel::playPlaylist,
+                                            onPlayPlaylist = viewModel.playback::playPlaylist,
                                             onCreatePlaylist = viewModel::createPlaylist,
                                             onDeletePlaylist = viewModel::deletePlaylist,
                                             downloadsMap = downloadsMap,
                                             onDownloadTrack = viewModel::downloadTrackForOffline,
                                             onDownloadAlbum = viewModel::downloadAlbumForOffline,
                                             onRemoveDownload = viewModel::removeOfflineDownload,
-                                            onPlayTrackNext = viewModel::playTrackNext,
-                                            onAddTrackToQueue = viewModel::addTrackToQueue
+                                            onPlayTrackNext = viewModel.playback::playTrackNext,
+                                            onAddTrackToQueue = viewModel.playback::addTrackToQueue
                                         )
                                     }
 
@@ -841,7 +826,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             tracks = tracks,
                                             currentTrackId = currentTrack?.id,
                                             isPlaying = isPlaying,
-                                            onPlayPlaylist = viewModel::playPlaylist,
+                                            onPlayPlaylist = viewModel.playback::playPlaylist,
                                             onCreatePlaylist = viewModel::createPlaylist,
                                             onDeletePlaylist = viewModel::deletePlaylist,
                                             onToggleStarTrack = viewModel::toggleStarTrack,
@@ -862,7 +847,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             isPlaying = isPlaying,
                                             selectedAlbumId = selectedAlbumId,
                                             onSelectFilter = viewModel::selectFavouritesFilterTab,
-                                            onPlayTrack = { trk, ctx -> viewModel.playTrack(trk, ctx) },
+                                            onPlayTrack = { trk, ctx -> viewModel.playback.playTrack(trk, ctx) },
                                             onToggleStarTrack = viewModel::toggleStarTrack,
                                             onOpenAlbum = { albumId ->
                                                 viewModel.openAlbumDetail(albumId)
@@ -870,9 +855,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCloseAlbumDetail = {
                                                 viewModel.openAlbumDetail(null)
                                             },
-                                            onPlayAlbum = viewModel::playAlbum,
+                                            onPlayAlbum = viewModel.playback::playAlbum,
                                             onSmartShuffleTracks = { favTracks ->
-                                                viewModel.startSmartShuffleSession(favTracks)
+                                                viewModel.playback.startSmartShuffleSession(favTracks)
                                             },
                                             viewMode = tabDisplayPreferences["FAVOURITES"]?.viewMode ?: LibraryViewMode.LIST,
                                             onSetViewMode = { viewModel.setCategoryViewMode("FAVOURITES", it) },
@@ -894,47 +879,47 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             isSyncing = isSyncing,
                                             onSetAppIconVariant = viewModel::setAppIconVariant,
                                             onOpenAppIconSettings = { viewModel.setAppIconSettingsOpen(true) },
-                                            onSetDockStyle = viewModel::setDockStyle,
-                                            onSetHideMiniPlayerOnScroll = viewModel::setHideMiniPlayerOnScroll,
+                                            onSetDockStyle = viewModel.settings::setDockStyle,
+                                            onSetHideMiniPlayerOnScroll = viewModel.settings::setHideMiniPlayerOnScroll,
                                             onSetThemeMode = viewModel::setThemeMode,
-                                            onSetUseMaterialYou = viewModel::setUseMaterialYouDynamicColor,
-                                            onSetHarmonizeArtwork = viewModel::setHarmonizePlayerWithArtwork,
+                                            onSetUseMaterialYou = viewModel.settings::setUseMaterialYouDynamicColor,
+                                            onSetHarmonizeArtwork = viewModel.settings::setHarmonizePlayerWithArtwork,
                                             onSetUnifiedMaterialYouColor = viewModel::setUnifiedMaterialYouColor,
                                             onSetCuratedPalette = viewModel::setCuratedColorPalette,
-                                            onSetCornerStylePreset = viewModel::setCornerStylePreset,
+                                            onSetCornerStylePreset = viewModel.settings::setCornerStylePreset,
                                             onSetInterfaceStyle = viewModel::setInterfaceStyle,
-                                            onSetHeaderFont = viewModel::setHeaderFont,
-                                            onSetBodyFont = viewModel::setBodyFont,
-                                            onSetArtworkCut = viewModel::setArtworkCut,
-                                            onSetHomeSections = viewModel::setHomeSections,
-                                            onResetHomeSections = viewModel::resetHomeSections,
+                                            onSetHeaderFont = viewModel.settings::setHeaderFont,
+                                            onSetBodyFont = viewModel.settings::setBodyFont,
+                                            onSetArtworkCut = viewModel.settings::setArtworkCut,
+                                            onSetHomeSections = viewModel.settings::setHomeSections,
+                                            onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onSetPlayerBackgroundStyle = viewModel::setPlayerBackgroundStyle,
                                             onSetArtworkShape = viewModel::setArtworkShapeMode,
-                                            onSetAnimatedSquiggly = viewModel::setAnimatedSquigglyWave,
-                                            onSetHapticFeedback = viewModel::setHapticFeedbackEnabled,
+                                            onSetAnimatedSquiggly = viewModel.settings::setAnimatedSquigglyWave,
+                                            onSetHapticFeedback = viewModel.settings::setHapticFeedbackEnabled,
                                             onSetHighRefreshRate120Hz = viewModel::setHighRefreshRate120Hz,
                                             shuffleMode = shuffleMode,
-                                            onSetShuffleMode = viewModel::setShuffleMode,
+                                            onSetShuffleMode = viewModel.playback::setShuffleMode,
                                             onSetSmartShuffleProfile = viewModel::setSmartShuffleProfile,
                                             onSelectReverbPreset = viewModel::selectReverbPreset,
-                                            onSetCrossfadeSeconds = viewModel::setCrossfadeSeconds,
-                                            onSetGapless = viewModel::setGaplessPlayback,
-                                            onSetAutoplay = viewModel::setAutoplaySimilar,
+                                            onSetCrossfadeSeconds = viewModel.settings::setCrossfadeSeconds,
+                                            onSetGapless = viewModel.settings::setGaplessPlayback,
+                                            onSetAutoplay = viewModel.settings::setAutoplaySimilar,
                                             onSetSongAnalysis = viewModel::setSongAnalysis,
-                                            songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted }} downloaded songs analysed",
-                                            onSetReplayGain = viewModel::setReplayGainMode,
-                                            onSetAutoScrobble = viewModel::setAutoScrobble,
+                                            songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + (if (phoneSource != null) allServerTracks.count { it.isOnDevice } else 0)} songs on this phone analysed",
+                                            onSetReplayGain = viewModel.settings::setReplayGainMode,
+                                            onSetAutoScrobble = viewModel.settings::setAutoScrobble,
                                             onSetPauseOnHeadphoneDisconnect = viewModel::setPauseOnHeadphoneDisconnect,
-                                            onSetFallbackArtistToAlbumArt = viewModel::setFallbackArtistToAlbumArt,
+                                            onSetFallbackArtistToAlbumArt = viewModel.settings::setFallbackArtistToAlbumArt,
                                             onUpdateWifiQuality = viewModel::updateTranscodeProfile,
                                             onUpdateMobileQuality = viewModel::setMobileQuality,
                                             onSetDownloadSpeedLimit = viewModel::setDownloadSpeedLimit,
-                                            onSetReadAheadBuffer = viewModel::setReadAheadBuffer,
+                                            onSetReadAheadBuffer = viewModel.settings::setReadAheadBuffer,
                                             onSetWidgetLayoutMode = viewModel::setWidgetLayoutMode,
                                             onSetWidgetThemeMode = viewModel::setWidgetThemeMode,
-                                            onSetWidgetShowArtwork = viewModel::setWidgetShowArtwork,
-                                            onSetWidgetShowFavoriteButton = viewModel::setWidgetShowFavoriteButton,
-                                            onSetWidgetShowLyrics = viewModel::setWidgetShowLyrics,
+                                            onSetWidgetShowArtwork = viewModel.settings::setWidgetShowArtwork,
+                                            onSetWidgetShowFavoriteButton = viewModel.settings::setWidgetShowFavoriteButton,
+                                            onSetWidgetShowLyrics = viewModel.settings::setWidgetShowLyrics,
                                             onSetCheckForUpdates = viewModel::setCheckForUpdates,
                                             availableUpdate = availableUpdate,
                                             updateCheckStatus = updateCheckStatus,
@@ -944,9 +929,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                             onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
-                                            onStartSleepTimerMinutes = { mins -> viewModel.startSleepTimerDuration(mins) },
-                                            onStartSleepTimerEndOfTrack = viewModel::startSleepTimerEndOfTrack,
-                                            onCancelSleepTimer = viewModel::cancelSleepTimer,
+                                            onStartSleepTimerMinutes = { mins -> viewModel.playback.startSleepTimerDuration(mins) },
+                                            onStartSleepTimerEndOfTrack = viewModel.playback::startSleepTimerEndOfTrack,
+                                            onCancelSleepTimer = viewModel.playback::cancelSleepTimer,
                                             onSelectEqPreset = viewModel::selectEqualizerPreset,
                                             offlineStorageSummary = offlineStorageSummary,
                                             onClearOfflineDownloads = viewModel::clearAllOfflineDownloads,
@@ -954,7 +939,14 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onClearTempAudioCache = viewModel::clearTemporaryAudioCache,
                                             onBack = { viewModel.selectDestination(PrimaryDestination.HOME) },
                                             onActivateServer = viewModel::activateExistingServer,
-                                            onTestAndSaveServer = viewModel::testAndSaveServer
+                                            onTestAndSaveServer = viewModel::testAndSaveServer,
+                                            phoneMusic = PhoneMusicState(
+                                                enabled = phoneSource != null,
+                                                songCount = remember(allServerTracks) { allServerTracks.count { it.isOnDevice } },
+                                                scanning = isScanningPhone
+                                            ),
+                                            onSetPhoneMusic = viewModel::setPhoneMusicEnabled,
+                                            onRescanPhoneMusic = viewModel::rescanPhoneMusic
                                         )
                                     }
                                 }
@@ -969,8 +961,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         positionMs = positionMs,
                                         durationMs = durationMs,
                                         unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
-                                        onTogglePlay = viewModel::togglePlayPause,
-                                        onSkipNext = viewModel::skipNext,
+                                        onTogglePlay = viewModel.playback::togglePlayPause,
+                                        onSkipNext = viewModel.playback::skipNext,
                                         onExpand = { viewModel.setPlayerExpanded(true) }
                                     )
                                 }
@@ -1059,7 +1051,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 lyricsResult = currentLyricsResult,
                                 reverbProcessingMode = reverbProcessingMode,
                                 isPlayingOfflineFile = isPlayingOfflineFile,
-                                download = remember(activeTrack.id, downloadsMap[activeTrack.id]) {
+                                download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
                                     PlayerDownload(
                                         state = downloadsMap[activeTrack.id],
                                         onDownload = { viewModel.downloadTrackForOffline(activeTrack) },
@@ -1073,13 +1065,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onCollapse = { viewModel.setPlayerExpanded(false) },
                                 onSelectTab = viewModel::selectNowPlayingTab,
                                 onCycleArtworkShape = viewModel::cycleArtworkShapeMode,
-                                onTogglePlay = viewModel::togglePlayPause,
-                                onSkipPrevious = viewModel::skipPrevious,
-                                onSwipePrevious = { viewModel.skipPrevious(restartIfPlayed = false) },
-                                onSkipNext = viewModel::skipNext,
+                                onTogglePlay = viewModel.playback::togglePlayPause,
+                                onSkipPrevious = viewModel.playback::skipPrevious,
+                                onSwipePrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
+                                onSkipNext = viewModel.playback::skipNext,
                                 onSeek = viewModel::seekTo,
-                                onToggleShuffle = viewModel::toggleShuffle,
-                                onToggleRepeatOne = viewModel::toggleRepeatOne,
+                                onToggleShuffle = viewModel.playback::toggleShuffle,
+                                onToggleRepeatOne = viewModel.playback::toggleRepeatOne,
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onSetTrackRating = viewModel::setTrackRating,
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
@@ -1094,9 +1086,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
                                 onOpenPlaylist = viewModel::openPlaylistAnywhere,
                                 onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
-                                onPlayQueueTrack = { viewModel.playFromQueue(it) },
-                                onRemoveQueueTrack = viewModel::removeTrackFromQueue,
-                                onMoveQueueTrack = viewModel::moveQueueTrack
+                                onPlayQueueTrack = { viewModel.playback.playFromQueue(it) },
+                                onRemoveQueueTrack = viewModel.playback::removeTrackFromQueue,
+                                onMoveQueueTrack = viewModel.playback::moveQueueTrack
                             )
                         }
                     }
@@ -1159,11 +1151,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     SleepTimerModal(
                         state = sleepTimerState,
                         currentTrackTitle = currentTrack?.title ?: "Current Track",
-                        onStartDuration = viewModel::startSleepTimerDuration,
-                        onStartEndOfTrack = viewModel::startSleepTimerEndOfTrack,
-                        onAddFiveMinutes = { viewModel.addSleepTimerMinutes(5) },
-                        onUpdateOptions = viewModel::updateSleepTimerOptions,
-                        onCancel = viewModel::cancelSleepTimer,
+                        onStartDuration = viewModel.playback::startSleepTimerDuration,
+                        onStartEndOfTrack = viewModel.playback::startSleepTimerEndOfTrack,
+                        onAddFiveMinutes = { viewModel.playback.addSleepTimerMinutes(5) },
+                        onUpdateOptions = viewModel.playback::updateSleepTimerOptions,
+                        onCancel = viewModel.playback::cancelSleepTimer,
                         onClose = { viewModel.setSleepTimerSheetOpen(false) }
                     )
                 }
@@ -1184,7 +1176,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     ) + fadeOut()
                 ) {
                     SonicLabModalOverlay(
-                        tracks = tracks,
+                        moodMixes = homeShelves.mixes.filter { it.key.startsWith("mood:") },
+                        songAnalysisOn = customizationSettings.songAnalysis,
                         activePreset = eqPreset,
                         customBandsDb = customEqBands,
                         activeTranscodeFormat = activeServer.transcodeFormat,
@@ -1192,11 +1185,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onUpdateTranscodeProfile = viewModel::updateTranscodeProfile,
                         onSelectPreset = viewModel::selectEqualizerPreset,
                         onUpdateBand = viewModel::updateCustomEqBand,
-                        onPlayMoodMix = { mixTracks ->
-                            if (mixTracks.isNotEmpty()) {
-                                viewModel.playTrack(mixTracks.first(), mixTracks)
-                            }
-                        },
+                        onPlayMix = viewModel::playMix,
+                        onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }
                     )
                 }
@@ -1302,7 +1292,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     HomeIntro(
                         mixes = homeShelves.mixes,
                         autoplay = customizationSettings.autoplaySimilar,
-                        onAutoplayChange = viewModel::setAutoplaySimilar,
+                        onAutoplayChange = viewModel.settings::setAutoplaySimilar,
                         songAnalysis = customizationSettings.songAnalysis,
                         onSongAnalysisChange = viewModel::setSongAnalysis,
                         onDone = viewModel::dismissHomeIntro

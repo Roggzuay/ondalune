@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.isOnDevice
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.lazy.LazyListState
@@ -9,7 +10,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.data.model.hasGenre
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.filled.HeartBroken
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.LinearProgressIndicator
@@ -45,21 +45,13 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
-import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.animation.animateContentSize
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.LocalContentColor
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,54 +72,40 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.ViewCompact
-import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.FilledTonalToggleButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -170,7 +148,7 @@ import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
 import io.github.roggzuay.ondalune.ui.components.formatDurationSec
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
-import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
+import io.github.roggzuay.ondalune.ui.viewmodel.LibraryQueries
 import kotlinx.coroutines.Job
 
 /**
@@ -876,11 +854,19 @@ fun TrackExpressiveRow(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${track.suffix} ${track.bitDepth}/${track.samplingRate / 1000}k",
+                                // Songs on the phone don't know their sample format: just the file type.
+                                text = if (track.samplingRate > 0) "${track.suffix} ${track.bitDepth}/${track.samplingRate / 1000}k" else track.suffix,
                                 style = monoLabelSmall(),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (isDownloaded) {
+                            if (track.isOnDevice) {
+                                Icon(
+                                    imageVector = Icons.Filled.PhoneAndroid,
+                                    contentDescription = "On this phone",
+                                    tint = LocalContentColor.current,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            } else if (isDownloaded) {
                                 Icon(
                                     imageVector = Icons.Filled.CloudDone,
                                     contentDescription = "Available offline",
@@ -1200,27 +1186,27 @@ fun LibraryCollectionScreen(
 
     // Per-category independent sorting & direction
     val sortedAlbums = remember(albums, activeTabPref) {
-        OndaluneViewModel.sortAlbums(albums, activeTabPref)
+        LibraryQueries.sortAlbums(albums, activeTabPref)
     }
 
     val sortedArtists = remember(artists, activeTabPref) {
-        OndaluneViewModel.sortArtists(artists, activeTabPref)
+        LibraryQueries.sortArtists(artists, activeTabPref)
     }
 
     val sortedPlaylists = remember(playlists, activeTabPref) {
-        OndaluneViewModel.sortPlaylists(playlists, activeTabPref)
+        LibraryQueries.sortPlaylists(playlists, activeTabPref)
     }
 
     val sortedGenres = remember(genres, activeTabPref) {
-        OndaluneViewModel.sortGenres(genres, activeTabPref)
+        LibraryQueries.sortGenres(genres, activeTabPref)
     }
 
     val sortedFolders = remember(folders, activeTabPref) {
-        OndaluneViewModel.sortFolders(folders, activeTabPref)
+        LibraryQueries.sortFolders(folders, activeTabPref)
     }
 
     val sortedTracks = remember(tracks, activeTabPref) {
-        OndaluneViewModel.sortTracks(tracks, activeTabPref)
+        LibraryQueries.sortTracks(tracks, activeTabPref)
     }
 
     // Sub-screen 1: Album Detail View
@@ -1704,14 +1690,16 @@ fun AlbumDetailSubScreen(
                 val downloads = LocalDownloads.current
                 // The album's songs as one download: the cloud becomes a spinner, then a ring that
                 // fills song by song, then the done cloud.
-                val albumDownload = remember(tracks, downloads) { downloadStatusOf(tracks.map { downloads[it.id] }) }
-                DownloadButton(
+                // Songs already on the phone (its own music) have nothing to download.
+                val remoteTracks = remember(tracks) { tracks.filterNot { it.isOnDevice } }
+                val albumDownload = remember(remoteTracks, downloads) { downloadStatusOf(remoteTracks.map { downloads[it.id] }) }
+                if (remoteTracks.isNotEmpty()) DownloadButton(
                     status = albumDownload,
                     // Every album page downloads, wherever it was opened from.
-                    onDownload = { onDownloadAlbum?.invoke() ?: downloadActions?.download(tracks) },
-                    onCancel = { downloadActions?.cancelDownloads(tracks) },
-                    onResume = { downloadActions?.resumeDownloads(tracks) },
-                    onRemove = { downloadActions?.removeDownloads(tracks) },
+                    onDownload = { onDownloadAlbum?.invoke() ?: downloadActions?.download(remoteTracks) },
+                    onCancel = { downloadActions?.cancelDownloads(remoteTracks) },
+                    onResume = { downloadActions?.resumeDownloads(remoteTracks) },
+                    onRemove = { downloadActions?.removeDownloads(remoteTracks) },
                     iconSize = 24.dp
                 ) { onClick, content ->
                     ExpressiveBounceIconButton(

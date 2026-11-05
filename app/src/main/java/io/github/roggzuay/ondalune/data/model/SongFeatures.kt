@@ -8,7 +8,7 @@ import kotlin.math.log2
 import kotlin.math.sqrt
 
 /**
- * What on-device song analysis estimates from a short excerpt of a downloaded song. Rough by
+ * What on-device song analysis estimates from a short excerpt of a song stored on the phone. Rough by
  * design: enough to sort songs into calm and lively, and to keep autoplay near the same tempo.
  * All values but [bpm] run 0..1.
  */

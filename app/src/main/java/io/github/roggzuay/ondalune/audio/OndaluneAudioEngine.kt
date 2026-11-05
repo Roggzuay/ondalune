@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.audio
 
+import io.github.roggzuay.ondalune.data.source.MusicSources
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,7 +12,6 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaExtractor
-import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.media.audiofx.EnvironmentalReverb
@@ -28,7 +28,6 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -334,7 +333,8 @@ class OndaluneAudioEngine(
         val path = when {
             offlineFile != null -> offlineFile.absolutePath
             server.isDemoServer -> withContext(Dispatchers.Default) { ensureDryMasterTrackWav(track).absolutePath }
-            else -> subsonicClient.buildStreamUrl(server, track.id)
+            else -> MusicSources.forServer(context, subsonicClient, server).playablePath(server, track)
+                ?: throw java.io.FileNotFoundException("\"${track.title}\" is no longer on this phone")
         }
         return path to (offlineFile != null)
     }

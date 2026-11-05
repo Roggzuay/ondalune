@@ -13,7 +13,6 @@ import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicArtist
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
@@ -284,7 +283,7 @@ interface OndaluneDao {
         SubsonicPlaylist::class,
         SubsonicDownloadEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -380,6 +379,15 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /** Sources other than Subsonic servers (this phone's music); existing rows stay servers. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!hasColumn(db, "subsonic_servers", "sourceType")) {
+                    db.execSQL("ALTER TABLE subsonic_servers ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'SUBSONIC'")
+                }
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -387,7 +395,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

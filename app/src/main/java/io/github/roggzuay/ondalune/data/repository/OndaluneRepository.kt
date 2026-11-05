@@ -4,7 +4,6 @@ import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
 import io.github.roggzuay.ondalune.data.local.OndaluneDao
 import io.github.roggzuay.ondalune.data.model.AlbumListType
-import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicArtist
@@ -14,12 +13,22 @@ import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
+import io.github.roggzuay.ondalune.data.model.SourceType
+import io.github.roggzuay.ondalune.data.model.isLocalSource
+import io.github.roggzuay.ondalune.data.source.LocalMusicSource
+import io.github.roggzuay.ondalune.data.source.MusicSource
+import io.github.roggzuay.ondalune.data.source.OpenSubsonicSource
+import io.github.roggzuay.ondalune.data.source.SourceCapability
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 class OndaluneRepository(
     private val dao: OndaluneDao,
-    val client: OpenSubsonicClient
+    val client: OpenSubsonicClient,
+    /** The source behind a library row; Subsonic for every row unless told otherwise (tests). */
+    private val sourceFor: (SubsonicServerConfig) -> MusicSource = { OpenSubsonicSource(client) },
+    /** Reads this phone's music; null where there is no phone (tests). */
+    private val phone: LocalMusicSource? = null
 ) {
     val serversFlow: Flow<List<SubsonicServerConfig>> = dao.observeServers()
 
@@ -39,7 +48,9 @@ class OndaluneRepository(
             DemoSubsonicCatalog.seedPlaylists(id).forEach { dao.insertPlaylist(it) }
             return seededServer
         }
-        val active = dao.getActiveServer() ?: existingServers.first().also {
+        // This phone's music is never the active library; it joins whichever server is.
+        val active = dao.getActiveServer()?.takeUnless { it.isLocalSource }
+            ?: existingServers.first { !it.isLocalSource }.also {
             dao.setActiveServer(it.id)
         }
         val existingTracks = dao.getTracksForServerOnce(active.id)
@@ -142,33 +153,76 @@ class OndaluneRepository(
     suspend fun toggleStarTrack(server: SubsonicServerConfig, track: SubsonicTrack) {
         val newStarred = !track.starred
         dao.updateTrackStarred(track.id, newStarred)
-        client.setStarredRemote(server, track.id, newStarred)
+        if (SourceCapability.SYNC_FAVOURITES in sourceFor(server).capabilities) {
+            client.setStarredRemote(server, track.id, newStarred)
+        }
     }
 
     suspend fun setTrackRating(server: SubsonicServerConfig, track: SubsonicTrack, rating: Int) {
         val clamped = rating.coerceIn(0, 5)
         dao.updateTrackRating(track.id, clamped)
-        client.setRatingRemote(server, track.id, clamped)
+        if (SourceCapability.SYNC_FAVOURITES in sourceFor(server).capabilities) {
+            client.setRatingRemote(server, track.id, clamped)
+        }
     }
 
     suspend fun recordPlay(server: SubsonicServerConfig, track: SubsonicTrack) {
         dao.incrementPlayCount(track.id)
-        client.scrobbleRemote(server, track.id, submission = true)
+        if (SourceCapability.SCROBBLE in sourceFor(server).capabilities) {
+            client.scrobbleRemote(server, track.id, submission = true)
+        }
     }
 
     suspend fun fetchLyricsResult(
         server: SubsonicServerConfig,
         track: SubsonicTrack
     ): io.github.roggzuay.ondalune.data.model.TrackLyricsResult {
-        return client.fetchTrackLyrics(server, track)
+        return sourceFor(server).lyrics(server, track)
+    }
+
+    /** The library row for this phone's music, created on first use. Never the active library. */
+    suspend fun phoneSource(): SubsonicServerConfig {
+        dao.getAllServersOnce().firstOrNull { it.isLocalSource }?.let { return it }
+        val row = SubsonicServerConfig(
+            name = "This phone",
+            baseUrl = "",
+            username = "",
+            passwordOrToken = "",
+            serverSoftware = "On-device music",
+            extensionsCsv = "",
+            sourceType = SourceType.LOCAL.name
+        )
+        return row.copy(id = dao.insertServer(row))
     }
 
     /**
-     * Returns time-synced lyrics only when genuinely available from embedded LRC or OpenSubsonic
-     * `structuredLyrics`. Never fabricates fake synchronized lyric lines for real tracks.
+     * Reads this phone's music into the library. Hearts, ratings and play counts given in the app
+     * survive a rescan; songs no longer on the phone are removed. Returns how many songs the library has from the phone.
      */
-    suspend fun fetchLyrics(server: SubsonicServerConfig, track: SubsonicTrack): List<LyricLine> {
-        return client.fetchSyncedLyrics(server, track)
+    suspend fun scanPhoneMusic(source: SubsonicServerConfig): Int {
+        // Without the permission nothing can be read: keep the songs rather than drop them all.
+        val scanned = phone?.scan(source.id) ?: return dao.getTracksForServerOnce(source.id).size
+        val existing = dao.getTracksForServerOnce(source.id).associateBy { it.id }
+        val merged = scanned.map { fresh ->
+            val old = existing[fresh.id] ?: return@map fresh
+            fresh.copy(
+                starred = old.starred,
+                userRating = old.userRating,
+                playCount = old.playCount,
+                artistBio = old.artistBio,
+                artistImageUrl = old.artistImageUrl
+            )
+        }
+        merged.chunked(500).forEach { dao.insertTracks(it) }
+        val live = merged.mapTo(HashSet()) { it.id }
+        existing.keys.filterNot { it in live }.chunked(500).forEach { dao.deleteTracks(source.id, it) }
+        return merged.size
+    }
+
+    /** Forgets this phone's music (the files stay on the phone). */
+    suspend fun removePhoneSource(source: SubsonicServerConfig) {
+        dao.getTracksForServerOnce(source.id).map { it.id }.chunked(500).forEach { dao.deleteTracks(source.id, it) }
+        dao.deleteServer(source.id)
     }
 
     suspend fun createPlaylist(
@@ -232,7 +286,7 @@ class OndaluneRepository(
         artistName: String
     ): List<String> {
         if (server.isDemoServer || artistId.isBlank()) return emptyList()
-        val info2 = client.fetchArtistInfo2(server, artistId)
+        val info2 = if (SourceCapability.ARTIST_INFO in sourceFor(server).capabilities) client.fetchArtistInfo2(server, artistId) else null
         // Server bio first; Wikipedia only fills what the server left empty.
         val wiki = if (info2?.bio.isNullOrBlank()) client.fetchWikipediaArtistSummary(artistName) else null
         val image = info2?.imageUrl?.takeIf { it.isNotBlank() } ?: wiki?.imageUrl.orEmpty()
