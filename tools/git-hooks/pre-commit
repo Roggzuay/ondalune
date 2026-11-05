@@ -1,0 +1,17 @@
+#!/bin/sh
+# Gitleaks pre-commit hook: scans only the staged changes for secrets.
+# Install once: git config core.hooksPath tools/git-hooks
+# Skip once, on purpose: SKIP_GITLEAKS=1 git commit ...
+[ "${SKIP_GITLEAKS:-0}" = "1" ] && exit 0
+
+GITLEAKS="$(command -v gitleaks || echo "$HOME/.local/bin/gitleaks")"
+if [ ! -x "$GITLEAKS" ]; then
+    echo "pre-commit: gitleaks not found; install it or commit with SKIP_GITLEAKS=1" >&2
+    exit 1
+fi
+
+"$GITLEAKS" git --pre-commit --staged --redact --verbose --no-banner \
+    "$(git rev-parse --show-toplevel)" || {
+    echo "pre-commit: gitleaks found a possible secret in the staged changes; commit blocked." >&2
+    exit 1
+}

@@ -22,3 +22,14 @@ In scope:
 Out of scope:
 - Vulnerabilities in your music server itself; report those to its project, such as Navidrome.
 - Issues that need a rooted or already compromised phone.
+
+## Secret scanning
+
+Every push and pull request runs [Gitleaks](https://github.com/gitleaks/gitleaks) over the whole
+git history (`.github/workflows/gitleaks.yml`, a pinned release checked against its SHA-256), with
+the rules in `.gitleaks.toml`. Contributors can scan staged changes before each commit with
+`git config core.hooksPath tools/git-hooks`.
+
+The last full audit (5 November 2026, Gitleaks 8.30.1) covered every branch, tag, stash and
+unreachable object and found no secrets in the repository's history. Release signing keys and
+their passwords are kept outside the repository and are never committed.

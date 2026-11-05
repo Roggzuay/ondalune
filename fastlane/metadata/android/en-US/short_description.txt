@@ -1,1 +1,1 @@
-Music player for Navidrome & Subsonic with speed/pitch, reverb and synced lyrics
+Subsonic, Navidrome & Jellyfin music player with speed/pitch, reverb and lyrics

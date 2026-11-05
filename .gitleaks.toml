@@ -1,0 +1,36 @@
+# Gitleaks config for Roggzuay/ondalune (Gitleaks 8.30.1)
+#
+# Uses the full built-in rule set. The 2026-11-05 audit found no false
+# positives in git history (all refs, stashes and unreachable objects),
+# so nothing was allowlisted for history; see the one entry at the end.
+#
+# The only hits were storePassword/keyPassword in keystore.properties.
+# Those are real release-signing passwords in a git-ignored, local-only
+# file. Do NOT allowlist keystore.properties: if it is ever committed
+# (git add -f, or the .gitignore line removed), this scan has to fail.
+#
+# When a confirmed false positive turns up, add a narrow allowlist below
+# (one path + one regex, never a whole directory), or put its fingerprint
+# in .gitleaksignore.
+
+title = "Ondalune gitleaks config"
+minVersion = "v8.30.0"
+
+[extend]
+useDefault = true
+
+# Template for a future confirmed false positive (keep it narrow):
+#
+# [[allowlists]]
+# description = "Fake token used by CredentialBase64Test"
+# targetRules = ["generic-api-key"]
+# paths = ['''^app/src/test/java/io/github/roggzuay/ondalune/CredentialBase64Test\.kt$''']
+# regexes = ['''<exact fake value pattern>''']
+
+# Confirmed false positive: the public SHA-256 of the release signing certificate. It is in every
+# release APK and F-Droid's metadata requires it (AllowedAPKSigningKeys); it grants nothing.
+[[allowlists]]
+description = "Public release-certificate fingerprint in the F-Droid metadata"
+condition = "AND"
+paths = ['''^docs/fdroid/io\.github\.roggzuay\.ondalune\.yml$''']
+regexes = ['''2b4608125f8267852d26c80bc65690a1fe4255de5beca9f4b7afa5f75e357430''']
