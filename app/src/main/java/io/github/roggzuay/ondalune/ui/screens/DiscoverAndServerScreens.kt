@@ -11,6 +11,7 @@ import io.github.roggzuay.ondalune.ui.components.SupportDeveloperCard
 import io.github.roggzuay.ondalune.ui.components.AboutLicencesRow
 import io.github.roggzuay.ondalune.ui.components.UpdatesCard
 import io.github.roggzuay.ondalune.data.network.AppUpdate
+import io.github.roggzuay.ondalune.BuildConfig
 import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
 import io.github.roggzuay.ondalune.ui.theme.styleSpecFor
 import io.github.roggzuay.ondalune.data.model.HomeSection
@@ -431,6 +432,8 @@ fun SettingsCustomizationScreen(
     updateCheckStatus: UpdateCheckStatus = UpdateCheckStatus.IDLE,
     onCheckForUpdatesNow: () -> Unit = {},
     onViewUpdate: () -> Unit = {},
+    onSetUpdateNotifications: (Boolean) -> Unit = {},
+    onSetUpdatePrereleases: (Boolean) -> Unit = {},
     onRestoreDefaults: () -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -2147,13 +2150,17 @@ fun SettingsCustomizationScreen(
             Spacer(modifier = Modifier.height(12.dp))
             SupportDeveloperCard()
             Spacer(modifier = Modifier.height(12.dp))
-            UpdatesCard(
+            if (BuildConfig.SELF_UPDATE) UpdatesCard(
                 available = availableUpdate,
                 status = updateCheckStatus,
                 autoCheck = settings.checkForUpdates,
                 onCheckNow = onCheckForUpdatesNow,
                 onView = onViewUpdate,
-                onSetAutoCheck = onSetCheckForUpdates
+                onSetAutoCheck = onSetCheckForUpdates,
+                notify = settings.updateNotifications,
+                onSetNotify = onSetUpdateNotifications,
+                prereleases = settings.updatePrereleases,
+                onSetPrereleases = onSetUpdatePrereleases
             )
             Spacer(modifier = Modifier.height(12.dp))
             AboutLicencesRow()

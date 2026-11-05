@@ -40,6 +40,12 @@ import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
 import io.github.roggzuay.ondalune.ui.theme.LocalCornerScale
 import java.io.File
 import kotlin.math.roundToInt
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
+import io.github.roggzuay.ondalune.data.update.InstallSource
 
 /** What a major or minor release (1.1, 2.0) tells people the first time they open it. */
 data class ReleaseNotes(val version: String, val items: List<String>)
@@ -136,33 +142,45 @@ fun UpdateBanner(update: AppUpdate, onView: () -> Unit, onLater: () -> Unit, mod
 }
 
 /**
- * The release's notes, then the in-app update below them: download progress, the one-time
- * "allow installs" step, or what went wrong. Without [inAppInstall] (preview and debug builds,
- * which a release can't update), Download opens the release page instead.
+ * The update's details: this version and the new one, its date and notes, and the way to update
+ * that fits how this copy was installed. A GitHub copy downloads and installs it here (Android asks
+ * to confirm); an F-Droid copy is sent to F-Droid, which builds and signs its own; any other copy
+ * gets instructions, never an APK that wouldn't install over it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UpdateDialog(
+fun UpdateDetailsSheet(
     update: AppUpdate,
+    installedVersion: String,
+    source: InstallSource,
     install: UpdateInstallState,
-    inAppInstall: Boolean,
     onUpdate: () -> Unit,
     onAllowInstalls: () -> Unit,
     onInstall: (File) -> Unit,
     onCancel: () -> Unit,
-    onOpenReleasePage: () -> Unit,
+    onOpenLink: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.testTag("update_dialog"),
-        title = { Text("Ondalune ${update.version}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                NoteBullets(
-                    update.notes.ifEmpty { listOf("Fixes & improvements") },
-                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
-                )
-                when (install) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding()
+                .testTag("update_details"),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                "Ondalune ${update.version}" + if (update.prerelease) " (pre-release)" else "",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            StatusText(listOfNotNull("You have $installedVersion", update.publishedOn.takeIf { it.isNotBlank() }?.let { "released $it" }).joinToString(" · "))
+            NoteBullets(
+                update.notes.ifEmpty { listOf("Fixes & improvements") },
+                Modifier.weight(1f, fill = false).heightIn(max = 320.dp).verticalScroll(rememberScrollState())
+            )
+            when (source) {
+                InstallSource.GITHUB -> when (install) {
                     UpdateInstallState.Idle -> Unit
                     is UpdateInstallState.Downloading -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         LinearProgressIndicator(progress = { install.progress }, modifier = Modifier.fillMaxWidth())
@@ -174,31 +192,52 @@ fun UpdateDialog(
                         StatusText("Android will ask you to confirm. Ondalune closes while it updates; open it again afterwards.")
                     is UpdateInstallState.Failed -> StatusText(install.message, MaterialTheme.colorScheme.error)
                 }
+                InstallSource.FDROID ->
+                    StatusText("Ondalune came from F-Droid, so F-Droid delivers this update once it has built it. Update it there.")
+                InstallSource.OTHER ->
+                    StatusText(
+                        "This copy of Ondalune wasn't installed from its GitHub releases or F-Droid, so it can't update " +
+                            "itself, and a release APK wouldn't install over it. Update it the way you installed it."
+                    )
             }
-        },
-        confirmButton = {
-            when (install) {
-                UpdateInstallState.Idle ->
-                    if (inAppInstall) TextButton(onClick = onUpdate) { Text("Update") }
-                    else TextButton(onClick = onOpenReleasePage) { Text("Download") }
-                is UpdateInstallState.Downloading -> TextButton(onClick = onCancel) { Text("Cancel") }
-                is UpdateInstallState.NeedsPermission -> TextButton(onClick = onAllowInstalls) { Text("Open settings") }
-                is UpdateInstallState.Ready -> TextButton(onClick = { onInstall(install.apk) }) { Text("Install") }
-                is UpdateInstallState.Failed -> TextButton(onClick = onUpdate) { Text("Try again") }
-            }
-        },
-        dismissButton = {
-            when (install) {
-                is UpdateInstallState.Downloading -> Unit
-                is UpdateInstallState.NeedsPermission -> TextButton(onClick = onCancel) { Text("Cancel") }
-                is UpdateInstallState.Failed -> TextButton(onClick = onOpenReleasePage) { Text("Release page") }
-                else -> TextButton(onClick = onDismiss) { Text("Close") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End).padding(bottom = 12.dp)) {
+                TextButton(onClick = { onOpenLink(update.pageUrl) }) { Text("Full release notes") }
+                when (source) {
+                    InstallSource.GITHUB -> when (install) {
+                        UpdateInstallState.Idle -> FilledTonalButton(onClick = onUpdate, modifier = Modifier.testTag("update_now")) { Text("Update") }
+                        is UpdateInstallState.Downloading -> TextButton(onClick = onCancel) { Text("Cancel") }
+                        is UpdateInstallState.NeedsPermission -> FilledTonalButton(onClick = onAllowInstalls) { Text("Open settings") }
+                        is UpdateInstallState.Ready -> FilledTonalButton(onClick = { onInstall(install.apk) }) { Text("Install") }
+                        is UpdateInstallState.Failed -> FilledTonalButton(onClick = onUpdate) { Text("Try again") }
+                    }
+                    InstallSource.FDROID -> FilledTonalButton(onClick = { onOpenLink(FDROID_PAGE) }) { Text("Open F-Droid") }
+                    InstallSource.OTHER -> Unit
+                }
             }
         }
-    )
+    }
 }
 
-/** Settings card above About: the installed version, Check now, and the daily check switch. */
+/** F-Droid's page for Ondalune; the F-Droid app opens it. */
+private const val FDROID_PAGE = "https://f-droid.org/packages/io.github.roggzuay.ondalune/"
+
+/** A small, lasting reminder at the top of Home once the update banner is put off with "Later". */
+@Composable
+fun UpdateIndicator(update: AppUpdate, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = modifier.testTag("update_indicator")
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+            Spacer(Modifier.width(10.dp))
+            Text("Update available: ${update.version}", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
 @Composable
 fun UpdatesCard(
     available: AppUpdate?,
@@ -207,6 +246,10 @@ fun UpdatesCard(
     onCheckNow: () -> Unit,
     onView: () -> Unit,
     onSetAutoCheck: (Boolean) -> Unit,
+    notify: Boolean = true,
+    onSetNotify: (Boolean) -> Unit = {},
+    prereleases: Boolean = false,
+    onSetPrereleases: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -253,7 +296,7 @@ fun UpdatesCard(
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text("Check automatically", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Once a day, asks GitHub for a newer version and lets you know on Home",
+                        "Once a day, in the background, asks GitHub for a newer version",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -264,7 +307,22 @@ fun UpdatesCard(
                     modifier = Modifier.testTag("toggle_check_updates")
                 )
             }
+            if (autoCheck) {
+                SwitchLine("Notify me", "A quiet notification once per new version; Home keeps showing it until you update", notify, onSetNotify, "toggle_update_notifications")
+            }
+            SwitchLine("Include pre-releases", "Test versions before they are released. Off: stable releases only", prereleases, onSetPrereleases, "toggle_update_prereleases")
         }
+    }
+}
+
+@Composable
+private fun SwitchLine(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit, tag: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.testTag(tag))
     }
 }
 
