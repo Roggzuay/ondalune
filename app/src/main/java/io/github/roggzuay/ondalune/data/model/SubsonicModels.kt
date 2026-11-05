@@ -55,6 +55,31 @@ data class TrackOverride(
     val year: Int? = null
 )
 
+/**
+ * A folder picked in Settings → Music sources (a Storage Access Framework tree). Only the music in
+ * picked folders joins the library; Ondalune keeps read access to them across restarts.
+ */
+@Entity(tableName = "local_folders")
+data class LocalFolder(
+    @PrimaryKey val treeUri: String,
+    val name: String,
+    /** Where it is, for people: "Internal storage › Music › Albums". */
+    val location: String,
+    val trackCount: Int = 0,
+    val lastScanMs: Long = 0,
+    /** False when the last scan couldn't open it (permission gone, card removed); its songs stay. */
+    val accessible: Boolean = true
+)
+
+/** What the last scan saw of one song file, so an unchanged file isn't read again. */
+@Entity(tableName = "local_files")
+data class LocalFileRecord(
+    @PrimaryKey val trackId: String,
+    val folderUri: String,
+    val size: Long,
+    val modifiedMs: Long
+)
+
 fun SubsonicTrack.withOverride(o: TrackOverride?): SubsonicTrack =
     if (o == null) this else copy(title = o.title ?: title, artist = o.artist ?: artist, genre = o.genre ?: genre, year = o.year ?: year)
 
@@ -83,8 +108,9 @@ data class SubsonicTrack(
     val durationSec: Int,
     val bitRate: Int,
     val suffix: String, // e.g. "FLAC", "OPUS", "MP3"
-    val bitDepth: Int = 24,
-    val samplingRate: Int = 96000,
+    /** 0 when the source doesn't say. */
+    val bitDepth: Int = 0,
+    val samplingRate: Int = 0,
     val starred: Boolean = false,
     val trackNumber: Int = 1,
     val year: Int = 2025,
@@ -96,11 +122,13 @@ data class SubsonicTrack(
     val artStyleIndex: Int = 0,
     val paletteSeedHex: String = "#FF6B5B",
     val accentHex: String = "#70F5FF",
-    val bpm: Int = 118,
-    val musicalKey: String = "F Minor",
+    /** Tempo from the server's tags; 0 when unknown (song analysis may measure it later). */
+    val bpm: Int = 0,
+    val musicalKey: String = "",
     val syncedLyricsRaw: String = "",
     val playCount: Int = 0,
-    val userRating: Int = 4, // 0 = Unrated, 1..5 = Star Rating (/rest/setRating.view)
+    /** The server's star rating, kept as it came. Ondalune no longer shows, sets or weighs ratings. */
+    val userRating: Int = 0,
     /** ReplayGain from the server (OpenSubsonic `replayGain`): gains in dB, peaks as linear 0..1+. */
     val rgTrackGain: Float? = null,
     val rgAlbumGain: Float? = null,
@@ -197,11 +225,37 @@ data class SubsonicPlaylist(
     val trackIdsCsv: String,
     val paletteSeedHex: String = "#FF6B5B",
     val accentHex: String = "#70F5FF",
-    val updatedAtMs: Long = System.currentTimeMillis()
+    val updatedAtMs: Long = System.currentTimeMillis(),
+    /** The server's id for a playlist that lives on the server; blank for one made in Ondalune. */
+    val remoteId: String = "",
+    val owner: String = "",
+    val isPublic: Boolean = false,
+    /** Someone else's playlist (shared with you): it can be played but not changed. */
+    val readOnly: Boolean = false,
+    val coverArtUrl: String = "",
+    /** The server's "changed" stamp, so unchanged playlists aren't fetched again. */
+    val remoteChanged: String = ""
 ) {
     val trackIds: List<String>
         get() = if (trackIdsCsv.isBlank()) emptyList() else trackIdsCsv.split(",").filter { it.isNotBlank() }
+
+    val isServerPlaylist: Boolean get() = remoteId.isNotBlank()
 }
+
+/** A playlist as the server lists it (`getPlaylists`), before its songs are fetched. */
+data class RemotePlaylist(
+    val id: String,
+    val name: String,
+    val comment: String,
+    val owner: String,
+    val isPublic: Boolean,
+    val songCount: Int,
+    val coverArtId: String,
+    val changed: String
+)
+
+/** One row per server playlist, so syncing again updates it instead of adding a copy. */
+fun serverPlaylistKey(serverId: Long, remoteId: String) = "srv:$serverId:$remoteId"
 
 data class LyricLine(
     val timeMs: Long,

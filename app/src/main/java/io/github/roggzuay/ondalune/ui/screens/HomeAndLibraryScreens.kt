@@ -150,6 +150,8 @@ import io.github.roggzuay.ondalune.ui.components.formatDurationSec
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryQueries
 import kotlinx.coroutines.Job
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Refresh
 
 /**
  * Home ("Listen Now") Screen with Pull-Down Quick Sync (popping a Material 3 Expressive morphing
@@ -432,7 +434,7 @@ fun FeaturedAlbumHeroCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "${album.genre} • ${album.year}",
+                        text = listOfNotNull(album.genre.ifBlank { null }, album.year.takeIf { it > 0 }).joinToString(" • "),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -705,7 +707,7 @@ fun AlbumExpressiveCard(
             if (!standard) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${album.songCount} tracks • ${album.year}",
+                    text = listOfNotNull("${album.songCount} tracks", album.year.takeIf { it > 0 }).joinToString(" • "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1007,18 +1009,25 @@ internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit) = Col
     onPlay = onPlay
 )
 
-/** Playlists show their first track's cover; delete sits on the row and on long-press. */
+/**
+ * Playlists show the server's cover, else their first track's; delete sits on the row and on
+ * long-press. The subtitle says where the playlist lives: on the server (and whose, when it was
+ * shared with you) or in Ondalune.
+ */
 internal fun SubsonicPlaylist.toEntry(
     trackMap: Map<String, SubsonicTrack>,
+    serverName: String,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
     onDelete: (() -> Unit)?
 ) = CollectionEntry(
     key = "pl_$id",
     title = name,
-    subtitle = "${trackIds.size} tracks",
+    subtitle = "${trackIds.size} tracks • ${sourceLabel(serverName)}",
     detail = comment,
-    coverArtUrl = trackIds.firstNotNullOfOrNull { trackMap[it]?.coverArtUrl?.takeIf(String::isNotBlank) }.orEmpty(),
+    coverArtUrl = coverArtUrl.ifBlank {
+        trackIds.firstNotNullOfOrNull { trackMap[it]?.coverArtUrl?.takeIf(String::isNotBlank) }.orEmpty()
+    },
     seedHex = paletteSeedHex,
     accentHex = accentHex,
     artStyleIndex = name.length % 5,
@@ -1099,12 +1108,24 @@ internal fun TrackOptionsPopup(track: SubsonicTrack, onDismiss: () -> Unit) {
     )
 }
 
+/** "On Navidrome", "Shared by alex on Navidrome" or "In Ondalune". */
+internal fun SubsonicPlaylist.sourceLabel(serverName: String) = when {
+    !isServerPlaylist -> "In Ondalune"
+    readOnly && owner.isNotBlank() -> "Shared by $owner on $serverName"
+    else -> "On $serverName"
+}
+
 @Composable
-internal fun DeletePlaylistDialog(playlist: SubsonicPlaylist, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun DeletePlaylistDialog(playlist: SubsonicPlaylist, serverName: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete \"${playlist.name}\"?") },
-        text = { Text("The playlist is removed from the server. Its songs stay in your library.") },
+        text = {
+            Text(
+                if (playlist.isServerPlaylist) "The playlist is deleted from $serverName for every app you use with it. Its songs stay in your library."
+                else "The playlist is removed from Ondalune. Its songs stay in your library."
+            )
+        },
         confirmButton = { TextButton(onClick = { onConfirm(); onDismiss() }) { Text("Delete") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
@@ -1116,6 +1137,8 @@ internal fun DeletePlaylistDialog(playlist: SubsonicPlaylist, onConfirm: () -> U
  */
 @Composable
 fun LibraryCollectionScreen(
+    /** The active server's name, for "On Navidrome" playlist labels. */
+    serverName: String = "",
     albums: List<SubsonicAlbum>,
     artists: List<SubsonicArtist>,
     tracks: List<SubsonicTrack>,
@@ -1477,7 +1500,13 @@ fun LibraryCollectionScreen(
                 }
                 collectionEntries(
                     sortedPlaylists.map { pl ->
-                        pl.toEntry(trackMap, onOpen = { onPlayPlaylist(pl) }, onPlay = { onPlayPlaylist(pl) }, onDelete = { pendingDelete = pl })
+                        pl.toEntry(
+                            trackMap,
+                            serverName,
+                            onOpen = { onPlayPlaylist(pl) },
+                            onPlay = { onPlayPlaylist(pl) },
+                            onDelete = if (pl.readOnly) null else ({ pendingDelete = pl })
+                        )
                     },
                     effectiveViewMode, gridCols
                 )
@@ -1526,7 +1555,7 @@ fun LibraryCollectionScreen(
     }
 
     optionsTrack?.let { TrackOptionsPopup(it) { optionsTrack = null } }
-    pendingDelete?.let { pl -> DeletePlaylistDialog(pl, onConfirm = { onDeletePlaylist(pl.id) }, onDismiss = { pendingDelete = null }) }
+    pendingDelete?.let { pl -> DeletePlaylistDialog(pl, serverName, onConfirm = { onDeletePlaylist(pl.id) }, onDismiss = { pendingDelete = null }) }
 
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
@@ -1843,6 +1872,11 @@ fun PlaylistsCollectionScreen(
     onToggleStarTrack: (SubsonicTrack) -> Unit,
     onCreatePlaylist: (String, String, List<String>) -> Unit,
     onDeletePlaylist: (String) -> Unit,
+    /** The active server's name, for "On Navidrome" labels. */
+    serverName: String = "",
+    isRefreshing: Boolean = false,
+    /** Reads the server's playlists again; null when the library has no server playlists. */
+    onRefresh: (() -> Unit)? = null,
     selectedPlaylistId: String? = null,
     onOpenPlaylist: (String?) -> Unit = {},
     viewMode: LibraryViewMode = LibraryViewMode.LIST,
@@ -1857,9 +1891,16 @@ fun PlaylistsCollectionScreen(
     if (selectedPlaylist != null) {
         BackHandler { onOpenPlaylist(null) }
         val playlistTracks = selectedPlaylist.trackIds.mapNotNull { trackMap[it] }
+        // Songs the server or phone no longer has are left out, and counted.
+        val unavailable = selectedPlaylist.trackIds.size - playlistTracks.size
         GenreOrFolderDetailSubScreen(
             title = selectedPlaylist.name,
-            subtitle = listOf("${playlistTracks.size} tracks", selectedPlaylist.comment).filter { it.isNotBlank() }.joinToString(" • "),
+            subtitle = listOf(
+                "${playlistTracks.size} tracks",
+                if (unavailable > 0) "$unavailable unavailable" else "",
+                selectedPlaylist.sourceLabel(serverName),
+                selectedPlaylist.comment
+            ).filter { it.isNotBlank() }.joinToString(" • "),
             tracks = playlistTracks,
             currentTrackId = currentTrackId,
             isPlaying = isPlaying,
@@ -1902,12 +1943,24 @@ fun PlaylistsCollectionScreen(
                         Spacer(Modifier.width(6.dp))
                         Text("New")
                     }
+                    if (onRefresh != null) {
+                        IconButton(onClick = onRefresh, enabled = !isRefreshing, modifier = Modifier.testTag("playlists_refresh_button")) {
+                            if (isRefreshing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Filled.Refresh, contentDescription = "Refresh playlists from $serverName")
+                        }
+                    }
                     ViewModeMenuButton(viewMode = viewMode, onSetViewMode = onSetViewMode)
                 }
             }
             collectionEntries(
                 playlists.distinctBy { it.id }.map { pl ->
-                    pl.toEntry(trackMap, onOpen = { onOpenPlaylist(pl.id) }, onPlay = { onPlayPlaylist(pl, null) }, onDelete = { pendingDelete = pl })
+                    pl.toEntry(
+                        trackMap,
+                        serverName,
+                        onOpen = { onOpenPlaylist(pl.id) },
+                        onPlay = { onPlayPlaylist(pl, null) },
+                        onDelete = if (pl.readOnly) null else ({ pendingDelete = pl })
+                    )
                 },
                 viewMode, columns
             )
@@ -1915,7 +1968,7 @@ fun PlaylistsCollectionScreen(
         }
     }
 
-    pendingDelete?.let { pl -> DeletePlaylistDialog(pl, onConfirm = { onDeletePlaylist(pl.id) }, onDismiss = { pendingDelete = null }) }
+    pendingDelete?.let { pl -> DeletePlaylistDialog(pl, serverName, onConfirm = { onDeletePlaylist(pl.id) }, onDismiss = { pendingDelete = null }) }
 
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
@@ -2287,7 +2340,7 @@ fun SmartDynamicSearchScreen(
                                 Text(
                                     text = when {
                                         topTrack != null -> "${topTrack.artist} • ${topTrack.album} • ${topTrack.suffix}"
-                                        topAlbum != null -> "${topAlbum.artist} • ${topAlbum.year} • ${topAlbum.songCount} tracks"
+                                        topAlbum != null -> listOfNotNull(topAlbum.artist, topAlbum.year.takeIf { it > 0 }, "${topAlbum.songCount} tracks").joinToString(" • ")
                                         else -> "${topArtist?.genre} • ${topArtist?.albumCount} albums"
                                     },
                                     style = MaterialTheme.typography.bodySmall,

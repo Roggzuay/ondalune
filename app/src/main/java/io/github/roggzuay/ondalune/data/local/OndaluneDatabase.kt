@@ -22,6 +22,8 @@ import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackOverride
+import io.github.roggzuay.ondalune.data.model.LocalFolder
+import io.github.roggzuay.ondalune.data.model.LocalFileRecord
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -264,6 +266,33 @@ interface OndaluneDao {
     @Query("DELETE FROM subsonic_playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: String)
 
+    @Query("SELECT * FROM subsonic_playlists WHERE serverId = :serverId")
+    suspend fun getPlaylistsForServerOnce(serverId: Long): List<SubsonicPlaylist>
+
+    @Query("SELECT id FROM subsonic_tracks WHERE serverId = :serverId")
+    suspend fun getTrackIdsForServer(serverId: Long): List<String>
+
+    @Query("SELECT * FROM local_folders ORDER BY name")
+    fun observeLocalFolders(): Flow<List<LocalFolder>>
+
+    @Query("SELECT * FROM local_folders ORDER BY name")
+    suspend fun getLocalFoldersOnce(): List<LocalFolder>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLocalFolder(folder: LocalFolder)
+
+    @Query("DELETE FROM local_folders WHERE treeUri = :treeUri")
+    suspend fun deleteLocalFolder(treeUri: String)
+
+    @Query("SELECT * FROM local_files WHERE folderUri = :folderUri")
+    suspend fun getLocalFiles(folderUri: String): List<LocalFileRecord>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLocalFiles(files: List<LocalFileRecord>)
+
+    @Query("DELETE FROM local_files WHERE trackId IN (:trackIds)")
+    suspend fun deleteLocalFiles(trackIds: List<String>)
+
     @Query("SELECT * FROM subsonic_downloads WHERE serverId = :serverId ORDER BY updatedAtMs DESC")
     fun observeDownloadsForServer(serverId: Long): Flow<List<SubsonicDownloadEntity>>
 
@@ -292,9 +321,11 @@ interface OndaluneDao {
         SubsonicTrack::class,
         SubsonicPlaylist::class,
         SubsonicDownloadEntity::class,
-        TrackOverride::class
+        TrackOverride::class,
+        LocalFolder::class,
+        LocalFileRecord::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -409,6 +440,39 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 8: server playlists (their server id, owner, cover, changed stamp), the folders picked for
+         * music on this phone, and per-file scan records. The 118 BPM every song used to get when
+         * its server didn't say is cleared: 0 means unknown, and the next sync brings real values.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                listOf(
+                    "remoteId TEXT NOT NULL DEFAULT ''",
+                    "owner TEXT NOT NULL DEFAULT ''",
+                    "isPublic INTEGER NOT NULL DEFAULT 0",
+                    "readOnly INTEGER NOT NULL DEFAULT 0",
+                    "coverArtUrl TEXT NOT NULL DEFAULT ''",
+                    "remoteChanged TEXT NOT NULL DEFAULT ''"
+                ).forEach { column ->
+                    if (!hasColumn(db, "subsonic_playlists", column.substringBefore(' '))) {
+                        db.execSQL("ALTER TABLE subsonic_playlists ADD COLUMN $column")
+                    }
+                }
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `local_folders` (`treeUri` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                        "`location` TEXT NOT NULL, `trackCount` INTEGER NOT NULL, `lastScanMs` INTEGER NOT NULL, " +
+                        "`accessible` INTEGER NOT NULL, PRIMARY KEY(`treeUri`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `local_files` (`trackId` TEXT NOT NULL, `folderUri` TEXT NOT NULL, " +
+                        "`size` INTEGER NOT NULL, `modifiedMs` INTEGER NOT NULL, PRIMARY KEY(`trackId`))"
+                )
+                db.execSQL("UPDATE subsonic_tracks SET bpm = 0 WHERE bpm = 118")
+                db.execSQL("UPDATE subsonic_tracks SET musicalKey = '' WHERE musicalKey = 'F Minor'")
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -416,7 +480,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

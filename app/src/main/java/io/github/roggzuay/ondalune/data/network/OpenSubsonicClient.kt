@@ -7,6 +7,7 @@ import io.github.roggzuay.ondalune.data.model.LyricsAvailability
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.data.model.RemotePlaylist
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import java.io.File
 import java.io.FileOutputStream
@@ -68,7 +69,9 @@ class OpenSubsonicClient {
     fun buildEndpointUrl(
         server: SubsonicServerConfig,
         endpoint: String,
-        queryParams: Map<String, String> = emptyMap()
+        queryParams: Map<String, String> = emptyMap(),
+        /** Parameters that repeat, such as `songId` for each song added to a playlist. */
+        repeatedParams: List<Pair<String, String>> = emptyList()
     ): String {
         val cleanBase = server.baseUrl.trim().trimEnd('/')
         val baseHttpUrl = "$cleanBase/rest/$endpoint.view".toHttpUrlOrNull()
@@ -97,6 +100,7 @@ class OpenSubsonicClient {
         queryParams.forEach { (k, v) ->
             builder.addQueryParameter(k, v)
         }
+        repeatedParams.forEach { (k, v) -> builder.addQueryParameter(k, v) }
 
         return builder.build().toString()
     }
@@ -461,25 +465,27 @@ class OpenSubsonicClient {
             album = s.optString("album", album?.optString("name") ?: "Unknown Album"),
             albumId = albumId,
             durationSec = s.optInt("duration", 210).coerceAtLeast(15),
-            bitRate = s.optInt("bitRate", 960),
-            suffix = s.optString("suffix", "FLAC").uppercase(),
-            bitDepth = s.optInt("bitDepth", 24),
-            samplingRate = s.optInt("samplingRate", 48000),
+            // What the server doesn't say stays unknown (0 or blank): the player never shows a
+            // made-up format, bit depth, sample rate, tempo or year.
+            bitRate = s.optInt("bitRate", 0),
+            suffix = s.optString("suffix", "").uppercase(),
+            bitDepth = s.optInt("bitDepth", 0),
+            samplingRate = s.optInt("samplingRate", 0),
             starred = s.has("starred"),
             trackNumber = s.optInt("track", fallbackTrackNumber),
-            year = s.optInt("year", album?.optInt("year", 2025) ?: 2025),
+            year = s.optInt("year", album?.optInt("year", 0) ?: 0),
             genre = s.optJSONArray("genres")
                 ?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("name")?.takeIf(String::isNotBlank) } }
                 ?.takeIf { it.isNotEmpty() }?.joinToString("; ")
                 ?: s.optString("genre", album?.optString("genre").orEmpty()),
-            folderPath = s.optString("path", "/Music/Lossless"),
+            folderPath = s.optString("path", ""),
             coverArtUrl = buildCoverArtUrl(server, coverId),
             artistImageUrl = if (trackArtistId.isNotBlank()) buildCoverArtUrl(server, trackArtistId) else "",
             artStyleIndex = styleIndex % 6,
             paletteSeedHex = palette.first,
             accentHex = palette.second,
             playCount = s.optInt("playCount", 0),
-            userRating = s.optInt("userRating", if (s.has("starred")) 5 else 4),
+            bpm = s.optInt("bpm", 0),
             rgTrackGain = s.optJSONObject("replayGain").optFloatOrNull("trackGain"),
             rgAlbumGain = s.optJSONObject("replayGain").optFloatOrNull("albumGain"),
             rgTrackPeak = s.optJSONObject("replayGain").optFloatOrNull("trackPeak"),
@@ -499,14 +505,60 @@ class OpenSubsonicClient {
     }
 
     /** GET [endpoint] and return its `subsonic-response`, or null on HTTP/API failure. */
-    private fun getResponse(server: SubsonicServerConfig, endpoint: String, params: Map<String, String>): JSONObject? {
-        val url = buildEndpointUrl(server = server, endpoint = endpoint, queryParams = params)
+    private fun getResponse(
+        server: SubsonicServerConfig,
+        endpoint: String,
+        params: Map<String, String>,
+        repeated: List<Pair<String, String>> = emptyList()
+    ): JSONObject? {
+        val url = buildEndpointUrl(server = server, endpoint = endpoint, queryParams = params, repeatedParams = repeated)
         if (url.isBlank()) return null
         return okHttpClient.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
             if (!resp.isSuccessful) return null
             JSONObject(resp.body?.string().orEmpty()).optJSONObject("subsonic-response")
                 ?.takeIf { it.optString("status") == "ok" }
         }
+    }
+
+    /**
+     * The playlists the signed-in user can see (`getPlaylists`): their own and public ones shared by
+     * others. Null when the server can't be reached or refuses, so callers keep what they have.
+     */
+    suspend fun fetchPlaylists(server: SubsonicServerConfig): List<RemotePlaylist>? = withContext(Dispatchers.IO) {
+        if (server.isDemoServer) return@withContext null
+        runCatching {
+            val list = getResponse(server, "getPlaylists", emptyMap())
+                ?.optJSONObject("playlists") ?: return@runCatching null
+            val arr = list.optJSONArray("playlist") ?: return@runCatching emptyList()
+            (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(::parseRemotePlaylist) }
+        }.getOrNull()
+    }
+
+    /** A playlist's songs (`getPlaylist`), in order; null if it couldn't be read. */
+    suspend fun fetchPlaylistSongs(server: SubsonicServerConfig, playlistId: String): List<SubsonicTrack>? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val playlist = getResponse(server, "getPlaylist", mapOf("id" to playlistId))
+                    ?.optJSONObject("playlist") ?: return@runCatching null
+                val entries = playlist.optJSONArray("entry") ?: return@runCatching emptyList()
+                (0 until entries.length()).mapNotNull { i ->
+                    entries.optJSONObject(i)?.let { parseSong(server, it, album = null, styleIndex = i, fallbackTrackNumber = i + 1) }
+                        ?.takeIf { it.id.isNotBlank() }
+                }
+            }.getOrNull()
+        }
+
+    /** Adds songs to the end of a server playlist (`updatePlaylist`); false if the server refused. */
+    suspend fun addToRemotePlaylist(server: SubsonicServerConfig, playlistId: String, songIds: List<String>): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                getResponse(server, "updatePlaylist", mapOf("playlistId" to playlistId), songIds.map { "songIdToAdd" to it }) != null
+            }.getOrDefault(false)
+        }
+
+    /** Deletes a server playlist (`deletePlaylist`); false if the server refused (not yours, or gone). */
+    suspend fun deleteRemotePlaylist(server: SubsonicServerConfig, playlistId: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { getResponse(server, "deletePlaylist", mapOf("id" to playlistId)) != null }.getOrDefault(false)
     }
 
     /** Result of a full library walk; [complete] is false if any page failed, so callers must not prune. */
@@ -646,42 +698,9 @@ class OpenSubsonicClient {
                     .optJSONObject("subsonic-response")
                     ?.optJSONObject("searchResult3")
                     ?.optJSONArray("song") ?: return@withContext emptyList()
-                val list = mutableListOf<SubsonicTrack>()
-                for (i in 0 until songs.length()) {
-                    val s = songs.optJSONObject(i) ?: continue
-                    val palette = palettePairs[i % palettePairs.size]
-                    val coverId = s.optString("coverArt", s.optString("id"))
-                    val trackArtistId = s.optString("artistId", "")
-                    val coverArtUrl = buildCoverArtUrl(server, coverId)
-                    list.add(
-                        SubsonicTrack(
-                            id = s.optString("id"),
-                            serverId = server.id,
-                            title = s.optString("title", "Track"),
-                            artist = s.optString("artist", "Artist"),
-                            artistId = trackArtistId,
-                            album = s.optString("album", "Album"),
-                            albumId = s.optString("albumId", ""),
-                            durationSec = s.optInt("duration", 200).coerceAtLeast(15),
-                            bitRate = s.optInt("bitRate", 850),
-                            suffix = s.optString("suffix", "FLAC").uppercase(),
-                            bitDepth = s.optInt("bitDepth", 16),
-                            samplingRate = s.optInt("samplingRate", 44100),
-                            starred = s.has("starred"),
-                            trackNumber = s.optInt("track", i + 1),
-                            year = s.optInt("year", 2024),
-                            genre = s.optString("genre", "Stream"),
-                            coverArtUrl = coverArtUrl,
-                            artistImageUrl = if (trackArtistId.isNotBlank()) buildCoverArtUrl(server, trackArtistId) else coverArtUrl,
-                            artStyleIndex = i % 6,
-                            paletteSeedHex = palette.first,
-                            accentHex = palette.second,
-                            playCount = s.optInt("playCount", 0),
-                            userRating = s.optInt("userRating", if (s.has("starred")) 5 else 4)
-                        )
-                    )
+                (0 until songs.length()).mapNotNull { i ->
+                    songs.optJSONObject(i)?.let { parseSong(server, it, album = null, styleIndex = i, fallbackTrackNumber = i + 1) }
                 }
-                list
             }
         } catch (_: Exception) {
             emptyList()
@@ -1015,4 +1034,19 @@ class OpenSubsonicClient {
             LyricLine(timeMs = totalMs, text = textPart)
         }
     }
+}
+
+/** One entry of `getPlaylists`. */
+internal fun parseRemotePlaylist(p: JSONObject): RemotePlaylist? {
+    val id = p.optString("id").takeIf { it.isNotBlank() } ?: return null
+    return RemotePlaylist(
+        id = id,
+        name = p.optString("name").ifBlank { "Untitled playlist" },
+        comment = p.optString("comment"),
+        owner = p.optString("owner"),
+        isPublic = p.optBoolean("public", false),
+        songCount = p.optInt("songCount", 0),
+        coverArtId = p.optString("coverArt"),
+        changed = p.optString("changed")
+    )
 }

@@ -160,6 +160,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.Box
+import io.github.roggzuay.ondalune.data.model.SourceType
+import io.github.roggzuay.ondalune.data.model.source
 
 /**
  * Process-scoped tracker ensuring the Ondalune Animated Launch Intro runs at most once per cold
@@ -232,6 +234,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val tabDisplayPreferences by viewModel.tabDisplayPreferences.collectAsStateWithLifecycle()
 
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
+    val isRefreshingPlaylists by viewModel.isRefreshingPlaylists.collectAsStateWithLifecycle()
     // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
     val heroLaunch = remember { HeroLaunch() }
     // How far the player is open; the mini player and the full player share it.
@@ -742,6 +745,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
                                     PrimaryDestination.LIBRARY -> {
                                         LibraryCollectionScreen(
+                                            serverName = activeServer.name,
                                             albums = albums,
                                             artists = artists,
                                             tracks = tracks,
@@ -787,6 +791,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     PrimaryDestination.ARTISTS -> {
                                         val artistsKey = LibraryFilterTab.ARTISTS.name
                                         LibraryCollectionScreen(
+                                            serverName = activeServer.name,
                                             albums = albums,
                                             artists = artists,
                                             tracks = tracks,
@@ -840,6 +845,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCreatePlaylist = viewModel::createPlaylist,
                                             onDeletePlaylist = viewModel::deletePlaylist,
                                             onToggleStarTrack = viewModel::toggleStarTrack,
+                                            serverName = activeServer.name,
+                                            isRefreshing = isRefreshingPlaylists,
+                                            onRefresh = viewModel::refreshServerPlaylists.takeIf { activeServer.source == SourceType.SUBSONIC && !activeServer.isDemoServer },
                                             selectedPlaylistId = selectedPlaylistId,
                                             onOpenPlaylist = viewModel::openPlaylistDetail,
                                             viewMode = tabDisplayPreferences["PLAYLISTS"]?.viewMode ?: LibraryViewMode.LIST,

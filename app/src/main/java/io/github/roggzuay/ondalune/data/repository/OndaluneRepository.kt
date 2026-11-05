@@ -12,6 +12,8 @@ import io.github.roggzuay.ondalune.data.model.SubsonicArtist
 import io.github.roggzuay.ondalune.data.model.SubsonicFolder
 import io.github.roggzuay.ondalune.data.model.SubsonicGenre
 import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
+import io.github.roggzuay.ondalune.data.model.LOCAL_TRACK_PREFIX
+import io.github.roggzuay.ondalune.data.model.serverPlaylistKey
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
@@ -171,7 +173,62 @@ class OndaluneRepository(
             val live = merged.mapTo(HashSet()) { it.id }
             existing.keys.filterNot { it in live }.chunked(500).forEach { dao.deleteTracks(server.id, it) }
         }
+        syncServerPlaylists(server)
         return merged.size
+    }
+
+    /**
+     * Brings the server's playlists in as their own rows (one per server playlist, keyed by its
+     * server id, so syncing again never adds a copy). Changed ones are fetched again, unchanged
+     * ones keep their songs, ones gone from the server are removed. Playlists made in Ondalune are
+     * never touched. Returns false when the server couldn't list them; the cached ones then stay.
+     */
+    suspend fun syncServerPlaylists(server: SubsonicServerConfig): Boolean {
+        val source = sourceFor(server)
+        val remote = source.playlists(server) ?: return false
+        val cached = dao.getPlaylistsForServerOnce(server.id).filter { it.isServerPlaylist }.associateBy { it.remoteId }
+        var known: Set<String>? = null
+        for (p in remote) {
+            val old = cached[p.id]
+            // The server's "changed" stamp; cleared when the songs couldn't be read, so the next
+            // sync tries again.
+            var stamp = p.changed
+            val trackIds = if (old != null && p.changed.isNotBlank() && old.remoteChanged == p.changed) {
+                old.trackIds
+            } else {
+                val songs = source.playlistSongs(server, p.id)
+                if (songs != null) {
+                    // A song the library sync hasn't seen yet still plays from the playlist.
+                    val inLibrary = known ?: dao.getTrackIdsForServer(server.id).toHashSet().also { known = it }
+                    songs.filter { it.id !in inLibrary }.distinctBy { it.id }.takeIf { it.isNotEmpty() }?.let { dao.insertTracks(it) }
+                    songs.map { it.id }
+                } else {
+                    stamp = ""
+                    old?.trackIds ?: continue
+                }
+            }
+            dao.insertPlaylist(
+                SubsonicPlaylist(
+                    id = serverPlaylistKey(server.id, p.id),
+                    serverId = server.id,
+                    name = p.name,
+                    comment = p.comment,
+                    trackIdsCsv = trackIds.joinToString(","),
+                    paletteSeedHex = old?.paletteSeedHex ?: "#FF6B5B",
+                    accentHex = old?.accentHex ?: "#70F5FF",
+                    updatedAtMs = old?.updatedAtMs ?: System.currentTimeMillis(),
+                    remoteId = p.id,
+                    owner = p.owner,
+                    isPublic = p.isPublic,
+                    readOnly = p.owner.isNotBlank() && !p.owner.equals(server.username.trim(), ignoreCase = true),
+                    coverArtUrl = p.coverArtId.takeIf { it.isNotBlank() }?.let { client.buildCoverArtUrl(server, it) }.orEmpty(),
+                    remoteChanged = stamp
+                )
+            )
+        }
+        val live = remote.mapTo(HashSet()) { it.id }
+        cached.values.filter { it.remoteId !in live }.forEach { dao.deletePlaylist(it.id) }
+        return true
     }
 
     suspend fun toggleStarTrack(server: SubsonicServerConfig, track: SubsonicTrack) {
@@ -263,13 +320,37 @@ class OndaluneRepository(
         dao.insertPlaylist(playlist)
     }
 
-    suspend fun addTracksToPlaylist(playlist: SubsonicPlaylist, trackIds: List<String>) {
-        val merged = (playlist.trackIds + trackIds).distinct()
-        dao.insertPlaylist(playlist.copy(trackIdsCsv = merged.joinToString(","), updatedAtMs = System.currentTimeMillis()))
+    /**
+     * Adds songs to a playlist. A server playlist changes on the server first (only songs from that
+     * server, only if it's yours), then here; returns false when the server refused, and nothing
+     * changes.
+     */
+    suspend fun addTracksToPlaylist(playlist: SubsonicPlaylist, trackIds: List<String>): Boolean {
+        val added = trackIds.filterNot { it in playlist.trackIds }.distinct()
+        if (added.isEmpty()) return true
+        if (playlist.isServerPlaylist) {
+            val server = dao.getAllServersOnce().find { it.id == playlist.serverId } ?: return false
+            if (playlist.readOnly || added.any { it.startsWith(LOCAL_TRACK_PREFIX) }) return false
+            if (!sourceFor(server).addToPlaylist(server, playlist.remoteId, added)) return false
+        }
+        dao.insertPlaylist(
+            playlist.copy(
+                trackIdsCsv = (playlist.trackIds + added).joinToString(","),
+                updatedAtMs = System.currentTimeMillis(),
+                remoteChanged = "" // the server's stamp moved; read it again on the next sync
+            )
+        )
+        return true
     }
 
-    suspend fun deletePlaylist(playlistId: String) {
-        dao.deletePlaylist(playlistId)
+    /** Deletes a playlist; a server playlist is deleted on the server (only if it's yours). */
+    suspend fun deletePlaylist(playlist: SubsonicPlaylist): Boolean {
+        if (playlist.isServerPlaylist) {
+            val server = dao.getAllServersOnce().find { it.id == playlist.serverId } ?: return false
+            if (playlist.readOnly || !sourceFor(server).deletePlaylist(server, playlist.remoteId)) return false
+        }
+        dao.deletePlaylist(playlist.id)
+        return true
     }
 
     suspend fun deleteServer(serverId: Long) {
