@@ -365,7 +365,41 @@ fun monoLabelSmall() = MaterialTheme.typography.labelSmall.let {
     if (LocalStyleSpec.current.monoBadges) it.copy(fontFamily = MonoFontFamily) else it
 }
 
-/** Bookkeeping for the colour-scheme fade in [OndaluneExpressiveTheme]. */
+/**
+ * Gives [content] the theme's colours, faded across over 600 ms whenever they change. For the open
+ * player, whose colours follow each new cover: fading only there keeps the rest of the app from
+ * recomposing every frame, which is what made an app-wide fade stutter.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun FadingColors(content: @Composable () -> Unit) {
+    val target = MaterialTheme.colorScheme
+    val fade = remember { SchemeFade(target, "") }
+    val progress = remember { Animatable(1f) }
+    val reducedMotion = LocalReducedMotion.current
+    if (fade.to !== target) {
+        fade.from = if (reducedMotion) target else fade.shown
+        fade.to = target
+        fade.pending = !reducedMotion
+    }
+    LaunchedEffect(target) {
+        if (fade.pending) {
+            progress.snapTo(0f)
+            fade.pending = false
+            progress.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
+        } else progress.snapTo(1f)
+    }
+    val p = progress.value
+    val scheme = when {
+        fade.pending -> fade.from
+        p >= 1f -> target
+        else -> lerpScheme(fade.from, target, p)
+    }
+    fade.shown = scheme
+    MaterialExpressiveTheme(colorScheme = scheme, content = content)
+}
+
+/** Bookkeeping for a colour-scheme fade ([OndaluneExpressiveTheme], [FadingColors]). */
 private class SchemeFade(initial: ColorScheme, var key: String) {
     var from = initial
     var to = initial
