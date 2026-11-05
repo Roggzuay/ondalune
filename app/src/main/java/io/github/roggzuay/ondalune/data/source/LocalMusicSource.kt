@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import io.github.roggzuay.ondalune.data.model.LOCAL_TRACK_PREFIX
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricsAvailability
+import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
@@ -43,7 +44,13 @@ class LocalMusicSource(
     private val context: Context,
     private val parseLrc: (String) -> List<LyricLine>
 ) : MusicSource {
-    override val capabilities = emptySet<SourceCapability>()
+    override suspend fun ping(server: SubsonicServerConfig) = PingDiagnosticResult(
+        success = hasPermission(context),
+        statusMessage = if (hasPermission(context)) "Music on this phone" else "Allow \"Music and audio\" to play music on this phone"
+    )
+
+    /** The phone's library comes from [scan], not a sync. */
+    override suspend fun fetchLibrary(server: SubsonicServerConfig, onProgress: (Int) -> Unit) = null
 
     override suspend fun playablePath(server: SubsonicServerConfig, track: SubsonicTrack) = filePath(context, track)
 

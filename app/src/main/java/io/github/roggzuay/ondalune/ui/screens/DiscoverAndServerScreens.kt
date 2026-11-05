@@ -2,6 +2,10 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SegmentedButton
+import io.github.roggzuay.ondalune.data.model.SourceType
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlaybackSettingsRow
 import io.github.roggzuay.ondalune.ui.components.SupportDeveloperCard
 import io.github.roggzuay.ondalune.ui.components.AboutLicencesRow
@@ -439,7 +443,7 @@ fun SettingsCustomizationScreen(
     onClearTempAudioCache: () -> Unit = {},
     onBack: () -> Unit = {},
     onActivateServer: (SubsonicServerConfig) -> Unit,
-    onTestAndSaveServer: (String, String, String, String, Boolean, String, Int) -> Unit,
+    onTestAndSaveServer: (String, String, String, String, Boolean, String, Int, SourceType) -> Unit,
     phoneMusic: PhoneMusicState = PhoneMusicState(),
     onSetPhoneMusic: (Boolean) -> Unit = {},
     onRescanPhoneMusic: () -> Unit = {}
@@ -450,6 +454,7 @@ fun SettingsCustomizationScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var useTokenAuth by remember { mutableStateOf(true) }
+    var serverType by remember { mutableStateOf(SourceType.SUBSONIC) }
 
     // Track which expandable list sections are currently expanded
     val expandedMap = remember {
@@ -2019,9 +2024,11 @@ fun SettingsCustomizationScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     Text(
-                        text = "Connect New OpenSubsonic Server",
+                        text = "Connect a server",
                         style = MaterialTheme.typography.titleMedium
                     )
+
+                    ServerTypePicker(serverType) { serverType = it }
 
                     OutlinedTextField(
                         value = serverName,
@@ -2072,7 +2079,8 @@ fun SettingsCustomizationScreen(
                         )
                     }
 
-                    Row(
+                    // Jellyfin signs in with a password; only Subsonic has the token option.
+                    if (serverType == SourceType.SUBSONIC) Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -2116,7 +2124,8 @@ fun SettingsCustomizationScreen(
                                 password,
                                 useTokenAuth,
                                 activeServer.transcodeFormat,
-                                activeServer.maxBitRate
+                                activeServer.maxBitRate,
+                                serverType
                             )
                         },
                         enabled = serverUrl.length > 8 && username.isNotBlank(),
@@ -2127,7 +2136,7 @@ fun SettingsCustomizationScreen(
                     ) {
                         Icon(Icons.Filled.Speed, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ping & Connect OpenSubsonic Server")
+                        Text("Connect ${serverType.label} server")
                     }
                 }
             }
@@ -3589,6 +3598,21 @@ private fun MoodMixesPanel(
     }
 }
 
+/** OpenSubsonic or Jellyfin, for the add-server forms. */
+@Composable
+private fun ServerTypePicker(selected: SourceType, onSelect: (SourceType) -> Unit) {
+    val types = listOf(SourceType.SUBSONIC, SourceType.JELLYFIN)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().testTag("server_type_picker")) {
+        types.forEachIndexed { i, type ->
+            SegmentedButton(
+                selected = type == selected,
+                onClick = { onSelect(type) },
+                shape = SegmentedButtonDefaults.itemShape(i, types.size)
+            ) { Text(type.label) }
+        }
+    }
+}
+
 @Composable
 private fun EqResponseCurveCanvas(
     bandsDb: List<Float>,
@@ -3961,7 +3985,7 @@ fun UserServerInfoModal(
 @Composable
 fun ServerOnboardingIntroModal(
     activeServer: SubsonicServerConfig,
-    onConnectServer: (String, String, String, String, Boolean) -> Unit,
+    onConnectServer: (String, String, String, String, Boolean, SourceType) -> Unit,
     onContinueWithDemo: () -> Unit,
     syncState: OndaluneViewModel.OnboardingSync? = null
 ) {
@@ -3971,6 +3995,7 @@ fun ServerOnboardingIntroModal(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var useTokenAuth by remember { mutableStateOf(true) }
+    var serverType by remember { mutableStateOf(SourceType.SUBSONIC) }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -4029,14 +4054,16 @@ fun ServerOnboardingIntroModal(
                             )
                         }
                         Text(
-                            text = "Enter Your OpenSubsonic Server Details",
+                            text = "Enter your server details",
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "Connect to Navidrome, Gonic, Airsonic-Advanced, or Ampache with MD5 salt + token authentication.",
+                            text = "Connect to Navidrome, Gonic, Airsonic-Advanced, Ampache or Jellyfin.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        ServerTypePicker(serverType) { serverType = it }
 
                         OutlinedTextField(
                             value = serverName,
@@ -4087,7 +4114,7 @@ fun ServerOnboardingIntroModal(
                             )
                         }
 
-                        Row(
+                        if (serverType == SourceType.SUBSONIC) Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -4128,7 +4155,8 @@ fun ServerOnboardingIntroModal(
                                     serverUrl,
                                     username,
                                     password,
-                                    useTokenAuth
+                                    useTokenAuth,
+                                    serverType
                                 )
                             },
                             enabled = serverUrl.length > 8 && username.isNotBlank(),

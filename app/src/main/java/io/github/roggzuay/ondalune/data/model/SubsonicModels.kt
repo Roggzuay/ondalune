@@ -20,21 +20,56 @@ data class SubsonicServerConfig(
     val serverSoftware: String = "OpenSubsonic 1.16.1",
     val extensionsCsv: String = "songLyrics,transcodeOffset,formPost,apiKeyAuthentication",
     val lastPingMs: Long = 0L,
-    /** [SourceType] name: a Subsonic server, or the music stored on this phone. */
-    val sourceType: String = SourceType.SUBSONIC.name
+    /** [SourceType] name: a Subsonic or Jellyfin server, or the music stored on this phone. */
+    val sourceType: String = SourceType.SUBSONIC.name,
+    /** The signed-in user's id on servers that need one in requests (Jellyfin). */
+    val remoteUserId: String = ""
 )
 
 /** Where a library comes from. Stored by name on [SubsonicServerConfig.sourceType]. */
-enum class SourceType { SUBSONIC, LOCAL }
+enum class SourceType(val label: String) { SUBSONIC("OpenSubsonic"), JELLYFIN("Jellyfin"), LOCAL("This phone") }
+
+val SubsonicServerConfig.source: SourceType
+    get() = SourceType.entries.find { it.name == sourceType } ?: SourceType.SUBSONIC
 
 /** The music stored on this phone, rather than a server. */
-val SubsonicServerConfig.isLocalSource: Boolean get() = sourceType == SourceType.LOCAL.name
+val SubsonicServerConfig.isLocalSource: Boolean get() = source == SourceType.LOCAL
 
 /** Track ids from this phone's music start with this, so they never clash with a server's ids. */
 const val LOCAL_TRACK_PREFIX = "local:"
 
 /** A song from this phone's own storage (always playable offline, never downloaded). */
 val SubsonicTrack.isOnDevice: Boolean get() = id.startsWith(LOCAL_TRACK_PREFIX)
+
+/**
+ * Song details changed in the app. Kept apart from the synced library, so a sync never undoes them,
+ * and never sent to the server. A null field keeps the source's value.
+ */
+@Entity(tableName = "track_overrides", primaryKeys = ["serverId", "trackId"])
+data class TrackOverride(
+    val serverId: Long,
+    val trackId: String,
+    val title: String? = null,
+    val artist: String? = null,
+    val genre: String? = null,
+    val year: Int? = null
+)
+
+fun SubsonicTrack.withOverride(o: TrackOverride?): SubsonicTrack =
+    if (o == null) this else copy(title = o.title ?: title, artist = o.artist ?: artist, genre = o.genre ?: genre, year = o.year ?: year)
+
+/** The override that turns [original] into the given details; null when nothing differs. */
+fun overrideFor(original: SubsonicTrack, title: String, artist: String, genre: String, year: Int): TrackOverride? {
+    val o = TrackOverride(
+        serverId = original.serverId,
+        trackId = original.id,
+        title = title.trim().takeIf { it.isNotEmpty() && it != original.title },
+        artist = artist.trim().takeIf { it.isNotEmpty() && it != original.artist },
+        genre = genre.trim().takeIf { it != original.genre },
+        year = year.takeIf { it != original.year }
+    )
+    return o.takeIf { it.title != null || it.artist != null || it.genre != null || it.year != null }
+}
 
 @Entity(tableName = "subsonic_tracks")
 data class SubsonicTrack(

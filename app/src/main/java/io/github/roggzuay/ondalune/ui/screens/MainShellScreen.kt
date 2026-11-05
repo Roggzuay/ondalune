@@ -332,6 +332,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             override fun openAlbum(track: SubsonicTrack) = viewModel.openAlbumAnywhere(track.albumId)
             override fun openArtist(track: SubsonicTrack) = viewModel.openArtistFromTrack(track)
             override fun openArtist(artistId: String, name: String) = viewModel.openArtistByName(artistId, name)
+            override fun originalOf(track: SubsonicTrack) = viewModel.originalOf(track)
+            override fun saveDetails(track: SubsonicTrack, title: String, artist: String, genre: String, year: Int) =
+                viewModel.saveTrackDetails(track, title, artist, genre, year)
         }
     }
     val favouriteArtistIds by viewModel.favouriteArtistIds.collectAsStateWithLifecycle()
@@ -1356,13 +1359,14 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 ) {
                     ServerOnboardingIntroModal(
                         activeServer = activeServer,
-                        onConnectServer = { name, url, user, pass, tokenAuth ->
+                        onConnectServer = { name, url, user, pass, tokenAuth, type ->
                             viewModel.connectServerDuringOnboarding(
                                 name = name,
                                 baseUrl = url,
                                 username = user,
                                 passwordOrToken = pass,
-                                useTokenAuth = tokenAuth
+                                useTokenAuth = tokenAuth,
+                                sourceType = type
                             )
                         },
                         onContinueWithDemo = {

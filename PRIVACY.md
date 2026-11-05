@@ -26,7 +26,10 @@ Ondalune only connects to:
 ## Data stored on your phone
 
 - **Server details.** Passwords are encrypted with a key held in Android's Keystore, which never
-  leaves the device.
+  leaves the device. For a Jellyfin server the password is only used to sign in and isn't stored;
+  the sign-in token Jellyfin returns is kept instead, encrypted the same way.
+- **Song details you edit** (title, artist, genre, year). They are kept in the app's own
+  storage and never sent to your server or written to your files.
 - **Your library cache, settings, queue, and downloaded songs.**
 - **Music on this phone, only if you turn it on** (Settings → Music sources → Music on this phone).
   With the "Music and audio" permission, Ondalune reads Android's list of the audio files on your

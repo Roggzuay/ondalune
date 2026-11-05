@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.data.local
 
+import io.github.roggzuay.ondalune.data.source.MusicSources
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -223,7 +224,7 @@ class OndaluneDownloadManager(
                 Result.success(targetFile)
             } else {
                 client.downloadAudioStreamToFile(
-                    server = server,
+                    candidateUrl = MusicSources.forServer(context, client, server).downloadUrl(server, track).orEmpty(),
                     track = track,
                     targetFile = targetFile,
                     speedLimit = speedLimit

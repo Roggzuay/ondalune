@@ -10,7 +10,8 @@
 [![Latest release](https://img.shields.io/github/v/release/Roggzuay/ondalune)](https://github.com/Roggzuay/ondalune/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/github/license/Roggzuay/ondalune)](LICENSE)
 
-Ondalune streams your library from Navidrome or any Subsonic/OpenSubsonic server and plays it
+Ondalune streams your library from Navidrome, Jellyfin or any Subsonic/OpenSubsonic server, and
+the music stored on your phone, and plays it
 through a hand-tuned audio engine: real-time speed and pitch control, a live studio reverb,
 synced lyrics, and a player that takes its colours and motion from whatever is playing.
 
@@ -104,14 +105,21 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Background playback** keeps going on the lock screen and through screen-off.
 - **Media notification and resizable widgets** with a blurred-artwork background.
 
-## Servers
+## Music sources
 
 Ondalune works with servers that speak the Subsonic API, including **Navidrome**, **Gonic** and
 **Airsonic-Advanced**, and it uses OpenSubsonic extensions such as structured lyrics when the
-server offers them. You can add more than one server and switch between them.
+server offers them. It also works with **Jellyfin**. You can add more than one server and switch
+between them.
+
+Turn on **Music on this phone** and the songs stored on your phone join your server's library:
+same Home, mixes, search and queue, playable without a connection, with lyrics from `.lrc` files
+beside them. Song details you correct in the app (title, artist, genre, year) stay corrected
+after every sync, and are never written to the server or your files.
 
 - **Security:** passwords are encrypted on your phone with a key from Android's hardware-backed
-  Keystore, and token authentication is used where the server supports it.
+  Keystore, and token authentication is used where the server supports it. For Jellyfin the
+  password is used once to sign in and isn't kept; only the sign-in token is stored, encrypted.
 - **Home networks:** plain `http://` addresses work (the app tells you they aren't encrypted).
   Servers with a self-signed or private certificate work once you install that certificate on
   your phone.
