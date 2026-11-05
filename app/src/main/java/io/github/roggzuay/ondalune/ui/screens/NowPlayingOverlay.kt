@@ -465,7 +465,6 @@ fun NowPlayingStudioOverlay(
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
     backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
     unifiedMaterialYouColor: Boolean = false,
-    onSetTrackRating: (SubsonicTrack, Int) -> Unit = { _, _ -> }
 ) {
     val isUpNextBottomSheetOpen = activeTab == NowPlayingSheetTab.QUEUE
     BackHandler {
@@ -601,7 +600,6 @@ fun NowPlayingStudioOverlay(
                                 positionMs = positionMs,
                                 queue = queue,
                                 shuffleMode = shuffleMode,
-                                smartShuffleProfile = smartShuffleProfile,
                                 onTriggerPulseAndCycleShape = {
                                     scope.launch {
                                         artworkPulse.snapTo(1.06f)
@@ -643,7 +641,6 @@ fun NowPlayingStudioOverlay(
                                 sleepTimerState = sleepTimerState,
                                 shuffleEnabled = shuffleEnabled,
                                 shuffleMode = shuffleMode,
-                                smartShuffleProfile = smartShuffleProfile,
                                 repeatOneEnabled = repeatOneEnabled,
                                 animatedWaveEnabled = animatedWaveEnabled,
                                 showRemainingTime = showRemainingTime,
@@ -658,7 +655,6 @@ fun NowPlayingStudioOverlay(
                                 onToggleShuffle = onToggleShuffle,
                                 onToggleRepeatOne = onToggleRepeatOne,
                                 onToggleStar = onToggleStar,
-                                onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
                                 onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
                                 onResetSpeedPitch = onResetSpeedPitch,
                                 showSpeedResetHint = showSpeedResetHint,
@@ -690,7 +686,6 @@ fun NowPlayingStudioOverlay(
                             positionMs = positionMs,
                             queue = queue,
                             shuffleMode = shuffleMode,
-                            smartShuffleProfile = smartShuffleProfile,
                             onTriggerPulseAndCycleShape = {
                                 scope.launch {
                                     artworkPulse.snapTo(1.06f)
@@ -727,7 +722,6 @@ fun NowPlayingStudioOverlay(
                             sleepTimerState = sleepTimerState,
                             shuffleEnabled = shuffleEnabled,
                             shuffleMode = shuffleMode,
-                            smartShuffleProfile = smartShuffleProfile,
                             repeatOneEnabled = repeatOneEnabled,
                             animatedWaveEnabled = animatedWaveEnabled,
                             showRemainingTime = showRemainingTime,
@@ -742,7 +736,6 @@ fun NowPlayingStudioOverlay(
                             onToggleShuffle = onToggleShuffle,
                             onToggleRepeatOne = onToggleRepeatOne,
                             onToggleStar = onToggleStar,
-                            onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
                             onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
                             onResetSpeedPitch = onResetSpeedPitch,
                             showSpeedResetHint = showSpeedResetHint,
@@ -993,7 +986,6 @@ private fun NowPlayingCenterStage(
     positionMs: Long,
     queue: List<SubsonicTrack>,
     shuffleMode: ShuffleMode,
-    smartShuffleProfile: SmartShuffleProfile,
     onTriggerPulseAndCycleShape: () -> Unit,
     onSwipeDownDelta: (Float) -> Unit,
     onSwipeDownFinish: (Float) -> Unit,
@@ -1238,7 +1230,6 @@ private fun NowPlayingControlsColumn(
     sleepTimerState: SleepTimerState,
     shuffleEnabled: Boolean,
     shuffleMode: ShuffleMode,
-    smartShuffleProfile: SmartShuffleProfile,
     repeatOneEnabled: Boolean,
     animatedWaveEnabled: Boolean,
     showRemainingTime: Boolean,
@@ -1253,7 +1244,6 @@ private fun NowPlayingControlsColumn(
     onToggleShuffle: () -> Unit,
     onToggleRepeatOne: () -> Unit,
     onToggleStar: () -> Unit,
-    onSetTrackRating: (Int) -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
     onResetSpeedPitch: () -> Unit,
     showSpeedResetHint: Boolean,
@@ -1269,7 +1259,7 @@ private fun NowPlayingControlsColumn(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Hide the big song title, artist, and rating row when Lyrics mode is active
+        // Hide the big song title and artist when Lyrics mode is active
         // so the full-area blurred lyrics canvas is never disturbed.
         AnimatedVisibility(visible = !isLyricsMode) {
             Column(
@@ -1328,26 +1318,6 @@ private fun NowPlayingControlsColumn(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             modifier = Modifier.padding(top = 2.dp)
                         ) {
-                            for (starIdx in 1..5) {
-                                val filled = starIdx <= track.userRating
-                                Icon(
-                                    imageVector = if (filled) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                                    contentDescription = "Rate $starIdx stars",
-                                    tint = if (filled) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    },
-                                    modifier = Modifier
-                                        .size(17.dp)
-                                        .clickable {
-                                            hapticManager.performSubtleTick()
-                                            onSetTrackRating(starIdx)
-                                        }
-                                        .testTag("now_playing_rate_${starIdx}")
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
                             val downloaded = isPlayingOfflineFile || download?.state?.isCompleted == true
                             if (downloaded) {
                                 Icon(
@@ -1363,9 +1333,6 @@ private fun NowPlayingControlsColumn(
                             Text(
                                 text = buildString {
                                     append("${track.playCount} plays")
-                                    if (shuffleMode == ShuffleMode.SMART) {
-                                        append(" • ${track.smartAffinityPercent(smartShuffleProfile)}% Smart Match")
-                                    }
                                     if (reverbState.isActivelyProcessing) {
                                         append(" • ${reverbProcessingMode.label}")
                                     }
@@ -1374,7 +1341,7 @@ private fun NowPlayingControlsColumn(
                                     }
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (shuffleMode == ShuffleMode.SMART || reverbState.isActivelyProcessing || downloaded) {
+                                color = if (reverbState.isActivelyProcessing || downloaded) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1934,7 +1901,7 @@ private fun UpNextPartialBottomSheet(
                         ) {
                             Text(
                                 text = if (shuffleMode == ShuffleMode.SMART) {
-                                    "Smart Shuffle (${smartShuffleProfile.label}) • Prioritizing 4–5★ & most-played tracks"
+                                    "Smart Shuffle (${smartShuffleProfile.label}) • ${smartShuffleProfile.description}"
                                 } else {
                                     "Standard Shuffle • Uniform random order"
                                 },
@@ -1989,12 +1956,7 @@ private fun UpNextPartialBottomSheet(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = buildString {
-                                        append("${item.artist} • ${item.userRating}★ • ${item.playCount} plays")
-                                        if (shuffleMode == ShuffleMode.SMART) {
-                                            append(" • ${item.smartAffinityPercent(smartShuffleProfile)}%")
-                                        }
-                                    },
+                                    text = "${item.artist} • ${item.playCount} plays",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,

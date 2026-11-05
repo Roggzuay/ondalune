@@ -114,6 +114,7 @@ import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
 import kotlin.math.sin
+import androidx.compose.material.icons.filled.Refresh
 
 /** Cover art and the artist line shown on the Your Mix hero, from the listener's own shelves. */
 private class MixArt(val covers: List<String>, val artists: String)
@@ -278,6 +279,20 @@ fun YourMixHero(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(if (wide) left - 24.dp else w * 0.55f)
             )
+            // Play already deals a new mix every time; this says so, and deals one without
+            // opening the player.
+            TextButton(
+                onClick = {
+                    haptics?.performSubtleTick()
+                    onPlay(null)
+                },
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                modifier = Modifier.testTag("your_mix_new_mix")
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("New mix", style = MaterialTheme.typography.labelLarge)
+            }
         }
 
         // The button is drawn last (below) so it swells over the shapes.

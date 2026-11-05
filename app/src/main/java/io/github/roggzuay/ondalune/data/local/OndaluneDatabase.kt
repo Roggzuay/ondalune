@@ -248,9 +248,6 @@ interface OndaluneDao {
     @Query("UPDATE subsonic_tracks SET playCount = playCount + 1 WHERE id = :trackId")
     suspend fun incrementPlayCount(trackId: String)
 
-    @Query("UPDATE subsonic_tracks SET userRating = :rating WHERE id = :trackId")
-    suspend fun updateTrackRating(trackId: String, rating: Int)
-
     @Query("UPDATE subsonic_tracks SET artistImageUrl = :artistImageUrl, artistBio = :artistBio WHERE artistId = :artistId OR artist = :artistName")
     suspend fun updateArtistMetadata(artistId: String, artistName: String, artistImageUrl: String, artistBio: String)
 

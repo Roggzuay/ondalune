@@ -730,30 +730,6 @@ class OpenSubsonicClient {
     }
 
     /**
-     * Sets a 0..5 star rating on an OpenSubsonic track (`/rest/setRating.view`).
-     */
-    suspend fun setRatingRemote(
-        server: SubsonicServerConfig,
-        id: String,
-        rating: Int
-    ): Boolean = withContext(Dispatchers.IO) {
-        if (server.isDemoServer) return@withContext true
-        val safeRating = rating.coerceIn(0, 5)
-        val url = buildEndpointUrl(
-            server = server,
-            endpoint = "setRating",
-            queryParams = mapOf("id" to id, "rating" to safeRating.toString())
-        )
-        if (url.isBlank()) return@withContext false
-        try {
-            val req = Request.Builder().url(url).get().build()
-            okHttpClient.newCall(req).execute().use { it.isSuccessful }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /**
      * Sends an OpenSubsonic scrobble event (`/rest/scrobble.view`).
      */
     suspend fun scrobbleRemote(

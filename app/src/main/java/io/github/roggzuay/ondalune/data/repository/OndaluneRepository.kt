@@ -237,12 +237,6 @@ class OndaluneRepository(
         sourceFor(server).setFavourite(server, track.id, newStarred)
     }
 
-    suspend fun setTrackRating(server: SubsonicServerConfig, track: SubsonicTrack, rating: Int) {
-        val clamped = rating.coerceIn(0, 5)
-        dao.updateTrackRating(track.id, clamped)
-        sourceFor(server).setRating(server, track, clamped)
-    }
-
     suspend fun recordPlay(server: SubsonicServerConfig, track: SubsonicTrack) {
         dao.incrementPlayCount(track.id)
         sourceFor(server).reportPlayed(server, track)

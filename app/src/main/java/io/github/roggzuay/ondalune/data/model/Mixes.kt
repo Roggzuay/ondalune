@@ -18,8 +18,76 @@ fun localEpochDay(nowMs: Long = System.currentTimeMillis()): Long =
 private const val MIX_SIZE = 50
 private const val MIN_MIX = 10
 
-/** How much a song says about taste: plays, favourites and ratings. */
-private fun SubsonicTrack.affinity(): Double = 1.0 + playCount + (if (starred) 5.0 else 0.0) + (if (userRating >= 4) 1.0 else 0.0)
+/** How much a song says about taste: plays and favourites. */
+private fun SubsonicTrack.affinity(): Double = 1.0 + playCount + (if (starred) 5.0 else 0.0)
+
+/**
+ * Your Mix: [size] songs drawn from the whole library, different every time. Taste raises a song's
+ * chances without deciding them: a heart, plays, and how much its artist and genres are loved and
+ * played. Songs among the last plays ([recentIds], most recent first) are held back. No artist
+ * takes more than its share (about a tenth of the mix, more when the library has few artists) and
+ * no album more than half of that, and [spreadOut] keeps one artist from playing twice running.
+ * A small library still gives everything it has.
+ */
+fun yourMix(
+    library: List<SubsonicTrack>,
+    recentIds: List<String>,
+    size: Int = 60,
+    random: Random = Random
+): List<SubsonicTrack> {
+    val pool = library.filter { it.id.isNotBlank() }.distinctBy { it.id }
+    if (pool.isEmpty()) return emptyList()
+    val count = minOf(size, pool.size)
+
+    // Taste per artist and per genre, from hearts and plays, scaled 0..1 against the strongest.
+    fun taste(t: SubsonicTrack) = (if (t.starred) 3.0 else 0.0) + ln(1.0 + t.playCount)
+    val byArtist = HashMap<String, Double>()
+    val byGenre = HashMap<String, Double>()
+    pool.forEach { t ->
+        val v = taste(t)
+        if (v > 0) {
+            byArtist.merge(t.artist.lowercase(), v, Double::plus)
+            t.genreTokens().forEach { g -> byGenre.merge(g, v, Double::plus) }
+        }
+    }
+    val topArtist = byArtist.values.maxOrNull() ?: 1.0
+    val topGenre = byGenre.values.maxOrNull() ?: 1.0
+    val recency = recentIds.take(minOf(100, pool.size / 2)).withIndex().associate { (i, id) -> id to i }
+
+    // Weighted draw without replacement (Efraimidis–Spirakis keys u^(1/w)).
+    val keyed = pool.map { t ->
+        var w = 1.0 +
+            (if (t.starred) 1.5 else 0.0) +
+            0.4 * ln(1.0 + t.playCount) +
+            1.2 * ((byArtist[t.artist.lowercase()] ?: 0.0) / topArtist) +
+            0.8 * (t.genreTokens().maxOfOrNull { (byGenre[it] ?: 0.0) / topGenre } ?: 0.0)
+        recency[t.id]?.let { i -> w *= 0.05 + 0.95 * (i.toDouble() / recency.size).pow(2) }
+        t to random.nextDouble().pow(1.0 / w)
+    }.sortedByDescending { it.second }.map { it.first }
+
+    val artists = pool.mapTo(HashSet()) { it.artist.lowercase() }.size
+    val artistCap = maxOf((count + artists - 1) / artists, (count * 0.1).toInt(), 2)
+    val albumCap = maxOf(artistCap / 2, 2)
+    val perArtist = HashMap<String, Int>()
+    val perAlbum = HashMap<String, Int>()
+    val picks = ArrayList<SubsonicTrack>(count)
+    val skipped = ArrayList<SubsonicTrack>()
+    for (t in keyed) {
+        if (picks.size == count) break
+        val a = t.artist.lowercase()
+        val al = t.albumId.ifBlank { "${t.artist}/${t.album}" }
+        if ((perArtist[a] ?: 0) >= artistCap || (perAlbum[al] ?: 0) >= albumCap) {
+            skipped += t
+            continue
+        }
+        perArtist.merge(a, 1, Int::plus)
+        perAlbum.merge(al, 1, Int::plus)
+        picks += t
+    }
+    // Caps only spread the mix out; when they leave it short, the best of the rest fill it.
+    skipped.take(count - picks.size).forEach { picks += it }
+    return spreadOut(picks.shuffled(random))
+}
 
 /**
  * Mixes made only from the library and how it is played: the genres and the artist played most,
@@ -148,35 +216,3 @@ fun autoplayPicks(
     return spreadOut(picks, after = seeds.last()).take(count)
 }
 
-/**
- * Songs from [library] that sound like the [seeds]: shared genres first, then the same artists and
- * nearby years. A weighted shuffle, so strong matches lead without the same order every time.
- */
-fun similarTracks(
-    seeds: List<SubsonicTrack>,
-    library: List<SubsonicTrack>,
-    exclude: Set<String>,
-    count: Int,
-    random: Random = Random(System.nanoTime())
-): List<SubsonicTrack> {
-    val seedGenres = seeds.flatMap { it.genreTokens() }.toSet()
-    val seedArtists = seeds.map { it.artist.lowercase() }.toSet()
-    val seedYear = seeds.map { it.year }.filter { it > 0 }.average().takeIf { !it.isNaN() }
-    val scored = library.asSequence()
-        .filter { it.id !in exclude }
-        .map { t ->
-            val shared = t.genreTokens().count { it in seedGenres }
-            var score = shared * 3.0
-            if (t.artist.lowercase() in seedArtists) score += 2.0
-            if (seedYear != null && t.year > 0 && kotlin.math.abs(t.year - seedYear) <= 5) score += 1.0
-            t to score
-        }
-        .filter { it.second > 0.0 }
-        .toList()
-    // The jitter is drawn once per track; a random sort key breaks the sort contract.
-    return scored.map { (t, score) -> t to score + random.nextDouble() * 2.5 }
-        .sortedByDescending { it.second }
-        .distinctBy { it.first.albumId to it.first.title }
-        .take(count)
-        .map { it.first }
-}

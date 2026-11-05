@@ -124,10 +124,7 @@ object LibraryQueries {
                 compareBy<SubsonicTrack> { it.year }.thenBy { it.title.lowercase() }
             )
             LibrarySortOption.MOST_PLAYED -> tracks.sortedWith(
-                compareBy<SubsonicTrack> { it.playCount }.thenBy { it.userRating }.thenBy { it.title.lowercase() }
-            )
-            LibrarySortOption.TOP_RATED -> tracks.sortedWith(
-                compareBy<SubsonicTrack> { it.userRating }.thenBy { it.starred }.thenBy { it.playCount }
+                compareBy<SubsonicTrack> { it.playCount }.thenBy { it.starred }.thenBy { it.title.lowercase() }
             )
             else -> tracks.sortedBy { it.title.lowercase() }
         }

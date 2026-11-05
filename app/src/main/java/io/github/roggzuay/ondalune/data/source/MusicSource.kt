@@ -38,8 +38,6 @@ interface MusicSource {
     /** Saves a heart on a song or artist ([itemId]) on the server. */
     suspend fun setFavourite(server: SubsonicServerConfig, itemId: String, favourite: Boolean, isArtist: Boolean = false) {}
 
-    suspend fun setRating(server: SubsonicServerConfig, track: SubsonicTrack, rating: Int) {}
-
     /** Tells the server a song was played (play counts, scrobbling). */
     suspend fun reportPlayed(server: SubsonicServerConfig, track: SubsonicTrack) {}
 
@@ -79,10 +77,6 @@ class OpenSubsonicSource(private val client: OpenSubsonicClient) : MusicSource {
         client.setStarredRemote(server, itemId, favourite, idParam = if (isArtist) "artistId" else "id")
     }
 
-    override suspend fun setRating(server: SubsonicServerConfig, track: SubsonicTrack, rating: Int) {
-        client.setRatingRemote(server, track.id, rating)
-    }
-
     override suspend fun reportPlayed(server: SubsonicServerConfig, track: SubsonicTrack) {
         client.scrobbleRemote(server, track.id, submission = true)
     }
@@ -101,7 +95,7 @@ class OpenSubsonicSource(private val client: OpenSubsonicClient) : MusicSource {
         client.deleteRemotePlaylist(server, playlistId)
 }
 
-/** A Jellyfin server. Jellyfin has hearts but no star ratings, so ratings stay in the app. */
+/** A Jellyfin server. */
 class JellyfinSource(private val client: JellyfinClient) : MusicSource {
     override suspend fun ping(server: SubsonicServerConfig) = client.ping(server)
 
