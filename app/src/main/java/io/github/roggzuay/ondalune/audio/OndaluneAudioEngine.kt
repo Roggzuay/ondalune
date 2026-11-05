@@ -154,7 +154,8 @@ class OndaluneAudioEngine(
     val playingStream: StateFlow<PlayingStream?> = _playingStream.asStateFlow()
 
     /** The output device Android routes this engine's audio to right now, when it says. */
-    fun routedOutput(): android.media.AudioDeviceInfo? = audioTrack?.routedDevice ?: mediaPlayer?.routedDevice
+    fun routedOutput(): android.media.AudioDeviceInfo? =
+        audioTrack?.routedDevice ?: if (android.os.Build.VERSION.SDK_INT >= 28) mediaPlayer?.routedDevice else null
 
     var onTrackEnded: (() -> Unit)? = null
 
@@ -565,8 +566,9 @@ class OndaluneAudioEngine(
             setDataSourceOf(context, dataSourcePath)
             setOnPreparedListener { mp ->
                 _isBuffering.value = false
-                val audio = runCatching { mp.trackInfo.firstOrNull { it.trackType == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO }?.format }.getOrNull()
-                _playingStream.value = PlayingStream(audio?.let { DecodedStream.of(it, "MediaPlayer") }, ownPipeline = false, outputSampleRate = 0)
+                // MediaPlayer doesn't say reliably what it decoded (it can report its raw output), so
+                // only the path is recorded.
+                _playingStream.value = PlayingStream(decoded = null, ownPipeline = false, outputSampleRate = 0)
                 val actualDur = mp.duration.toLong()
                 if (actualDur > 1000L) {
                     _durationMs.value = actualDur
