@@ -344,7 +344,7 @@ class OndaluneAudioEngine(
         if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
             runCatching { WavPcmSource(File(path)) }.getOrNull()
         } else {
-            CodecPcmSource.open(path)
+            CodecPcmSource.open(context, path)
         }
 
     /**
@@ -543,7 +543,7 @@ class OndaluneAudioEngine(
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .build()
             )
-            setDataSource(dataSourcePath)
+            setDataSourceOf(context, dataSourcePath)
             setOnPreparedListener { mp ->
                 _isBuffering.value = false
                 val actualDur = mp.duration.toLong()

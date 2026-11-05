@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.audio
 
+import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -200,10 +201,10 @@ internal class CodecPcmSource private constructor(
 
     companion object {
         /** Opens [path] and decodes the first audio so the real sample rate is known; null if unsupported. */
-        fun open(path: String): CodecPcmSource? {
+        fun open(context: Context, path: String): CodecPcmSource? {
             val extractor = MediaExtractor()
             return try {
-                extractor.setDataSource(path)
+                extractor.setDataSourceOf(context, path)
                 val trackIndex = (0 until extractor.trackCount).firstOrNull {
                     extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/")
                 } ?: run {

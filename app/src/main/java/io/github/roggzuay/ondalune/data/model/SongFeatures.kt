@@ -12,6 +12,29 @@ import kotlin.math.sqrt
  * design: enough to sort songs into calm and lively, and to keep autoplay near the same tempo.
  * All values but [bpm] run 0..1.
  */
+/** What the player can say about a song's tempo; never a guess. */
+sealed interface TempoInfo {
+    /** From the song's tags (the server's bpm) or an analysis that found a steady beat. */
+    data class Known(val bpm: Int) : TempoInfo
+    data object Queued : TempoInfo
+    data object Analysing : TempoInfo
+    /** Not analysed, analysis off, failed, or no steady beat to measure: nothing is shown. */
+    data object Unknown : TempoInfo
+}
+
+/** The playing song's tempo from what is actually known about it. */
+fun tempoOf(track: SubsonicTrack?, features: SongFeatures?, analysing: Boolean, queued: Boolean): TempoInfo = when {
+    track == null -> TempoInfo.Unknown
+    track.bpm > 0 -> TempoInfo.Known(track.bpm)
+    features != null && features.hasSteadyTempo -> TempoInfo.Known(kotlin.math.round(features.bpm).toInt())
+    analysing -> TempoInfo.Analysing
+    queued -> TempoInfo.Queued
+    else -> TempoInfo.Unknown
+}
+
+/** A tempo estimate worth showing: the beat was regular enough to measure, at a plausible tempo. */
+val SongFeatures.hasSteadyTempo: Boolean get() = danceability >= 0.15f && bpm in 50f..220f
+
 data class SongFeatures(
     val bpm: Float,
     /** Loudness of the excerpt (RMS): 0 very quiet, 1 loud and dense. */

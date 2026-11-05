@@ -172,6 +172,9 @@ import io.github.roggzuay.ondalune.ui.viewmodel.FavouritesFilterTab
 import io.github.roggzuay.ondalune.widget.OndaluneMediaBridge
 import java.util.Locale
 import kotlin.math.roundToInt
+import io.github.roggzuay.ondalune.data.model.TempoInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 
 /**
  * Expandable Settings Section IDs for the Accordion List view in Settings.
@@ -2422,11 +2425,32 @@ private fun SwipeDownDismissModalContainer(
 /**
  * Speed (0.80x..2.00x) & Dynamic Pitch Correction Modal Sheet.
  */
+/** The tempo under the speed: the real BPM at this speed, or that it is being measured. */
+@Composable
+private fun TempoReadout(tempo: TempoInfo, speed: Float) {
+    val style = MaterialTheme.typography.labelSmall
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    when (tempo) {
+        is TempoInfo.Known -> Text("${(tempo.bpm * speed).roundToInt()} BPM", style = style, color = color)
+        TempoInfo.Analysing -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Analysing this song's tempo" }
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.5.dp, color = color)
+            Text("Analysing tempo…", style = style, color = color)
+        }
+        TempoInfo.Queued -> Text("Tempo analysis queued", style = style, color = color)
+        TempoInfo.Unknown -> Unit
+    }
+}
+
 @Composable
 fun SpeedPitchStudioModal(
     state: SpeedPitchState,
     reverbState: ReverbState = ReverbState(),
-    currentTrackBpm: Int,
+    /** The playing song's tempo, when it is actually known; nothing is shown otherwise. */
+    tempo: TempoInfo = TempoInfo.Unknown,
     onSetSpeed: (Float) -> Unit,
     onSetPitchMode: (PitchCorrectionMode) -> Unit,
     onSetIndependentSemitones: (Float) -> Unit,
@@ -2444,7 +2468,6 @@ fun SpeedPitchStudioModal(
     BackHandler(onBack = onClose)
 
     val speedPresets = listOf(0.80f, 0.90f, 1.00f, 1.10f, 1.25f, 1.50f, 1.75f, 2.00f)
-    val scaledBpm = (currentTrackBpm * state.speed).roundToInt()
 
     SwipeDownDismissModalContainer(
         onClose = onClose,
@@ -2531,11 +2554,7 @@ fun SpeedPitchStudioModal(
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
-                                Text(
-                                    text = "$scaledBpm BPM",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                TempoReadout(tempo, state.speed)
                             }
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
