@@ -145,6 +145,7 @@ import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
 import io.github.roggzuay.ondalune.ui.components.rememberHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.OndaluneExpressiveTheme
+import io.github.roggzuay.ondalune.ui.theme.FadingColors
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.PrimaryDestination
 import io.github.roggzuay.ondalune.ui.viewmodel.LibraryFilterTab
@@ -156,6 +157,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.layout.Box
 
 /**
  * Process-scoped tracker ensuring the Ondalune Animated Launch Intro runs at most once per cold
@@ -228,10 +232,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val tabDisplayPreferences by viewModel.tabDisplayPreferences.collectAsStateWithLifecycle()
 
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsStateWithLifecycle()
-    var playerZoomEntry by remember { mutableStateOf(false) }
     // Your Mix launch, written by the hero each frame; the shell draws the zoom over its own bars.
     val heroLaunch = remember { HeroLaunch() }
-    LaunchedEffect(isPlayerExpanded) { if (!isPlayerExpanded) playerZoomEntry = false }
+    // How far the player is open; the mini player and the full player share it.
+    val playerSheet = remember { PlayerSheetState() }
+    val playerSheetScope = rememberCoroutineScope()
+    LaunchedEffect(isPlayerExpanded) { playerSheet.settleTo(isPlayerExpanded, playerSheetScope) }
+    val playerShown by remember { derivedStateOf { playerSheet.fraction > 0f } }
     val isSonicLabOpen by viewModel.isSonicLabSheetOpen.collectAsStateWithLifecycle()
     val isSpeedPitchOpen by viewModel.isSpeedPitchSheetOpen.collectAsStateWithLifecycle()
     val isSleepTimerOpen by viewModel.isSleepTimerSheetOpen.collectAsStateWithLifecycle()
@@ -576,11 +583,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             isBuffering = isBuffering,
                                             positionMs = positionMs,
                                             durationMs = durationMs,
-                                            unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                             onTogglePlay = viewModel.playback::togglePlayPause,
                                             onSkipNext = viewModel.playback::skipNext,
                                             onSkipPrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
-                                            onExpand = { viewModel.setPlayerExpanded(true) }
+                                            onExpand = { viewModel.setPlayerExpanded(true) },
+                                            sheet = playerSheet
                                         )
                                     }
                                 }
@@ -711,7 +718,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onStartSmartShuffle = viewModel::playYourMix,
                                             onOpenPlayerFromMix = {
-                                                playerZoomEntry = true
+                                                playerSheet.fromHero = true
                                                 viewModel.setPlayerExpanded(true)
                                             },
                                             homeSections = customizationSettings.homeSections,
@@ -963,10 +970,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         isBuffering = isBuffering,
                                         positionMs = positionMs,
                                         durationMs = durationMs,
-                                        unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                         onTogglePlay = viewModel.playback::togglePlayPause,
                                         onSkipNext = viewModel.playback::skipNext,
-                                        onExpand = { viewModel.setPlayerExpanded(true) }
+                                        onExpand = { viewModel.setPlayerExpanded(true) },
+                                        sheet = playerSheet
                                     )
                                 }
                             }
@@ -1007,28 +1014,15 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     )
                 }
 
-                // Full-Screen Opaque Material 3 Expressive Now Playing Studio Sheet
-                AnimatedVisibility(
-                    visible = isPlayerExpanded && currentTrack != null,
-                    // From the Your Mix hero the player grows out of the zoom; elsewhere it slides up.
-                    enter = if (playerZoomEntry) {
-                        fadeIn(tween(240)) + scaleIn(initialScale = 0.9f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
-                    } else slideInVertically(
-                        initialOffsetY = { it },
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) + fadeIn(),
-                    exit = slideOutVertically(
-                        targetOffsetY = { it },
-                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
-                    ) + fadeOut()
-                ) {
+                // The full player, grown out of the mini player (or the Your Mix zoom) as far as
+                // [playerSheet] says.
+                if (playerShown) Box(Modifier.fillMaxSize().then(playerSheet.containerModifier())) {
                     val activeTrack = currentTrack
-                    if (activeTrack != null) {
+                    // Its colours follow each new cover with a fade; the rest of the app switches at once.
+                    if (activeTrack != null) FadingColors {
                         PlaybackPosition(viewModel) { positionMs, durationMs ->
                             NowPlayingStudioOverlay(
+                                sheet = playerSheet,
                                 track = activeTrack,
                                 server = activeServer,
                                 isPlaying = isPlaying,

@@ -75,6 +75,14 @@ private val releaseNotes = mapOf(
         "Optional song analysis for Upbeat and Calm mixes (off until you turn it on)",
         "Downloads: the cloud becomes a progress ring, with pause and resume",
         "Fixes & improvements, including Home sections that wouldn't switch off"
+    ),
+    "1.5" to listOf(
+        "Music on this phone: play the songs stored on your phone with your server's, even offline. Settings → Music sources",
+        "Jellyfin servers, alongside Navidrome and other OpenSubsonic servers",
+        "Edit a song's title, artist, genre and year from its options",
+        "The player grows out of the mini player and follows your finger when you drag it",
+        "Covers and colours fade into the next song, and lyrics glide line by line",
+        "Fixes & improvements, including Sonic Lab's mood cards"
     )
 )
 

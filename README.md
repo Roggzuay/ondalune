@@ -19,6 +19,8 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 [Report a bug](https://github.com/Roggzuay/ondalune/issues/new/choose) ·
 [Support on Ko-fi](https://ko-fi.com/roggzuay)
 
+<img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
+
 <img src="docs/screenshots/home.png" width="200" alt="Home with the Your Mix hero" />
 <img src="docs/screenshots/player.png" width="200" alt="Now playing" />
 <img src="docs/screenshots/lyrics.png" width="200" alt="Synced lyrics" />
@@ -45,6 +47,10 @@ Change playback speed from **0.80× to 2.00×** and choose how pitch behaves:
 
 There's a live BPM and semitone readout, quick speed chips, and a one-tap **432 Hz** tuning shortcut.
 
+<p align="center">
+<img src="docs/demo/speed-pitch.gif" width="240" alt="Slowing a song to 0.80× and switching to analog varispeed" />
+</p>
+
 ### 🌊 Live studio reverb
 A real-time stereo reverb runs on the audio stream itself, not as a filter on top of it. Pick a
 room, from a tight **Small Booth** through **Mastering Studio**, **Symphony Hall** and
@@ -53,7 +59,7 @@ listening. Then shape it yourself with wet/dry mix, room size, decay time and hi
 damping. Five-band EQ presets sit alongside it.
 
 <p align="center">
-<img src="docs/screenshots/reverb.png" width="220" alt="Live studio reverb controls" />
+<img src="docs/demo/reverb.gif" width="240" alt="Turning on the live reverb and picking the Mastering Studio room" />
 </p>
 
 ### 🔁 Seamless transitions
@@ -67,6 +73,10 @@ morphing shapes. Tap play and the shapes shatter, the button swells to fill the 
 land in the player with a fresh mix built from your favourites, your most-played tracks and the
 music that sounds like them.
 
+<p align="center">
+<img src="docs/demo/your-mix.gif" width="240" alt="Ondalune opening on Your Mix, then the play button filling the screen into the player" />
+</p>
+
 ### 🎨 A player that follows the artwork
 Colours are read from the actual cover, region by region, so the player, the background, the
 lock screen and the notification all match what's playing. Black-and-white covers get a
@@ -78,6 +88,10 @@ pause.
 Time-synced lyrics from your server scroll with the song, and you can tap any line to jump to it.
 Plain lyrics work too. Big home-screen widgets can show the current line.
 
+<p align="center">
+<img src="docs/demo/lyrics.gif" width="240" alt="Switching from the cover to synced lyrics" />
+</p>
+
 ### ✨ Make it yours
 - **Six interface styles**: Signature, Standard, Bloom, Poster, Lounge and Classic. Each changes the type, shapes, spacing and layout, not just the colours.
 - **Separate fonts** for headings and for song text, from nine typefaces.
@@ -88,12 +102,14 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Four launcher icons** (Moonlight, Paper, Slate and Graphite), including themed icons on Android 13 and newer.
 
 <p align="center">
-<img src="docs/screenshots/themes.png" width="220" alt="Theme and font settings" />
+<img src="docs/demo/themes.gif" width="220" alt="Switching between interface styles in Appearance" />
+<img src="docs/demo/artwork-shapes.gif" width="220" alt="Tapping the cover to change its shape" />
 <img src="docs/screenshots/library.png" width="220" alt="Library in tiles layout" />
 </p>
 
 ### 👆 Built for your thumbs
 - Swipe the cover to skip, or swipe the mini player.
+- Drag the mini player up to open the player, and pull the player down to close it: the cover travels with your finger.
 - Swipe a song to favourite it or to play it next.
 - Long-press to select songs, then **Select all** to queue, favourite or download a whole list at once.
 

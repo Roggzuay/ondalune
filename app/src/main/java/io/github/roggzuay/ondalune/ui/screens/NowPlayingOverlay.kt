@@ -9,17 +9,14 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalDensity
 import io.github.roggzuay.ondalune.ui.components.LocalTrackActions
-import androidx.compose.ui.text.font.FontFamily
 import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
 import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import androidx.compose.foundation.shape.CornerSize
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
-import io.github.roggzuay.ondalune.ui.theme.TextFontFamily
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
@@ -33,15 +30,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.material3.LoadingIndicator
-import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.foundation.basicMarquee
@@ -50,17 +40,11 @@ import androidx.compose.material3.IconToggleButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -72,14 +56,12 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -114,7 +96,6 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -132,22 +113,17 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -177,15 +153,11 @@ import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
-import io.github.roggzuay.ondalune.ui.components.ExpressivePlayMorphButton
 import io.github.roggzuay.ondalune.ui.components.ExpressiveSquigglySlider
 import io.github.roggzuay.ondalune.ui.components.ExpressiveTransportGroup
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
-import io.github.roggzuay.ondalune.ui.components.formatDurationSec
 import io.github.roggzuay.ondalune.ui.components.rememberHapticFeedbackManager
-import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
-import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.NowPlayingSheetTab
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -199,10 +171,16 @@ import io.github.roggzuay.ondalune.ui.components.DownloadButton
 import io.github.roggzuay.ondalune.ui.components.DownloadPhase
 import io.github.roggzuay.ondalune.ui.components.downloadStatusOf
 import kotlinx.coroutines.launch
-import kotlin.math.PI
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.gestures.animateScrollBy
 
 /**
  * Floating Pill/Squircle Mini-Player docked above the bottom navigation dock.
@@ -219,12 +197,13 @@ fun FloatingExpressiveMiniPlayer(
     onTogglePlay: () -> Unit,
     onSkipNext: () -> Unit,
     onExpand: () -> Unit,
-    unifiedMaterialYouColor: Boolean = false,
     onSkipPrevious: () -> Unit = {},
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = null
+    hazeState: HazeState? = null,
+    sheet: PlayerSheetState
 ) {
     // Swipe the bar: left = next track, right = previous. It follows the finger, then springs back.
+    // Upwards it opens the player, which follows the finger too.
     val dragX = remember { Animatable(0f) }
     val swipeScope = rememberCoroutineScope()
     val swipeHaptics = LocalHapticFeedbackManager.current
@@ -232,8 +211,15 @@ fun FloatingExpressiveMiniPlayer(
     val swipeThreshold = with(density) { 72.dp.toPx() }
     val latestNext by rememberUpdatedState(onSkipNext)
     val latestPrevious by rememberUpdatedState(onSkipPrevious)
+    val latestExpand by rememberUpdatedState(onExpand)
     val progress = (positionMs.toFloat() / durationMs.coerceAtLeast(1000L).toFloat()).coerceIn(0f, 1f)
     // The theme already follows the cover's real colors; the track's hex hint is only a guess.
+    DisposableEffect(sheet) {
+        onDispose {
+            sheet.miniCard = Rect.Zero
+            sheet.miniArt = Rect.Zero
+        }
+    }
 
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -245,24 +231,46 @@ fun FloatingExpressiveMiniPlayer(
                 .fillMaxWidth()
                 .widthIn(max = 760.dp)
                 .padding(horizontal = 12.dp, vertical = 4.dp)
+                .onGloballyPositioned { sheet.miniCard = it.rootRect() }
                 .graphicsLayer {
                     translationX = dragX.value
-                    alpha = 1f - (kotlin.math.abs(dragX.value) / (swipeThreshold * 4f)).coerceIn(0f, 0.35f)
+                    // The opening player covers the bar from where it stands, so the bar fades out under it.
+                    val opening = 1f - (sheet.fraction / 0.2f).coerceIn(0f, 1f)
+                    alpha = opening * (1f - (kotlin.math.abs(dragX.value) / (swipeThreshold * 4f)).coerceIn(0f, 0.35f))
                 }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            val offset = dragX.value
-                            when {
-                                offset < -swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestNext() }
-                                offset > swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestPrevious() }
-                            }
-                            swipeScope.launch { dragX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) }
+                .pointerInput(sheet) {
+                    var horizontal: Boolean? = null
+                    val tracker = VelocityTracker()
+                    fun open(velocityY: Float) {
+                        if (sheet.release(swipeScope, velocityY, startedOpen = false)) latestExpand()
+                    }
+                    detectDragGestures(
+                        onDragStart = {
+                            horizontal = null
+                            tracker.resetTracking()
                         },
-                        onDragCancel = { swipeScope.launch { dragX.animateTo(0f) } }
+                        onDragEnd = {
+                            if (horizontal == true) {
+                                val offset = dragX.value
+                                when {
+                                    offset < -swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestNext() }
+                                    offset > swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestPrevious() }
+                                }
+                                swipeScope.launch { dragX.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
+                            } else open(tracker.calculateVelocity().y)
+                        },
+                        onDragCancel = {
+                            if (horizontal == true) swipeScope.launch { dragX.animateTo(0f) } else open(0f)
+                        }
                     ) { change, amount ->
+                        if (horizontal == null) horizontal = kotlin.math.abs(amount.x) > kotlin.math.abs(amount.y)
                         change.consume()
-                        swipeScope.launch { dragX.snapTo(dragX.value + amount) }
+                        if (horizontal == true) {
+                            swipeScope.launch { dragX.snapTo(dragX.value + amount.x) }
+                        } else {
+                            tracker.addPointerInputChange(change)
+                            sheet.dragBy(amount.y)
+                        }
                     }
                 }
                 .frosted(hazeState, cornerShape(22.dp))
@@ -284,7 +292,11 @@ fun FloatingExpressiveMiniPlayer(
                         coverArtUrl = track.coverArtUrl,
                         // Static thumbnail: no morph or spin in the mini player.
                         shapeMode = ArtworkShapeMode.SQUIRCLE,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier
+                            .size(40.dp)
+                            .onGloballyPositioned { sheet.miniArt = it.rootRect() }
+                            // While the player is open, its own cover stands here and grows out of it.
+                            .graphicsLayer { alpha = if (sheet.thumbnailHidden) 0f else 1f }
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -384,38 +396,6 @@ fun FloatingExpressiveMiniPlayer(
 }
 
 /**
- * Configurable Dynamic Moving Player Background supporting 4 user-selectable styles:
- * - `APPLE_GLITTER_GRAIN`: Slow-moving blurred artwork mesh + shimmering micro-glitter + analog film grain.
- * - `LIQUID_AURORA`: Silky multi-node flowing aurora color ribbons without glitter or film grain.
- * - `VINYL_HALO_PULSE`: Concentric sonic aura rings pulsing gently with playback.
- * - `MINIMAL_TONAL`: Calm, zero-motion atmospheric tonal gradient.
- *
- * Also respects `unifiedMaterialYouColor` so the user can choose 1 unified Material You phone color
- * across the entire player or let the artwork drive the colors.
- */
-@Composable
-private fun DynamicArtworkMovingBackground(
-    track: SubsonicTrack,
-    seedColor: Color,
-    accentColor: Color,
-    isPlaying: Boolean,
-    playbackSpeed: Float,
-    backgroundStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
-    unifiedMaterialYouColor: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    PlayerBackdrop(
-        track = track,
-        palette = LocalArtworkPalette.current,
-        style = backgroundStyle,
-        isPlaying = isPlaying,
-        playbackSpeed = playbackSpeed,
-        modifier = modifier,
-        themeColorsOnly = unifiedMaterialYouColor
-    )
-}
-
-/**
  * Full-Screen Adaptive Opaque Material 3 Expressive Now Playing Studio Sheet.
  *
  * Dynamically adapts to screen ratio and form factor:
@@ -427,6 +407,7 @@ private fun DynamicArtworkMovingBackground(
  */
 @Composable
 fun NowPlayingStudioOverlay(
+    sheet: PlayerSheetState,
     track: SubsonicTrack,
     server: SubsonicServerConfig,
     isPlaying: Boolean,
@@ -495,83 +476,49 @@ fun NowPlayingStudioOverlay(
         }
     }
 
-    val artworkPalette = LocalArtworkPalette.current
-    val rawSeed = if (unifiedMaterialYouColor) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        artworkPalette.seed
-    }
-    val rawAccent = if (unifiedMaterialYouColor) {
-        MaterialTheme.colorScheme.tertiary
-    } else {
-        artworkPalette.swatches.getOrElse(1) { MaterialTheme.colorScheme.tertiary }
-    }
-
-    val seedColor by animateColorAsState(
-        targetValue = rawSeed,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
-        label = "playerSeedColor"
-    )
-    val accentColor by animateColorAsState(
-        targetValue = rawAccent,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
-        label = "playerAccentColor"
-    )
-
     val artworkPulse = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
 
-    // Interactive vertical swipe-down-to-dismiss state (works across the player & over the artwork!)
-    var verticalDragOffsetPx by remember { mutableFloatStateOf(0f) }
-    val animatedDragOffsetPx by animateFloatAsState(
-        targetValue = verticalDragOffsetPx,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "sheetSwipeDownOffset"
-    )
-
-    val onSwipeDownDelta: (Float) -> Unit = { dy ->
-        verticalDragOffsetPx = (verticalDragOffsetPx + dy).coerceAtLeast(0f)
-    }
-    val onSwipeDownFinish: () -> Unit = {
-        if (verticalDragOffsetPx > 140f) {
+    // Pulling down anywhere (the cover included) shrinks the player back into the mini player,
+    // following the finger; letting go finishes the way it was heading.
+    val onSwipeDownDelta: (Float) -> Unit = { dy -> sheet.dragBy(dy) }
+    val onSwipeDownFinish: (Float) -> Unit = { velocityY ->
+        if (!sheet.release(scope, velocityY, startedOpen = true)) {
             hapticManager.performSubtleTick()
-            verticalDragOffsetPx = 0f
-            if (isUpNextBottomSheetOpen) {
-                onSelectTab(NowPlayingSheetTab.COVER)
-            } else {
-                onCollapse()
-            }
-        } else {
-            verticalDragOffsetPx = 0f
+            onCollapse()
         }
+    }
+    // Everything but the cover fades in over the second half of opening, rising slightly.
+    val contentLift = with(LocalDensity.current) { 48.dp.toPx() }
+    val openingContent = Modifier.graphicsLayer {
+        alpha = sheet.contentAlpha
+        translationY = (1f - sheet.contentAlpha) * contentLift
     }
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                translationY = animatedDragOffsetPx
-            }
             .pointerInput(isUpNextBottomSheetOpen) {
                 if (!isUpNextBottomSheetOpen) {
+                    val tracker = VelocityTracker()
                     detectVerticalDragGestures(
+                        onDragStart = { tracker.resetTracking() },
                         onVerticalDrag = { change, dragAmount ->
-                            if (dragAmount > 0f || verticalDragOffsetPx > 0f) {
+                            if (dragAmount > 0f || sheet.fraction < 1f) {
                                 change.consume()
+                                tracker.addPointerInputChange(change)
                                 onSwipeDownDelta(dragAmount)
                             }
                         },
-                        onDragEnd = { onSwipeDownFinish() },
-                        onDragCancel = { verticalDragOffsetPx = 0f }
+                        onDragEnd = { onSwipeDownFinish(tracker.calculateVelocity().y) },
+                        onDragCancel = { onSwipeDownFinish(0f) }
                     )
                 }
             }
             .testTag("now_playing_studio_sheet"),
-        color = MaterialTheme.colorScheme.surface,
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp
     ) {
         BoxWithConstraints(
@@ -583,15 +530,21 @@ fun NowPlayingStudioOverlay(
             val isWideOrLandscape = availWidth >= 680.dp || availWidth > availHeight * 1.08f
             val isUltraTallPortrait = !isWideOrLandscape && (availHeight / availWidth.coerceAtLeast(1.dp)) >= 1.92f
 
-            DynamicArtworkMovingBackground(
-                track = track,
-                seedColor = seedColor,
-                accentColor = accentColor,
-                isPlaying = isPlaying,
-                playbackSpeed = speedPitchState.speed,
-                backgroundStyle = backgroundAnimationStyle,
-                unifiedMaterialYouColor = unifiedMaterialYouColor
-            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = sheet.backdropAlpha }
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                PlayerBackdrop(
+                    track = track,
+                    palette = LocalArtworkPalette.current,
+                    style = backgroundAnimationStyle,
+                    isPlaying = isPlaying,
+                    playbackSpeed = speedPitchState.speed,
+                    themeColorsOnly = unifiedMaterialYouColor
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -604,18 +557,20 @@ fun NowPlayingStudioOverlay(
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                NowPlayingTopHeaderBar(
-                    server = server,
-                    track = track,
-                    activeTab = activeTab,
-                    eqPreset = eqPreset,
-                    showTechnicalFormatBadge = showTechnicalFormatBadge,
-                    playingFromPlaylist = playingFromPlaylist,
-                    onCollapse = onCollapse,
-                    onSelectTab = onSelectTab,
-                    onOpenPlaylist = onOpenPlaylist,
-                    onOpenSonicLab = onOpenSonicLab
-                )
+                Box(openingContent) {
+                    NowPlayingTopHeaderBar(
+                        server = server,
+                        track = track,
+                        activeTab = activeTab,
+                        eqPreset = eqPreset,
+                        showTechnicalFormatBadge = showTechnicalFormatBadge,
+                        playingFromPlaylist = playingFromPlaylist,
+                        onCollapse = onCollapse,
+                        onSelectTab = onSelectTab,
+                        onOpenPlaylist = onOpenPlaylist,
+                        onOpenSonicLab = onOpenSonicLab
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 18.dp else 10.dp))
 
@@ -634,11 +589,11 @@ fun NowPlayingStudioOverlay(
                             contentAlignment = Alignment.Center
                         ) {
                             NowPlayingCenterStage(
+                                sheet = sheet,
                                 activeTab = activeTab,
                                 track = track,
                                 artworkShapeMode = artworkShapeMode,
                                 isPlaying = isPlaying,
-                                playbackSpeed = speedPitchState.speed,
                                 maxArtworkSize = minOf(availWidth * 0.42f, availHeight * 0.68f),
                                 artworkPulse = artworkPulse.value,
                                 lyrics = lyrics,
@@ -669,7 +624,8 @@ fun NowPlayingStudioOverlay(
                         Column(
                             modifier = Modifier
                                 .weight(1.05f)
-                                .fillMaxHeight(),
+                                .fillMaxHeight()
+                                .then(openingContent),
                             verticalArrangement = Arrangement.SpaceEvenly,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
@@ -722,11 +678,11 @@ fun NowPlayingStudioOverlay(
                         contentAlignment = Alignment.Center
                     ) {
                         NowPlayingCenterStage(
+                            sheet = sheet,
                             activeTab = activeTab,
                             track = track,
                             artworkShapeMode = artworkShapeMode,
                             isPlaying = isPlaying,
-                            playbackSpeed = speedPitchState.speed,
                             maxArtworkSize = portraitArtSize,
                             artworkPulse = artworkPulse.value,
                             lyrics = lyrics,
@@ -756,43 +712,45 @@ fun NowPlayingStudioOverlay(
 
                     Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 16.dp else 10.dp))
 
-                    NowPlayingControlsColumn(
-                        track = track,
-                        isPlaying = isPlaying,
-                        isBuffering = isBuffering,
-                        positionMs = positionMs,
-                        durationMs = durationMs,
-                        speedPitchState = speedPitchState,
-                        reverbState = reverbState,
-                        reverbProcessingMode = reverbProcessingMode,
-                        isPlayingOfflineFile = isPlayingOfflineFile,
-                                download = download,
-                        sleepTimerState = sleepTimerState,
-                        shuffleEnabled = shuffleEnabled,
-                        shuffleMode = shuffleMode,
-                        smartShuffleProfile = smartShuffleProfile,
-                        repeatOneEnabled = repeatOneEnabled,
-                        animatedWaveEnabled = animatedWaveEnabled,
-                        showRemainingTime = showRemainingTime,
-                        showPlayerStarButton = showPlayerStarButton,
-                        activeTab = activeTab,
-                        isUltraTallPortrait = isUltraTallPortrait,
-                        onSelectTab = onSelectTab,
-                        onTogglePlay = onTogglePlay,
-                        onSkipPrevious = onSkipPrevious,
-                        onSkipNext = onSkipNext,
-                        onSeek = onSeek,
-                        onToggleShuffle = onToggleShuffle,
-                        onToggleRepeatOne = onToggleRepeatOne,
-                        onToggleStar = onToggleStar,
-                        onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
-                        onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
-                        onResetSpeedPitch = onResetSpeedPitch,
-                        showSpeedResetHint = showSpeedResetHint,
-                        onSpeedResetHintShown = onSpeedResetHintShown,
-                        onOpenSleepTimerSheet = onOpenSleepTimerSheet,
-                        onOpenArtist = onOpenArtist
-                    )
+                    Box(openingContent) {
+                        NowPlayingControlsColumn(
+                            track = track,
+                            isPlaying = isPlaying,
+                            isBuffering = isBuffering,
+                            positionMs = positionMs,
+                            durationMs = durationMs,
+                            speedPitchState = speedPitchState,
+                            reverbState = reverbState,
+                            reverbProcessingMode = reverbProcessingMode,
+                            isPlayingOfflineFile = isPlayingOfflineFile,
+                            download = download,
+                            sleepTimerState = sleepTimerState,
+                            shuffleEnabled = shuffleEnabled,
+                            shuffleMode = shuffleMode,
+                            smartShuffleProfile = smartShuffleProfile,
+                            repeatOneEnabled = repeatOneEnabled,
+                            animatedWaveEnabled = animatedWaveEnabled,
+                            showRemainingTime = showRemainingTime,
+                            showPlayerStarButton = showPlayerStarButton,
+                            activeTab = activeTab,
+                            isUltraTallPortrait = isUltraTallPortrait,
+                            onSelectTab = onSelectTab,
+                            onTogglePlay = onTogglePlay,
+                            onSkipPrevious = onSkipPrevious,
+                            onSkipNext = onSkipNext,
+                            onSeek = onSeek,
+                            onToggleShuffle = onToggleShuffle,
+                            onToggleRepeatOne = onToggleRepeatOne,
+                            onToggleStar = onToggleStar,
+                            onSetTrackRating = { rating -> onSetTrackRating(track, rating) },
+                            onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
+                            onResetSpeedPitch = onResetSpeedPitch,
+                            showSpeedResetHint = showSpeedResetHint,
+                            onSpeedResetHintShown = onSpeedResetHintShown,
+                            onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                            onOpenArtist = onOpenArtist
+                        )
+                    }
                 }
             }
 
@@ -816,7 +774,7 @@ fun NowPlayingStudioOverlay(
                 enter = slideInVertically(
                     initialOffsetY = { it },
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        dampingRatio = Spring.DampingRatioNoBouncy,
                         stiffness = Spring.StiffnessMediumLow
                     )
                 ) + fadeIn(),
@@ -1023,11 +981,11 @@ private fun NowPlayingTopHeaderBar(
 
 @Composable
 private fun NowPlayingCenterStage(
+    sheet: PlayerSheetState,
     activeTab: NowPlayingSheetTab,
     track: SubsonicTrack,
     artworkShapeMode: ArtworkShapeMode,
     isPlaying: Boolean,
-    playbackSpeed: Float,
     maxArtworkSize: Dp,
     artworkPulse: Float,
     lyrics: List<LyricLine>,
@@ -1038,7 +996,7 @@ private fun NowPlayingCenterStage(
     smartShuffleProfile: SmartShuffleProfile,
     onTriggerPulseAndCycleShape: () -> Unit,
     onSwipeDownDelta: (Float) -> Unit,
-    onSwipeDownFinish: () -> Unit,
+    onSwipeDownFinish: (Float) -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -1052,30 +1010,55 @@ private fun NowPlayingCenterStage(
     val swipeScope = rememberCoroutineScope()
     // Horizontal offset of the cover while it is dragged or flung to the next/previous track. The
     // finger writes it directly (a coroutine per move event landed a frame late); [artSettle]
-    // animates it back, or out and in again for the next cover.
+    // animates it back, or away.
     var artDragX by remember { mutableFloatStateOf(0f) }
     val artSettle = remember { arrayOfNulls<Job>(1) }
     suspend fun animateArtTo(target: Float, spec: AnimationSpec<Float>, velocity: Float = 0f) =
         animate(artDragX, target, velocity, spec) { value, _ -> artDragX = value }
     val flingVelocity = with(LocalDensity.current) { 700.dp.toPx() }
+    // Brings a cover that left by [side] back in from the other side.
+    suspend fun slideBackIn(side: Float) {
+        artDragX = -side * sheet.fullArt.width * 0.6f
+        animateArtTo(0f, spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow))
+    }
 
-    // Decode the neighbouring covers ahead, so a swipe lands on a cover that is already in memory
-    // instead of decoding it while the new one slides in.
     val context = LocalContext.current
     val artPx = with(LocalDensity.current) { maxArtworkSize.coerceIn(160.dp, 420.dp).roundToPx() }
+    fun coverRequest(url: String) = artworkCacheKey(url).let { key ->
+        ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(artPx).build()
+    }
+    // Decode the neighbouring covers ahead, so a swipe lands on a cover that is already in memory
+    // instead of decoding it while the new one slides in.
     LaunchedEffect(track.id, queue) {
         val i = queue.indexOfFirst { it.id == track.id }
         if (i < 0) return@LaunchedEffect
         listOfNotNull(queue.getOrNull(i + 1), queue.getOrNull(i - 1))
             .filter { it.coverArtUrl.isNotBlank() }
-            .forEach { neighbour ->
-                val key = artworkCacheKey(neighbour.coverArtUrl)
-                context.imageLoader.enqueue(
-                    ImageRequest.Builder(context).data(neighbour.coverArtUrl)
-                        .memoryCacheKey(key).diskCacheKey(key).size(artPx).build()
-                )
-            }
+            .forEach { context.imageLoader.enqueue(coverRequest(it.coverArtUrl)) }
     }
+
+    // The cover on screen trails [track] until the new picture has loaded (at most 0.4 s), so the
+    // crossfade never fades in an empty tile. After a swipe the old cover has already left with
+    // the finger, by [swipedFrom] (-1 or 1), so it isn't shown leaving again; when the cover
+    // doesn't change (same album) it slides back in from the other side.
+    var shownTrack by remember { mutableStateOf(track) }
+    var swipedFrom by remember { mutableFloatStateOf(0f) }
+    val exitHidden = remember { booleanArrayOf(false) }
+    LaunchedEffect(track.id) {
+        val side = swipedFrom
+        if (side != 0f) artSettle[0]?.cancel()
+        val coverChanged = shownTrack.coverKey() != track.coverKey()
+        if (coverChanged && track.coverArtUrl.isNotBlank()) {
+            withTimeoutOrNull(400) { context.imageLoader.execute(coverRequest(track.coverArtUrl)) }
+        }
+        exitHidden[0] = side != 0f
+        shownTrack = track
+        if (side == 0f) return@LaunchedEffect
+        swipedFrom = 0f
+        if (coverChanged) artDragX = 0f
+        else artSettle[0] = swipeScope.launch { slideBackIn(side) }
+    }
+
     val centerMode = if (activeTab == NowPlayingSheetTab.LYRICS) {
         NowPlayingSheetTab.LYRICS
     } else {
@@ -1094,87 +1077,85 @@ private fun NowPlayingCenterStage(
     ) { tab ->
         when (tab) {
             NowPlayingSheetTab.LYRICS -> {
-                SyncedLyricsPane(
-                    track = track,
-                    lyrics = lyrics,
-                    lyricsResult = lyricsResult,
-                    positionMs = positionMs,
-                    isPlaying = isPlaying,
-                    playbackSpeed = playbackSpeed,
-                    onSeekToLyric = onSeek
-                )
+                Box(Modifier.graphicsLayer { alpha = sheet.contentAlpha }) {
+                    SyncedLyricsPane(
+                        lyrics = lyrics,
+                        lyricsResult = lyricsResult,
+                        positionMs = positionMs,
+                        onSeekToLyric = onSeek
+                    )
+                }
             }
 
             else -> {
+                DisposableEffect(sheet) {
+                    sheet.coverInPlayer = true
+                    onDispose { sheet.coverInPlayer = false }
+                }
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
+                    // The outer box takes the gestures and stays put; the inner one moves, so
+                    // finger positions are never measured in a moving frame.
                     Box(
                         modifier = Modifier
                             .size(maxArtworkSize.coerceIn(160.dp, 420.dp))
                             .aspectRatio(1f)
-                            .graphicsLayer {
-                                scaleX = artworkPulse
-                                scaleY = artworkPulse
-                            }
+                            .onGloballyPositioned { sheet.fullArt = it.rootRect() }
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onTap = { onTriggerPulseAndCycleShape() }
                                 )
                             }
-                            .graphicsLayer {
-                                // Straight sideways, no tilt: rotating around the centre made the
-                                // leading edge dip, as if the cover rode a wheel.
-                                translationX = artDragX
-                                alpha = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
-                            }
                             .pointerInput(Unit) {
                                 // One drag detector so the gesture locks to one axis: sideways skips
                                 // tracks, downwards closes the player.
                                 var horizontal: Boolean? = null
-                                var fingerX = 0f
                                 val tracker = VelocityTracker()
                                 detectDragGestures(
                                     onDragStart = {
                                         horizontal = null
-                                        fingerX = 0f
                                         tracker.resetTracking()
                                         artSettle[0]?.cancel() // catch a cover that is still settling
                                     },
                                     onDragEnd = {
+                                        val velocity = tracker.calculateVelocity()
                                         if (horizontal == true) {
                                             val width = size.width.toFloat()
                                             val offset = artDragX
-                                            val velocity = tracker.calculateVelocity().x
                                             // A quick flick skips even when short; a slow drag has
                                             // to carry the cover past a fifth of its width.
                                             val direction = when {
-                                                offset < -width * 0.22f || (offset < 0f && velocity < -flingVelocity) -> -1
-                                                offset > width * 0.22f || (offset > 0f && velocity > flingVelocity) -> 1
+                                                offset < -width * 0.22f || (offset < 0f && velocity.x < -flingVelocity) -> -1
+                                                offset > width * 0.22f || (offset > 0f && velocity.x > flingVelocity) -> 1
                                                 else -> 0
                                             }
                                             artSettle[0] = swipeScope.launch {
                                                 if (direction == 0) {
-                                                    animateArtTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), velocity)
+                                                    animateArtTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy), velocity.x)
                                                     return@launch
                                                 }
                                                 swipeHaptics?.performSubtleTick()
                                                 animateArtTo(direction * width * 1.1f, tween(160))
+                                                swipedFrom = direction.toFloat()
                                                 if (direction < 0) latestNext() else latestPrevious()
-                                                // The new cover slides in from the opposite side.
-                                                artDragX = -direction * width * 0.6f
-                                                animateArtTo(0f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow))
+                                                // Nothing to skip to: the cover comes back.
+                                                delay(700)
+                                                if (swipedFrom != 0f) {
+                                                    swipedFrom = 0f
+                                                    slideBackIn(direction.toFloat())
+                                                }
                                             }
                                         } else {
-                                            latestSwipeDownFinish()
+                                            latestSwipeDownFinish(velocity.y)
                                         }
                                     },
                                     onDragCancel = {
                                         if (horizontal == true) {
                                             artSettle[0] = swipeScope.launch { animateArtTo(0f, spring()) }
                                         } else {
-                                            latestSwipeDownFinish()
+                                            latestSwipeDownFinish(0f)
                                         }
                                     }
                                 ) { change, amount ->
@@ -1184,35 +1165,62 @@ private fun NowPlayingCenterStage(
                                     // player down instead of moving the cover.
                                     if (horizontal == null) horizontal = abs(amount.y) <= abs(amount.x) * 1.5f
                                     change.consume()
-                                    if (horizontal == true) {
-                                        artDragX += amount.x
-                                        // The layer moves with the finger, so local positions
-                                        // barely change; track the finger's own travel instead.
-                                        fingerX += amount.x
-                                        tracker.addPosition(change.uptimeMillis, Offset(fingerX, 0f))
-                                    } else {
-                                        latestSwipeDown(amount.y)
-                                    }
+                                    tracker.addPointerInputChange(change)
+                                    if (horizontal == true) artDragX += amount.x else latestSwipeDown(amount.y)
                                 }
                             }
                             .testTag("cycle_art_shape_button"),
                         contentAlignment = Alignment.Center
                     ) {
-                        ExpressiveArtwork(
-                            seedHex = track.paletteSeedHex,
-                            accentHex = track.accentHex,
-                            artStyleIndex = track.artStyleIndex,
-                            coverArtUrl = track.coverArtUrl,
-                            shapeMode = artworkShapeMode,
-                            isSpinning = isPlaying,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(sheet.artTransform())
+                                .graphicsLayer {
+                                    scaleX = artworkPulse
+                                    scaleY = artworkPulse
+                                    // Straight sideways, no tilt: rotating around the centre made the
+                                    // leading edge dip, as if the cover rode a wheel.
+                                    translationX = artDragX
+                                    alpha = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
+                                }
+                        ) {
+                            // A new cover fades and grows into place while the old one recedes.
+                            AnimatedContent(
+                                targetState = shownTrack,
+                                contentKey = { it.coverKey() },
+                                transitionSpec = {
+                                    val exit = if (exitHidden[0]) ExitTransition.None else
+                                        fadeOut(tween(260)) + scaleOut(tween(320), targetScale = 0.96f)
+                                    fadeIn(tween(320, delayMillis = 60)) + scaleIn(tween(460, easing = FastOutSlowInEasing), initialScale = 0.9f) togetherWith exit
+                                },
+                                label = "coverChange"
+                            ) { shown ->
+                                // A swiped-away cover is gone from its first leaving frame (an exit
+                                // animation would still draw it once, back in the middle).
+                                val hidden = exitHidden[0] && transition.targetState == EnterExitState.PostExit
+                                ExpressiveArtwork(
+                                    seedHex = shown.paletteSeedHex,
+                                    accentHex = shown.accentHex,
+                                    artStyleIndex = shown.artStyleIndex,
+                                    coverArtUrl = shown.coverArtUrl,
+                                    shapeMode = artworkShapeMode,
+                                    isSpinning = isPlaying,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer { alpha = if (hidden) 0f else 1f }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/** Identifies the picture a track shows, so songs from one album keep the same cover on screen. */
+private fun SubsonicTrack.coverKey() = if (coverArtUrl.isBlank()) "track:$id" else artworkCacheKey(coverArtUrl)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1580,23 +1588,32 @@ private fun NowPlayingControlsColumn(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SyncedLyricsPane(
-    track: SubsonicTrack,
     lyrics: List<LyricLine>,
     lyricsResult: TrackLyricsResult,
     positionMs: Long,
-    @Suppress("UNUSED_PARAMETER") isPlaying: Boolean,
-    @Suppress("UNUSED_PARAMETER") playbackSpeed: Float,
     onSeekToLyric: (Long) -> Unit
 ) {
     // Line-level sync only: LRC timestamps mark when each line starts, nothing finer, so the whole
     // current line lights up. A small lead covers the engine's progress-tick latency.
     val activeIdx = lyrics.indexOfLast { it.timeMs <= positionMs + LyricLeadMs }.coerceAtLeast(0)
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIdx, lyrics) {
-        if (activeIdx in lyrics.indices) {
-            val viewport = listState.layoutInfo.viewportSize.height
-            listState.animateScrollToItem(activeIdx, scrollOffset = -(viewport * 0.32f).toInt())
+    // Scrolling the lyrics by hand stops them following the song until 3 s after letting go.
+    val dragged by listState.interactionSource.collectIsDraggedAsState()
+    var follow by remember { mutableStateOf(true) }
+    LaunchedEffect(dragged) {
+        if (dragged) follow = false
+        else if (!follow) {
+            delay(3000)
+            follow = true
         }
+    }
+    // One glide per line, with the same timing as the highlight, to a third of the way down.
+    LaunchedEffect(activeIdx, lyrics, follow) {
+        if (!follow || activeIdx !in lyrics.indices) return@LaunchedEffect
+        val anchor = (listState.layoutInfo.viewportSize.height * 0.32f).toInt()
+        val line = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIdx }
+        if (line == null) listState.scrollToItem(activeIdx, -anchor)
+        else listState.animateScrollBy((line.offset - anchor).toFloat(), LyricGlide)
     }
 
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -1700,12 +1717,12 @@ private fun SyncedLyricsPane(
                             index < activeIdx -> 0.40f
                             else -> 0.58f
                         },
-                        animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                        animationSpec = LyricGlide,
                         label = "lyricEmphasis"
                     )
                     val scale by animateFloatAsState(
                         targetValue = if (isCurrent) 1f else 0.94f,
-                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                        animationSpec = LyricGlide,
                         label = "lyricScale"
                     )
                     Text(
@@ -1733,6 +1750,7 @@ private fun SyncedLyricsPane(
 }
 
 private const val LyricLeadMs = 200L
+private val LyricGlide = tween<Float>(520, easing = FastOutSlowInEasing)
 
 /**
  * Material 3 Expressive Partial Bottom Sheet for the "Play Next / Up Next" Queue.

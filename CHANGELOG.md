@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 (2026-11-05)
+
+- **Music on this phone:** turn it on in Settings → Music sources and the songs stored on your phone join your library: Home, mixes, search and the queue. They play offline, show their embedded covers, read lyrics from a matching `.lrc` file, and update when you add or delete files.
+- **Jellyfin:** add a Jellyfin server alongside OpenSubsonic ones. Your password is used once to sign in; only the sign-in token is kept, encrypted.
+- **Edit song details:** change a song's title, artist, genre and year from its options. Edits stay in the app, survive every sync, and **Use original** puts the server's details back.
+- **A player that moves with you:** the player grows out of the mini player, and the cover travels from the thumbnail to the middle of the screen. Drag the mini player up, or the player down, and it follows your finger.
+- **Smoother song changes:** the old cover fades away as the new one fades and grows into place, the player's colours fade to the new cover, and lyrics glide from line to line. Scroll the lyrics yourself and they wait a moment before following again.
+- **Fixes & improvements:**
+  - Sonic Lab's mood cards play your Upbeat and Calm mixes, or offer to turn on song analysis.
+  - The player and the queue open without a bounce.
+
 ## 1.4.0 (2026-11-05)
 
 - **Artist pages:** a full-size portrait running to the top of the screen, and the whole app takes on its colours while you're there. Play, shuffle, favourite, download and share, the latest release, popular songs, albums, singles and EPs, and similar artists. Tablets show the portrait beside the lists.

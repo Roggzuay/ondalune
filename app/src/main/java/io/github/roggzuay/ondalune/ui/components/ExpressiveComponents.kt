@@ -20,11 +20,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.roggzuay.ondalune.ui.theme.LocalCornerScale
-import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
 import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 import io.github.roggzuay.ondalune.ui.theme.ArtShape
 import io.github.roggzuay.ondalune.ui.theme.artShape
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import androidx.compose.runtime.State
 import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
@@ -85,7 +83,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -97,7 +94,6 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -123,15 +119,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -153,11 +146,9 @@ import io.github.roggzuay.ondalune.data.model.DockStyle
 import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -1284,7 +1275,8 @@ fun ExpressiveArtwork(
         if (coverArtUrl.isNotBlank()) {
             // When the cover changes (next song), the previous cover stays up as the placeholder and
             // cross-fades into the new one; the tonal tile is only for the very first load or a
-            // failure. Without this the tile flashed for a frame on every track change.
+            // failure. Without this the tile flashed for a frame on every track change. A cover
+            // already in memory (a new copy of this one, as the player opens) shows at once.
             var shownKey by remember { mutableStateOf<String?>(null) }
             val key = remember(coverArtUrl) { artworkCacheKey(coverArtUrl) }
             if (shownKey == null) {
@@ -1316,7 +1308,7 @@ fun ExpressiveArtwork(
                     .data(coverArtUrl)
                     .memoryCacheKey(key)
                     .diskCacheKey(key)
-                    .placeholderMemoryCacheKey(shownKey)
+                    .placeholderMemoryCacheKey(shownKey ?: key)
                     .crossfade(220)
                     .build()
             }
