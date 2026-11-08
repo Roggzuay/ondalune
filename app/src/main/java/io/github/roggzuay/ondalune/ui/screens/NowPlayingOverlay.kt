@@ -74,6 +74,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -718,7 +719,7 @@ fun NowPlayingStudioOverlay(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 16.dp else 10.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Box(openingContent) {
                         NowPlayingControlsColumn(
@@ -1007,7 +1008,8 @@ private fun NowPlayingCenterStage(
     }
 
     val context = LocalContext.current
-    val artPx = with(LocalDensity.current) { maxArtworkSize.coerceIn(160.dp, 420.dp).roundToPx() }
+    val artSize = maxArtworkSize.coerceIn(160.dp, 420.dp)
+    val artPx = with(LocalDensity.current) { artSize.roundToPx() }
     fun coverRequest(url: String) = artworkCacheKey(url).let { key ->
         ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(artPx).build()
     }
@@ -1083,10 +1085,13 @@ private fun NowPlayingCenterStage(
                 ) {
                     // The outer box takes the gestures and stays put; the inner one moves, so
                     // finger positions are never measured in a moving frame.
+                    // The cover gives way when the stage is short (tall phones, large display
+                    // sizes), so the quality line under it keeps its full height.
                     Box(
                         modifier = Modifier
-                            .size(maxArtworkSize.coerceIn(160.dp, 420.dp))
-                            .aspectRatio(1f)
+                            .weight(1f, fill = false)
+                            .sizeIn(maxWidth = artSize, maxHeight = artSize)
+                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
                             .onGloballyPositioned { sheet.fullArt = it.rootRect() }
                             .pointerInput(Unit) {
                                 detectTapGestures(
@@ -1199,7 +1204,7 @@ private fun NowPlayingCenterStage(
                         }
                     }
                     if (quality != null) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(6.dp))
                         AudioQualityChip(quality, onClick = onShowQuality, modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha })
                     }
                 }
@@ -1248,7 +1253,7 @@ private fun NowPlayingControlsColumn(
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit = {}
 ) {
-    val verticalGap = if (isUltraTallPortrait) 12.dp else 7.dp
+    val verticalGap = if (isUltraTallPortrait) 10.dp else 7.dp
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
     val isLyricsMode = activeTab == NowPlayingSheetTab.LYRICS
 

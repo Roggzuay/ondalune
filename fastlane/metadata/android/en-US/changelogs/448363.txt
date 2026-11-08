@@ -1,0 +1,1 @@
+Fixes: the audio quality line under the cover is no longer cut off on taller phones, and the cover is a little larger there. Back takes you to where you were on the previous page instead of its top. Pressing a tab closes search.

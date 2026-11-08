@@ -113,7 +113,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.offset
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -284,10 +288,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val selectedFolderPath by viewModel.selectedFolderDetail.collectAsStateWithLifecycle()
     val openHomeShelf by viewModel.openHomeShelf.collectAsStateWithLifecycle()
     val selectedPlaylistId by viewModel.selectedPlaylistDetailId.collectAsStateWithLifecycle()
+    val shownPage = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf, selectedPlaylistId)
     val playingFromPlaylist by viewModel.playingFromPlaylist.collectAsStateWithLifecycle()
     // Held here, outside the tab transitions, so Home keeps its scroll position while a page from
     // it (or another tab) is open.
     val homeListState = rememberLazyListState()
+    // A page keeps its saved state, its scroll position above all, while Back can still reach it.
+    val pageStates = rememberSaveableStateHolder()
+    val backTrail = remember { mutableListOf<String>() }
+
+    var searchOpen by rememberSaveable { mutableStateOf(searchQuery.isNotEmpty()) }
+    /** A tab press leaves search; pressing the open tab again otherwise takes it back to its top. */
+    fun openTab(dest: PrimaryDestination) {
+        val searching = searchOpen || searchQuery.isNotEmpty()
+        if (searching) {
+            searchOpen = false
+            viewModel.updateSearchQuery("")
+        }
+        when {
+            dest != currentDestination -> viewModel.selectDestination(dest)
+            !searching -> viewModel.reselectDestination()
+        }
+    }
 
     // The mini player waits for the first song you play. A song restored from last time stays
     // loaded (headphone and notification play resume it) but out of the way.
@@ -525,9 +547,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     containerColor = MaterialTheme.colorScheme.background,
                     topBar = {
                         // Artist pages show their portrait up to the top instead (selection still gets its bar).
+                        // Leaving one, the bar is back at full height at once: the page coming in is laid
+                        // out under it from its first frame, so it reopens where it was left.
+                        val artistPageShown = shownPage.detailKey?.startsWith("artist:") == true
                         AnimatedVisibility(
-                            visible = shownPortraits.isEmpty() || trackSelection.active,
-                            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                            visible = shownPortraits.isEmpty() || !artistPageShown || trackSelection.active,
+                            enter = fadeIn(),
                             exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
                         ) {
                         if (trackSelection.active) {
@@ -536,11 +561,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         OndaluneTopBar(
                             title = currentDestination.label,
                             searchQuery = searchQuery,
+                            searchOpen = searchOpen,
                             statusBanner = statusBanner,
                             filtersActive = libraryFilters.active,
                             isSettingsActive = currentDestination == PrimaryDestination.SETTINGS,
                             bannerBusy = isCutoutSyncActive,
                             onQueryChange = viewModel::updateSearchQuery,
+                            onSearchOpenChange = { searchOpen = it },
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
                             onDismissBanner = viewModel::dismissBanner
@@ -603,9 +630,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     selectedId = currentDestination,
                                     dockStyle = customizationSettings.dockStyle,
                                     hazeState = hazeState,
-                                    onSelect = { dest ->
-                                        if (dest == currentDestination) viewModel.reselectDestination() else viewModel.selectDestination(dest)
-                                    }
+                                    onSelect = ::openTab
                                 )
                             }
                         }
@@ -614,9 +639,16 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     Row(
                         // No bottom inset: lists scroll under the dock and mini player (every tab
                         // ends with room for them), which is what makes the Standard dock see-through.
+                        // The top bar's height is read while laying out, not while composing: a page
+                        // that comes back with the bar is measured at its real height from its first
+                        // frame, so its list reopens where it was left instead of clamping to the top.
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(top = innerPadding.calculateTopPadding())
+                            .layout { measurable, constraints ->
+                                val top = innerPadding.calculateTopPadding().roundToPx()
+                                val placeable = measurable.measure(constraints.offset(vertical = -top))
+                                layout(placeable.width, placeable.height + top) { placeable.place(0, top) }
+                            }
                     ) {
                         if (isExpandedScreen) {
                             NavigationRail(
@@ -628,7 +660,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     val selected = dest == currentDestination
                                     NavigationRailItem(
                                         selected = selected,
-                                        onClick = { viewModel.selectDestination(dest) },
+                                        onClick = { openTab(dest) },
                                         icon = {
                                             Icon(
                                                 imageVector = destinationIcon(dest, selected),
@@ -644,9 +676,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
                         Column(modifier = Modifier.weight(1f).nestedScroll(miniPlayerScrollWatcher)) {
                             val reducedMotion = LocalReducedMotion.current
+                            LaunchedEffect(shownPage.key) { backTrail.follow(shownPage, pageStates) }
                             AnimatedContent(
-                                targetState = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf, selectedPlaylistId),
-                                contentKey = { it.route + "/" + it.detailKey },
+                                targetState = shownPage,
+                                contentKey = { it.key },
                                 transitionSpec = {
                                     when {
                                         reducedMotion -> fadeIn(tween(110)).togetherWith(fadeOut(tween(90)))
@@ -662,6 +695,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                     .hazeSource(hazeState),
                                 label = "mainTabTransition"
                             ) { nav ->
+                                pageStates.SaveableStateProvider(nav.key) {
                                 // Render the snapshot this content was created for, so an outgoing
                                 // detail screen keeps its content while it animates away.
                                 val destination = nav.destination
@@ -986,6 +1020,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         )
                                     }
                                 }
+                            }
                             }
 
                             if (isExpandedScreen && miniPlayerTrack != null) {
@@ -1593,6 +1628,8 @@ private data class ShellNavState(
     val playlistId: String?
 ) {
     val route: String get() = destination.route
+    /** One key per page: the tab, plus the detail shown on top of it. */
+    val key: String get() = "$route/$detailKey"
     val detailKey: String? get() = albumId?.let { "album:$it" } ?: artistId?.let { "artist:$it" }
         ?: genreName?.let { "genre:$it" } ?: folderPath?.let { "folder:$it" } ?: playlistId?.let { "playlist:$it" }
         ?: shelf?.let { "shelf:${it.name}" }
@@ -1600,6 +1637,16 @@ private data class ShellNavState(
     /** Navigation depth inside the tab (shelf page, then a detail on top), for slide direction. */
     val depth: Int get() = (if (shelf != null) 1 else 0) +
         (if (albumId != null || artistId != null || genreName != null || folderPath != null || playlistId != null) 1 else 0)
+}
+
+/**
+ * Keeps this list to the detail pages Back can still reach from [page], and drops the saved state of
+ * every page left behind. Tab pages are never in it: they keep their place across tab switches.
+ */
+private fun MutableList<String>.follow(page: ShellNavState, states: SaveableStateHolder) {
+    val keep = if (page.detailKey == null) 0 else indexOf(page.key).let { if (it < 0) size else it + 1 }
+    subList(keep, size).apply { forEach(states::removeState); clear() }
+    if (page.detailKey != null && lastOrNull() != page.key) add(page.key)
 }
 
 /** Material fade through: outgoing fades fast, incoming fades and settles up from 92% scale. */
