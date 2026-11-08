@@ -21,10 +21,10 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 
 <img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
 
-<img src="docs/screenshots/home.png" width="200" alt="Home with the Your Mix hero" />
-<img src="docs/screenshots/player.png" width="200" alt="Now playing" />
-<img src="docs/screenshots/lyrics.png" width="200" alt="Synced lyrics" />
-<img src="docs/screenshots/speed_pitch.png" width="200" alt="Speed and pitch engine" />
+<img src="docs/screenshots/home.jpg" width="200" alt="Home with the Your Mix hero and its artwork collage" />
+<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured amber from the cover" />
+<img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with a full-bleed photo and the latest release" />
+<img src="docs/screenshots/library.jpg" width="200" alt="Library in tiles layout" />
 
 </div>
 
@@ -84,6 +84,12 @@ black-and-white theme instead of a guessed colour. Choose from five animated bac
 Living Artwork, Velvet Mesh, Aurora, Halo and Still. They move with the music and rest when you
 pause.
 
+<p align="center">
+<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in blue and lavender, taken from the cover" />
+<img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in warm rose tones from the artist photo" />
+<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in deep blue from the artist photo" />
+</p>
+
 ### 🎤 Synced lyrics
 Time-synced lyrics from your server scroll with the song, and you can tap any line to jump to it.
 Plain lyrics work too. Big home-screen widgets can show the current line.
@@ -104,7 +110,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 <p align="center">
 <img src="docs/demo/themes.gif" width="220" alt="Switching between interface styles in Appearance" />
 <img src="docs/demo/artwork-shapes.gif" width="220" alt="Tapping the cover to change its shape" />
-<img src="docs/screenshots/library.png" width="220" alt="Library in tiles layout" />
+<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: fonts, artwork shapes and the home layout editor" />
 </p>
 
 ### 👆 Built for your thumbs
@@ -120,6 +126,12 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Sleep timer**, and **scrobbling** back to your server.
 - **Background playback** keeps going on the lock screen and through screen-off.
 - **Media notification and resizable widgets** with a blurred-artwork background.
+
+<p align="center">
+<img src="docs/screenshots/downloads.jpg" width="220" alt="Downloads: one in progress and songs saved on the phone" />
+<img src="docs/screenshots/library-filter.jpg" width="220" alt="Library filter: downloaded only, hide short tracks, lossless only" />
+<img src="docs/screenshots/settings.jpg" width="220" alt="Settings sections" />
+</p>
 
 ## Music sources
 
