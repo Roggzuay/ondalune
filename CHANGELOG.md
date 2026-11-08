@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.1 (2026-11-08)
+
+- **Fixes & improvements:**
+  - The audio quality line under the cover is no longer cut off on taller phones (such as the Galaxy S26 Ultra); it is more compact, and the cover is a little larger there.
+  - Back takes you to where you were on the previous page, such as your place in Artists after opening an artist, instead of its top.
+  - Pressing Home or any other tab closes search and clears it.
+
 ## 1.6.0 (2026-11-05)
 
 - **Your server's playlists:** Navidrome and other OpenSubsonic playlists appear in Playlists, marked as the server's, with their songs and covers, and refresh with the library or the refresh button. Your own server playlists can be added to and deleted from Ondalune; playlists shared with you are read-only. Playlists made in Ondalune stay separate.

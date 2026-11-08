@@ -59,10 +59,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -87,16 +84,17 @@ import io.github.roggzuay.ondalune.data.model.OfflineSummary
 fun OndaluneTopBar(
     title: String,
     searchQuery: String,
+    searchOpen: Boolean,
     statusBanner: String?,
     filtersActive: Boolean,
     isSettingsActive: Boolean,
     bannerBusy: Boolean = false,
     onQueryChange: (String) -> Unit,
+    onSearchOpenChange: (Boolean) -> Unit,
     onOpenFilters: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismissBanner: () -> Unit
 ) {
-    var searchOpen by remember { mutableStateOf(searchQuery.isNotEmpty()) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -114,7 +112,7 @@ fun OndaluneTopBar(
                     onQueryChange = onQueryChange,
                     onClose = {
                         onQueryChange("")
-                        searchOpen = false
+                        onSearchOpenChange(false)
                     }
                 )
             } else {
@@ -134,7 +132,7 @@ fun OndaluneTopBar(
                         )
                     }
                     IconButton(
-                        onClick = { searchOpen = true },
+                        onClick = { onSearchOpenChange(true) },
                         shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.testTag("top_bar_search_button")
                     ) { Icon(Icons.Filled.Search, contentDescription = "Search") }
