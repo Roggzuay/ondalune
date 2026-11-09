@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.ArtworkCut
+import io.github.roggzuay.ondalune.ui.theme.colors
 import io.github.roggzuay.ondalune.ui.theme.ArtShape
 import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
@@ -121,6 +122,8 @@ private fun ThemePreviewCard(style: InterfaceStyle, selected: Boolean, onClick: 
             }
         }
         Spacer(Modifier.height(10.dp))
+        // The first row is the playing track, lit the way this theme lights it.
+        val lit = spec.nowPlayingRow.colors(scheme)
         repeat(2) { i ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -128,7 +131,7 @@ private fun ThemePreviewCard(style: InterfaceStyle, selected: Boolean, onClick: 
                     .fillMaxWidth()
                     .padding(vertical = 2.dp)
                     .clip(RoundedCornerShape(corner))
-                    .background(if (spec.cardRows) scheme.surfaceContainerHigh else Color.Transparent)
+                    .background(if (i == 0) lit.container else Color.Transparent)
                     .padding(4.dp)
             ) {
                 Box(
@@ -141,7 +144,7 @@ private fun ThemePreviewCard(style: InterfaceStyle, selected: Boolean, onClick: 
                 Text(
                     text = if (i == 0) "Song title" else "Another one",
                     style = TextStyle(fontFamily = body, fontSize = 11.sp, fontWeight = FontWeight.Medium),
-                    color = scheme.onSurface,
+                    color = if (i == 0) lit.accent else scheme.onSurface,
                     maxLines = 1
                 )
             }

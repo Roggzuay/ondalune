@@ -63,6 +63,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -419,15 +420,21 @@ private fun LazyListScope.artistSections(
         item(key = "popular_title") { SectionTitle("Popular") }
         item(key = "popular") {
             var showAll by rememberSaveable(artist.id) { mutableStateOf(false) }
-            Column(Modifier.padding(horizontal = 16.dp).animateContentSize()) {
+            Column(
+                Modifier.padding(horizontal = 16.dp).animateContentSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Keyed: play counts re-sort this list, and each row's state must move with its track.
                 (if (showAll) popular else popular.take(PopularPreview)).forEach { track ->
-                    TrackExpressiveRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        isPlaying = isPlaying,
-                        onPlay = { onPlayTrack(track) },
-                        onToggleStar = { onToggleStar(track) }
-                    )
+                    key(track.id) {
+                        TrackExpressiveRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            isPlaying = isPlaying,
+                            onPlay = { onPlayTrack(track) },
+                            onToggleStar = { onToggleStar(track) }
+                        )
+                    }
                 }
                 if (popular.size > PopularPreview) {
                     TextButton(onClick = { showAll = !showAll }) {
