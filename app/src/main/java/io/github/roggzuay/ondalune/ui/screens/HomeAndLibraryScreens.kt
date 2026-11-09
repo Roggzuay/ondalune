@@ -45,11 +45,13 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
+import io.github.roggzuay.ondalune.ui.theme.colors
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.graphics.lerp
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -764,6 +766,16 @@ fun TrackExpressiveRow(
     val isTransferring = entry?.stateEnum == OfflineDownloadState.DOWNLOADING || entry?.stateEnum == OfflineDownloadState.QUEUED
     val selected = selection.isSelected(track.id)
     var showOptions by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
+    val lit = LocalStyleSpec.current.nowPlayingRow.colors(scheme)
+    // One fraction drives every playing-row colour, so the highlight fades off the old row while
+    // it fades onto the new one.
+    val litFraction by animateFloatAsState(
+        targetValue = if (isCurrent && !selected) 1f else 0f,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+        label = "nowPlayingRow"
+    )
+    val artSize = if (compact) 42.dp else 56.dp
 
     // The swipe state (and its callback) is remembered once per row; read the latest track and
     // callback through these, or a second swipe acts on the track as it was first shown
@@ -802,19 +814,24 @@ fun TrackExpressiveRow(
                 if (selection.active) selection.toggle(track) else showOptions = true
             },
             color = when {
-                selected -> MaterialTheme.colorScheme.secondaryContainer
-                isCurrent -> MaterialTheme.colorScheme.surfaceContainerHighest
-                // Flat-row themes draw rows straight on the page; solid while swiping.
-                !LocalStyleSpec.current.cardRows && swipeState.dismissDirection == SwipeToDismissBoxValue.Settled -> Color.Transparent
-                !LocalStyleSpec.current.cardRows -> MaterialTheme.colorScheme.surface
-                else -> MaterialTheme.colorScheme.surfaceContainer
+                selected -> scheme.secondaryContainer
+                // Rows sit straight on the page; solid while swiping.
+                swipeState.dismissDirection == SwipeToDismissBoxValue.Settled -> Color.Transparent
+                else -> scheme.surface
             },
             cornerRadius = 22.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("track_row_${track.id}")
         ) {
-            Column {
+            val ink = lerp(LocalContentColor.current, lit.content, litFraction)
+            val accent = lerp(scheme.primary, lit.accent, litFraction)
+            val muted = lerp(scheme.onSurfaceVariant, lit.content, litFraction)
+            // Drawn here, not as the surface colour: a transparent surface and a filled one are
+            // different layouts, and switching would rebuild the row (artwork included) mid-fade.
+            Column(
+                Modifier.background(lit.container.copy(alpha = lit.container.alpha * litFraction), cornerShape(22.dp))
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -825,7 +842,7 @@ fun TrackExpressiveRow(
                         if (selected) SelectedBadge() else Text(
                             text = "$trackNumber",
                             style = MaterialTheme.typography.titleSmall,
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = lerp(scheme.onSurfaceVariant, lit.accent, litFraction)
                         )
                     } else Box(contentAlignment = Alignment.Center) {
                         ExpressiveArtwork(
@@ -834,12 +851,12 @@ fun TrackExpressiveRow(
                             artStyleIndex = track.artStyleIndex,
                             coverArtUrl = track.coverArtUrl,
                             styleShape = LocalStyleSpec.current.rowArtShape,
-                            modifier = Modifier.size(if (compact) 42.dp else 52.dp)
+                            modifier = Modifier.size(artSize)
                         )
                         if (selected) {
                             Box(
                                 Modifier
-                                    .size(if (compact) 42.dp else 52.dp)
+                                    .size(artSize)
                                     .clip(cornerShape(12.dp))
                                     .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
                                 contentAlignment = Alignment.Center
@@ -853,7 +870,7 @@ fun TrackExpressiveRow(
                         Text(
                             text = track.title,
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            color = lerp(scheme.onSurface, lit.accent, litFraction),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -861,7 +878,7 @@ fun TrackExpressiveRow(
                         Text(
                             text = if (compact) "${track.artist} • ${formatDurationSec(track.durationSec)}" else "${track.artist} • ${track.album}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = LocalContentColor.current.copy(alpha = 0.78f),
+                            color = ink.copy(alpha = 0.78f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -874,27 +891,28 @@ fun TrackExpressiveRow(
                                 // Songs on the phone don't know their sample format: just the file type.
                                 text = track.compactQuality(),
                                 style = monoLabelSmall(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = muted
                             )
                             if (track.isOnDevice) {
                                 Icon(
                                     imageVector = Icons.Filled.PhoneAndroid,
                                     contentDescription = "On this phone",
-                                    tint = LocalContentColor.current,
+                                    tint = ink,
                                     modifier = Modifier.size(14.dp)
                                 )
                             } else if (isDownloaded) {
                                 Icon(
                                     imageVector = Icons.Filled.CloudDone,
                                     contentDescription = "Available offline",
-                                    tint = LocalContentColor.current,
+                                    tint = ink,
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
                             Text(
-                                text = "${track.playCount} plays • ${formatDurationSec(track.durationSec)}",
+                                // Duration first: on narrow rows the play count is what gets cut.
+                                text = "${formatDurationSec(track.durationSec)} • ${track.playCount} plays",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = LocalContentColor.current.copy(alpha = 0.78f),
+                                color = ink.copy(alpha = 0.78f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -904,6 +922,7 @@ fun TrackExpressiveRow(
                     if (isCurrent) {
                         AnimatedAudioBarsIndicator(
                             isPlaying = isPlaying,
+                            color = lit.accent,
                             modifier = Modifier.padding(end = 8.dp)
                         )
                     }
@@ -913,11 +932,7 @@ fun TrackExpressiveRow(
                         active = track.starred,
                         size = 42.dp,
                         containerColor = Color.Transparent,
-                        contentColor = if (track.starred) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                        contentColor = if (track.starred) accent else muted
                     ) {
                         Icon(
                             imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -931,7 +946,7 @@ fun TrackExpressiveRow(
                             onClick = { showOptions = true },
                             size = 40.dp,
                             containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentColor = muted,
                             modifier = Modifier.testTag("track_more_menu_${track.id}")
                         ) {
                             Icon(

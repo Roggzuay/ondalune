@@ -2,10 +2,12 @@ package io.github.roggzuay.ondalune.ui.theme
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposePath
@@ -17,6 +19,23 @@ import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import com.materialkolor.PaletteStyle
+
+/**
+ * Container behind the playing track's row. FIXED is the same vivid tone in light and dark mode,
+ * so the row reads as a lit tile; SOFT is a translucent wash with only the title and bars in the accent.
+ */
+enum class NowPlayingRow { FIXED, TONAL, TERTIARY, SOLID, SOFT }
+
+/** Fill, text colour and accent (title, bars, heart) of the playing row. */
+data class NowPlayingColors(val container: Color, val content: Color, val accent: Color)
+
+fun NowPlayingRow.colors(scheme: ColorScheme): NowPlayingColors = when (this) {
+    NowPlayingRow.FIXED -> scheme.onPrimaryFixedVariant.let { NowPlayingColors(scheme.primaryFixed, it, it) }
+    NowPlayingRow.TONAL -> scheme.onPrimaryContainer.let { NowPlayingColors(scheme.primaryContainer, it, it) }
+    NowPlayingRow.TERTIARY -> scheme.onTertiaryContainer.let { NowPlayingColors(scheme.tertiaryContainer, it, it) }
+    NowPlayingRow.SOLID -> scheme.onPrimary.let { NowPlayingColors(scheme.primary, it, it) }
+    NowPlayingRow.SOFT -> NowPlayingColors(scheme.primaryContainer.copy(alpha = 0.45f), scheme.onSurface, scheme.primary)
+}
 
 /** Silhouette used to cut artwork. */
 enum class ArtShape { SQUIRCLE, ROUNDED, SQUARE, CIRCLE, PILL, FLOWER, COOKIE, CLOVER, SUNNY, PUFFY, GEM, ARCH, MIXED }
@@ -45,8 +64,10 @@ data class StyleSpec(
     val artShape: ArtShape,
     /** Small artwork in track rows. */
     val rowArtShape: ArtShape,
-    /** Track rows sit on tonal cards (false = flat rows on the page). */
+    /** Album, artist and playlist list rows sit on tonal cards (false = flat rows on the page). */
     val cardRows: Boolean,
+    /** How the playing track's row stands out; every other track row is flat on the page. */
+    val nowPlayingRow: NowPlayingRow,
     /** Album cards sit on a tonal container (false = artwork and text straight on the page). */
     val cardTiles: Boolean,
     val artBorder: Boolean,
@@ -66,7 +87,8 @@ val LocalStyleSpec = staticCompositionLocalOf { styleSpecFor(InterfaceStyle.SIGN
 fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     InterfaceStyle.SIGNATURE -> StyleSpec(
         style, AppFont.UNBOUNDED, AppFont.FIGTREE, PaletteStyle.Vibrant, 1f, false,
-        ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, cardTiles = true, artBorder = true,
+        ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, nowPlayingRow = NowPlayingRow.FIXED,
+        cardTiles = true, artBorder = true,
         monoBadges = true, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
             HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
@@ -76,7 +98,8 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     )
     InterfaceStyle.STANDARD -> StyleSpec(
         style, AppFont.SYSTEM, AppFont.SYSTEM, PaletteStyle.TonalSpot, 0.5f, true,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, cardTiles = false, artBorder = false,
+        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, nowPlayingRow = NowPlayingRow.TONAL,
+        cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
             HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
@@ -86,7 +109,8 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     )
     InterfaceStyle.BLOOM -> StyleSpec(
         style, AppFont.FREDOKA, AppFont.FIGTREE, PaletteStyle.Expressive, 1.35f, false,
-        ArtShape.MIXED, ArtShape.MIXED, cardRows = false, cardTiles = true, artBorder = false,
+        ArtShape.MIXED, ArtShape.MIXED, cardRows = false, nowPlayingRow = NowPlayingRow.TERTIARY,
+        cardTiles = true, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = true,
         defaultHome = listOf(
             HomeSection.RECENTLY_ADDED, HomeSection.MIXES, HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN,
@@ -96,7 +120,8 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     )
     InterfaceStyle.POSTER -> StyleSpec(
         style, AppFont.FLEX_WIDE, AppFont.FLEX, PaletteStyle.TonalSpot, 1.6f, false,
-        ArtShape.PILL, ArtShape.CIRCLE, cardRows = false, cardTiles = false, artBorder = false,
+        ArtShape.PILL, ArtShape.CIRCLE, cardRows = false, nowPlayingRow = NowPlayingRow.SOLID,
+        cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = true, shelfPlayButtons = true,
         defaultHome = listOf(
             HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.MOST_PLAYED, HomeSection.RECENTLY_ADDED,
@@ -106,7 +131,8 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     )
     InterfaceStyle.LOUNGE -> StyleSpec(
         style, AppFont.BRICOLAGE, AppFont.FIGTREE, PaletteStyle.Rainbow, 1.15f, false,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = true, cardTiles = false, artBorder = false,
+        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = true, nowPlayingRow = NowPlayingRow.SOFT,
+        cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = true, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
             HomeSection.FEATURED, HomeSection.MIXES, HomeSection.RECENTLY_PLAYED, HomeSection.JUMP_BACK_IN,
@@ -116,7 +142,8 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
     )
     InterfaceStyle.CLASSIC -> StyleSpec(
         style, AppFont.SYSTEM, AppFont.SYSTEM, PaletteStyle.Neutral, 0.4f, true,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, cardTiles = false, artBorder = false,
+        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, nowPlayingRow = NowPlayingRow.TONAL,
+        cardTiles = false, artBorder = false,
         monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
         defaultHome = listOf(
             HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.TOP_ARTISTS, HomeSection.RECENTLY_ADDED,
