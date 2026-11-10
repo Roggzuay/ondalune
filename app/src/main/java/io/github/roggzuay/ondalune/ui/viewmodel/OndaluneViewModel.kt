@@ -52,7 +52,6 @@ import io.github.roggzuay.ondalune.data.local.analysisInputs
 import io.github.roggzuay.ondalune.data.model.isLocalSource
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import io.github.roggzuay.ondalune.data.source.LocalMusicSource
-import io.github.roggzuay.ondalune.data.source.MusicSources
 import kotlinx.coroutines.flow.drop
 import io.github.roggzuay.ondalune.playback.PlaybackEngine
 import io.github.roggzuay.ondalune.playback.PlaybackHost
@@ -80,6 +79,7 @@ import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
 import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
+import io.github.roggzuay.ondalune.data.repository.LibrarySyncWorker
 import io.github.roggzuay.ondalune.data.repository.OndaluneRepository
 import io.github.roggzuay.ondalune.ui.components.AppIconLauncherManager
 import io.github.roggzuay.ondalune.ui.components.ReleaseNotes
@@ -180,13 +180,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val settings = SettingsStore(prefs)
     private val database = OndaluneDatabase.getInstance(application)
     private val client = OpenSubsonicClient()
-    private val repository = OndaluneRepository(
-        database.dao(),
-        client,
-        sourceFor = { MusicSources.forServer(application, client, it) },
-        folderPermissions = FolderPermissions(application),
-        jellyfin = MusicSources.jellyfin(application)
-    )
+    private val repository = OndaluneRepository.from(application, client)
     val audioEngine: OndaluneAudioEngine = OndalunePlaybackRuntime.getOrCreateEngine(application, client)
 
     /** Notification, widget and headset controls while this screen is alive (see onCleared). */
@@ -999,6 +993,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         OndaluneMediaBridge.onSeekTo = bridgeSeek
         checkForUpdate()
         UpdateCheckWorker.schedule(application, settings.customization.value.checkForUpdates)
+        LibrarySyncWorker.schedule(application, settings.customization.value.librarySyncHours)
         viewModelScope.launch {
             val activeServer = repository.ensureSeeded()
             _activeServerId.value = activeServer.id
@@ -2281,6 +2276,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setRescanFoldersOnLaunch(enabled: Boolean) = settings.setRescanFoldersOnLaunch(enabled)
+
+    fun setLibrarySyncHours(hours: Int) {
+        settings.setLibrarySyncHours(hours)
+        LibrarySyncWorker.schedule(getApplication(), hours, restart = true)
+    }
 
     /** Scans [folders] one after another, after any scan already running; never on the main thread. */
     private fun scanFolders(folders: List<LocalFolder>) {

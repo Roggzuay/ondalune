@@ -3,6 +3,7 @@ package io.github.roggzuay.ondalune.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -52,8 +55,45 @@ class MusicFolders(
     val onRescan: (LocalFolder) -> Unit = {},
     val onRescanAll: () -> Unit = {},
     val onCancelScan: () -> Unit = {},
-    val onSetRescanOnLaunch: (Boolean) -> Unit = {}
+    val onSetRescanOnLaunch: (Boolean) -> Unit = {},
+    /** Hours between background scans; 0 = off. */
+    val backgroundScanHours: Int = 0,
+    val onSetBackgroundScanHours: (Int) -> Unit = {}
 )
+
+private val BackgroundScanChoices = listOf(0 to "Off", 6 to "6 hours", 12 to "12 hours", 24 to "Daily", 168 to "Weekly")
+
+/** "Scan in the background": how often the library is checked for new music while Ondalune is closed. */
+@Composable
+fun BackgroundScanCard(state: MusicFolders, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.fillMaxWidth().testTag("background_scan_card")
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Scan in the background", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Checks your server and your music folders for new songs while Ondalune is closed. " +
+                    "Android picks the exact moment, and waits while the battery is low.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
+                BackgroundScanChoices.forEach { (hours, label) ->
+                    FilterChip(
+                        selected = state.backgroundScanHours == hours,
+                        onClick = { state.onSetBackgroundScanHours(hours) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 /**
  * "Music folders": the folders on this phone whose music joins the library. Each is picked in

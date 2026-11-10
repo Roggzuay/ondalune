@@ -2,6 +2,7 @@ package io.github.roggzuay.ondalune.ui.viewmodel
 
 import android.content.SharedPreferences
 import io.github.roggzuay.ondalune.data.model.AppFont
+import io.github.roggzuay.ondalune.data.repository.LibrarySyncWorker
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
@@ -126,6 +127,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }
 
+    fun setLibrarySyncHours(hours: Int) {
+        update { it.copy(librarySyncHours = hours) }
+    }
+
     fun setAnimatedSquigglyWave(enabled: Boolean) {
         update {
             it.copy(
@@ -216,6 +221,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             replayGainMode = ReplayGainMode.entries.find { it.name == prefs.getString("cfg_replay_gain", defaults.replayGainMode.name) } ?: defaults.replayGainMode,
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
             rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
+            librarySyncHours = prefs.getInt(LibrarySyncWorker.PREF_HOURS, defaults.librarySyncHours),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
             pauseOnHeadphoneDisconnect = prefs.getBoolean("cfg_pause_noisy", defaults.pauseOnHeadphoneDisconnect),
             animatedSquigglyWave = prefs.getBoolean("cfg_squiggly_wave", defaults.animatedSquigglyWave),
@@ -272,6 +278,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putString("cfg_replay_gain", s.replayGainMode.name)
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)
             .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
+            .putInt(LibrarySyncWorker.PREF_HOURS, s.librarySyncHours)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)
             .putBoolean("cfg_pause_noisy", s.pauseOnHeadphoneDisconnect)
             .putBoolean("cfg_squiggly_wave", s.animatedSquigglyWave)
