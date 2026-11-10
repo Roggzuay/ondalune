@@ -765,14 +765,36 @@ data class PlayerCustomizationSettings(
     val animatedSquigglyWave: Boolean = true,
     val hapticWobbleButtons: Boolean = true,
     val highRefreshRate120Hz: Boolean = true,
+    /** Streaming quality on Wi-Fi and on mobile data (see [StreamQualities]); RAW/0 = the original file. */
     val wifiTranscodeFormat: String = "RAW",
-    val wifiMaxBitRate: Int = 0, // 0 = Lossless FLAC
+    val wifiMaxBitRate: Int = 0,
     val mobileTranscodeFormat: String = "OPUS",
     val mobileMaxBitRate: Int = 192,
     val downloadSpeedLimit: DownloadSpeedLimit = DownloadSpeedLimit.UNLIMITED,
     val readAheadTrackBuffer: Int = 5,
     val smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED
 )
+
+/** A streaming quality: what the server converts songs to, and the bitrate cap (RAW/0 = the original file). */
+data class StreamQuality(val format: String, val maxBitRate: Int, val label: String) {
+    val badge get() = if (format == "RAW" || maxBitRate == 0) "Lossless" else "$format ${maxBitRate}k"
+}
+
+/** The qualities offered everywhere: the player sheet, Wi-Fi and mobile data settings. */
+val StreamQualities = listOf(
+    StreamQuality("RAW", 0, "Original file • not converted"),
+    StreamQuality("OPUS", 320, "Opus • 320 kbps Studio"),
+    StreamQuality("OPUS", 192, "Opus • 192 kbps Balanced"),
+    StreamQuality("OPUS", 128, "Opus • 128 kbps Data saver"),
+    StreamQuality("MP3", 320, "MP3 • 320 kbps High"),
+    StreamQuality("MP3", 192, "MP3 • 192 kbps Compatible")
+)
+
+/** The quality set for mobile data or for Wi-Fi. */
+fun PlayerCustomizationSettings.streamQuality(mobile: Boolean): StreamQuality {
+    val (format, rate) = if (mobile) mobileTranscodeFormat to mobileMaxBitRate else wifiTranscodeFormat to wifiMaxBitRate
+    return StreamQualities.find { it.format == format && it.maxBitRate == rate } ?: StreamQuality(format, rate, "$format • $rate kbps")
+}
 
 enum class EqualizerPreset(
     val label: String,

@@ -3,6 +3,7 @@
 package io.github.roggzuay.ondalune.ui.screens
 
 import io.github.roggzuay.ondalune.data.model.isOnDevice
+import io.github.roggzuay.ondalune.data.model.streamQuality
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.runtime.withFrameNanos
@@ -975,8 +976,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetAutoScrobble = viewModel.settings::setAutoScrobble,
                                             onSetPauseOnHeadphoneDisconnect = viewModel::setPauseOnHeadphoneDisconnect,
                                             onSetFallbackArtistToAlbumArt = viewModel.settings::setFallbackArtistToAlbumArt,
-                                            onUpdateWifiQuality = viewModel::updateTranscodeProfile,
-                                            onUpdateMobileQuality = viewModel::setMobileQuality,
+                                            onSetStreamQuality = viewModel::setStreamQuality,
                                             onSetDownloadSpeedLimit = viewModel::setDownloadSpeedLimit,
                                             onSetReadAheadBuffer = viewModel.settings::setReadAheadBuffer,
                                             onSetWidgetLayoutMode = viewModel::setWidgetLayoutMode,
@@ -1233,14 +1233,15 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         animationSpec = spring(stiffness = Spring.StiffnessMedium)
                     ) + fadeOut()
                 ) {
+                    val onMobileData = remember { viewModel.onMobileData() }
                     SonicLabModalOverlay(
                         moodMixes = homeShelves.mixes.filter { it.key.startsWith("mood:") },
                         songAnalysisOn = customizationSettings.songAnalysis,
                         activePreset = eqPreset,
                         customBandsDb = customEqBands,
-                        activeTranscodeFormat = activeServer.transcodeFormat,
-                        activeMaxBitRate = activeServer.maxBitRate,
-                        onUpdateTranscodeProfile = viewModel::updateTranscodeProfile,
+                        streamQuality = customizationSettings.streamQuality(onMobileData),
+                        onMobileData = onMobileData,
+                        onSetStreamQuality = { viewModel.setStreamQuality(onMobileData, it) },
                         onSelectPreset = viewModel::selectEqualizerPreset,
                         onUpdateBand = viewModel::updateCustomEqBand,
                         onPlayMix = viewModel::playMix,
@@ -1303,6 +1304,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 ) {
                     UserServerInfoModal(
                         activeServer = activeServer,
+                        streamProfile = customizationSettings.streamQuality(viewModel.onMobileData()).badge,
                         servers = servers,
                         pingDiagnostic = pingDiagnostic,
                         isSyncing = isSyncing,
