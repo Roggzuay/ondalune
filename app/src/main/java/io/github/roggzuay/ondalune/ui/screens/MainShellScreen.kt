@@ -926,6 +926,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             },
                                             viewMode = tabDisplayPreferences["FAVOURITES"]?.viewMode ?: LibraryViewMode.LIST,
                                             onSetViewMode = { viewModel.setCategoryViewMode("FAVOURITES", it) },
+                                            sortPreference = tabDisplayPreferences["FAVOURITES"] ?: viewModel.getTabPreference("FAVOURITES"),
+                                            onSetSortOption = { viewModel.setCategorySortOption("FAVOURITES", it) },
+                                            onToggleSortDirection = { viewModel.toggleCategorySortDirection("FAVOURITES") },
                                             scrollToTopSignal = scrollToTopSignal
                                         )
                                     }

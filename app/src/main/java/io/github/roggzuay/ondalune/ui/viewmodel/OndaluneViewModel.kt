@@ -1173,7 +1173,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             LibrarySortOption.MOST_PLAYED,
             LibrarySortOption.TRACK_COUNT,
             LibrarySortOption.ALBUM_COUNT,
-            LibrarySortOption.DATE_MODIFIED -> false
+            LibrarySortOption.DATE_MODIFIED,
+            LibrarySortOption.RECENTLY_FAVOURITED -> false
             LibrarySortOption.NAME_ASC,
             LibrarySortOption.ARTIST,
             LibrarySortOption.ALBUM,

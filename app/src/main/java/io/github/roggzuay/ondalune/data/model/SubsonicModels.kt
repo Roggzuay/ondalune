@@ -112,6 +112,8 @@ data class SubsonicTrack(
     val bitDepth: Int = 0,
     val samplingRate: Int = 0,
     val starred: Boolean = false,
+    /** When the song was hearted (0 = unknown). Jellyfin doesn't say, so there it's when the song was added. */
+    val starredAtMs: Long = 0L,
     val trackNumber: Int = 1,
     val year: Int = 2025,
     val genre: String = "Electronic",
@@ -279,7 +281,8 @@ enum class LibrarySortOption(val label: String, val shortLabel: String) {
     TRACK_NUMBER("Track Number", "Track #"),
     TRACK_COUNT("Song Count", "Songs"),
     ALBUM_COUNT("Album Count", "Albums"),
-    DATE_MODIFIED("Date Updated", "Updated")
+    DATE_MODIFIED("Date Updated", "Updated"),
+    RECENTLY_FAVOURITED("Recently Favourited", "Hearted")
 }
 
 /**
@@ -363,7 +366,8 @@ data class TabDisplayPreference(
                 LibrarySortOption.NAME_ASC,
                 LibrarySortOption.TRACK_COUNT
             )
-            "SONGS", "FAVOURITES" -> listOf(
+            "FAVOURITES" -> listOf(LibrarySortOption.RECENTLY_FAVOURITED) + supportedSortOptionsFor("SONGS")
+            "SONGS" -> listOf(
                 LibrarySortOption.NAME_ASC,
                 LibrarySortOption.ARTIST,
                 LibrarySortOption.ALBUM,

@@ -105,7 +105,7 @@ class JellyfinClient(private val deviceId: String, private val appVersion: Strin
                         server, "Users/${server.remoteUserId}/Items", mapOf(
                             "IncludeItemTypes" to "Audio",
                             "Recursive" to "true",
-                            "Fields" to "Genres,MediaSources,Path",
+                            "Fields" to "Genres,MediaSources,Path,DateCreated",
                             "SortBy" to "AlbumArtist,Album,ParentIndexNumber,IndexNumber",
                             "StartIndex" to start.toString(),
                             "Limit" to "500"
@@ -230,6 +230,7 @@ fun jellyfinTrackFrom(item: JSONObject, server: SubsonicServerConfig): SubsonicT
         bitDepth = audio?.optInt("BitDepth") ?: 0,
         samplingRate = audio?.optInt("SampleRate") ?: 0,
         starred = userData?.optBoolean("IsFavorite") == true,
+        starredAtMs = if (userData?.optBoolean("IsFavorite") == true) isoToMs(item.optString("DateCreated")) else 0L,
         trackNumber = item.optInt("IndexNumber", 1).coerceAtLeast(1),
         year = item.optInt("ProductionYear", 0),
         genre = item.optJSONArray("Genres").strings().joinToString("; "),
