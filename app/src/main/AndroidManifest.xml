@@ -234,6 +234,22 @@
             android:name=".widget.OndalunePlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Android Auto: the library the car browses, and the covers it shows. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <service
+            android:name=".auto.OndaluneAutoService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+        <provider
+            android:name=".auto.OndaluneArtProvider"
+            android:authorities="${applicationId}.art"
+            android:exported="true" />
     </application>
 
 </manifest>

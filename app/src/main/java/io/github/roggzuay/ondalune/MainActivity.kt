@@ -18,7 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.roggzuay.ondalune.ui.screens.OndaluneLaunchIntroTracker
 import io.github.roggzuay.ondalune.ui.screens.OndaluneMainShell
-import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel
+import io.github.roggzuay.ondalune.ui.viewmodel.PlayerLease
 import kotlin.math.abs
 
 /**
@@ -135,7 +135,7 @@ class MainActivity : ComponentActivity() {
         consumeOpenLyrics(intent)
 
         setContent {
-            val ondaluneViewModel: OndaluneViewModel = viewModel()
+            val ondaluneViewModel = viewModel<PlayerLease>().player
             val settings by ondaluneViewModel.customizationSettings.collectAsStateWithLifecycle()
 
             LaunchedEffect(settings.highRefreshRate120Hz) {
