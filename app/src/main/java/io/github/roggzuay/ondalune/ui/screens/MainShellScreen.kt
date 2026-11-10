@@ -758,6 +758,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onToggleStarTrack = viewModel::toggleStarTrack,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onStartSmartShuffle = viewModel::playYourMix,
+                                            onNewYourMix = { viewModel.playYourMix(fresh = true) },
                                             onOpenPlayerFromMix = {
                                                 playerSheet.fromHero = true
                                                 viewModel.setPlayerExpanded(true)

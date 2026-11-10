@@ -181,6 +181,7 @@ fun ListenNowHomeScreen(
     onToggleStarTrack: (SubsonicTrack) -> Unit,
     onOpenSonicLab: () -> Unit,
     onStartSmartShuffle: (startAfter: Job?) -> Job? = { null },
+    onNewYourMix: () -> Unit = {},
     onOpenPlayerFromMix: () -> Unit = {},
     onPullProgressChange: (Float) -> Unit = {},
     onQuickSync: () -> Unit = {},
@@ -347,7 +348,7 @@ fun ListenNowHomeScreen(
         sections.forEach { section ->
             when (section) {
                 HomeSection.YOUR_MIX -> item(key = "your_mix") {
-                    YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onOpenPlayer = onOpenPlayerFromMix, heroLaunch = heroLaunch)
+                    YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onNewMix = onNewYourMix, onOpenPlayer = onOpenPlayerFromMix, heroLaunch = heroLaunch)
                 }
                 HomeSection.MIXES -> if (shelves.mixes.isNotEmpty()) item(key = "mixes") {
                     MixesShelf(shelves.mixes, onPlayMix)

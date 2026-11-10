@@ -105,7 +105,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.LibraryMix
-import io.github.roggzuay.ondalune.data.model.localEpochDay
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.ui.components.LocalTrackActions
 import io.github.roggzuay.ondalune.ui.components.MorphShape
@@ -116,28 +115,15 @@ import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
 import kotlin.math.sin
 import androidx.compose.material.icons.filled.Refresh
 
-/** Cover art and the artist line shown on the Your Mix hero, from the listener's own shelves. */
+/** Cover art and the artist line shown on the Your Mix hero: from the songs the mix plays. */
 private class MixArt(val covers: List<String>, val artists: String)
 
 private fun mixArt(shelves: HomeShelves): MixArt {
-    val seeds = shelves.favouriteTracks.take(20) + shelves.mostPlayed.take(20) + shelves.jumpBackIn.take(10)
-    // One cover per album (each track has its own cover URL, so de-duplicating URLs let a single
-    // album fill every shape), drawn round-robin from different shelves and rotated daily.
-    val sources = listOf(
-        shelves.favouriteTracks.map { it.albumId to it.coverArtUrl },
-        shelves.mostPlayed.map { it.albumId to it.coverArtUrl },
-        shelves.recentlyPlayed.map { it.id to it.coverArtUrl },
-        shelves.jumpBackIn.map { it.albumId to it.coverArtUrl },
-        shelves.recentlyAdded.map { it.id to it.coverArtUrl },
-        shelves.rediscover.map { it.id to it.coverArtUrl }
-    ).map { list -> list.filter { it.second.isNotBlank() }.distinctBy { it.first }.take(12) }
-    val day = localEpochDay()
-    val picked = LinkedHashMap<String, String>()
-    for (round in 0 until 12) for (list in sources) {
-        list.getOrNull(round)?.let { (album, url) -> picked.putIfAbsent(album, url) }
-    }
-    val covers = picked.values.take(10).shuffled(kotlin.random.Random(day)).take(5)
-    val artists = seeds.groupingBy { it.artist }.eachCount().entries
+    val mix = shelves.yourMix
+    // One cover per album (each track has its own cover URL, so de-duplicating URLs would let a
+    // single album fill every shape), in play order: the first five albums you'll hear.
+    val covers = mix.filter { it.coverArtUrl.isNotBlank() }.distinctBy { it.albumId }.take(5).map { it.coverArtUrl }
+    val artists = mix.groupingBy { it.artist }.eachCount().entries
         .sortedByDescending { it.value }
         .map { it.key }
         .filter { it.isNotBlank() }
@@ -148,7 +134,7 @@ private fun mixArt(shelves: HomeShelves): MixArt {
 
 /**
  * "Your Mix": a big playful hero. Library artwork floats in a cluster of Material shapes and a
- * large play button morphs as it is pressed; tapping either plays a fresh smart mix.
+ * large play button morphs as it is pressed; tapping either plays today's mix, whose songs the artwork comes from.
  *
  * Starting the mix launches into the player: the play button swells to fill the screen while the
  * artwork shapes and the title rush away from it and grow, as if the camera dived past them into
@@ -178,6 +164,8 @@ val HeroButtonRadius = 64.dp
 fun YourMixHero(
     shelves: HomeShelves,
     onPlay: (startAfter: Job?) -> Job?,
+    /** Deals and plays a new mix, without opening the player. */
+    onNewMix: () -> Unit,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
     /** Mirrors the launch for the shell, which draws the zoom over its bars as well. */
@@ -279,12 +267,10 @@ fun YourMixHero(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(if (wide) left - 24.dp else w * 0.55f)
             )
-            // Play already deals a new mix every time; this says so, and deals one without
-            // opening the player.
             TextButton(
                 onClick = {
                     haptics?.performSubtleTick()
-                    onPlay(null)
+                    onNewMix()
                 },
                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
                 modifier = Modifier.testTag("your_mix_new_mix")
