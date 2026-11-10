@@ -1373,7 +1373,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onPause = viewModel::pauseOfflineDownloads,
                         onResume = viewModel::resumeOfflineDownloads,
                         onRetry = viewModel::retryOfflineDownloads,
-                        onRemove = viewModel::removeOfflineDownload,
+                        onRemove = viewModel::removeOfflineDownloads,
                         onOpenTrack = { trackId ->
                             showDownloads = false
                             downloadsSeenAt = System.currentTimeMillis()
