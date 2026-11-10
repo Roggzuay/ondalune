@@ -98,6 +98,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -741,12 +742,44 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         prefs.getString(PREF_RECENT_TRACKS, "").orEmpty().split(',').filter { it.isNotBlank() }
     )
 
+    /** Today's Your Mix as (day, song ids): drawn once a day or by "New mix", and kept across launches. */
+    private val _yourMixDeal = MutableStateFlow(
+        prefs.getString(PREF_YOUR_MIX, "").orEmpty().split('|').let { parts ->
+            (parts.first().toLongOrNull() ?: -1L) to parts.getOrNull(1).orEmpty().split(',').filter { it.isNotBlank() }
+        }
+    )
+
+    private fun dealYourMix(library: List<SubsonicTrack>): List<SubsonicTrack> {
+        val picks = yourMix(library, _recentTrackIds.value)
+        val day = localEpochDay()
+        prefs.edit().putString(PREF_YOUR_MIX, "$day|${picks.joinToString(",") { it.id }}").apply()
+        _yourMixDeal.value = day to picks.map { it.id }
+        return picks
+    }
+
+    /**
+     * The songs Your Mix plays, so Home's collage shows them: today's deal, or a new one on a new
+     * day (checked each minute) or when most of its songs have left the library.
+     */
+    val yourMixTracks: StateFlow<List<SubsonicTrack>> = combine(
+        allServerTracks,
+        _yourMixDeal,
+        flow { while (true) { emit(localEpochDay()); delay(60_000L) } }.distinctUntilChanged()
+    ) { library, (day, ids), today ->
+        if (library.isEmpty()) return@combine emptyList()
+        val byId = library.associateBy { it.id }
+        val picks = ids.mapNotNull { byId[it] }
+        if (day == today && picks.isNotEmpty() && picks.size * 2 >= ids.size) picks else dealYourMix(library)
+    }.flowOn(Dispatchers.Default) // scoring the whole library is too slow for the main thread
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val homeShelves: StateFlow<HomeShelves> = combine(
         tracks,
         _serverAlbumOrder,
         _recentTrackIds,
-        songFeatures
-    ) { trackList, order, recentIds, features ->
+        songFeatures,
+        yourMixTracks
+    ) { trackList, order, recentIds, features, mix ->
         val albumsByYear = repository.deriveAlbums(trackList, AlbumListType.NEWEST)
         val albumsById = albumsByYear.associateBy { it.id }
         val tracksById = trackList.associateBy { it.id }
@@ -763,7 +796,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 .take(200),
             recentlyPlayed = serverOrdered("recent"),
             rediscover = albumsByYear.shuffled(kotlin.random.Random(day)).take(60),
-            mixes = libraryMixes(trackList, recentIds, order["newest"].orEmpty(), seed = day, features = features)
+            mixes = libraryMixes(trackList, recentIds, order["newest"].orEmpty(), seed = day, features = features),
+            yourMix = mix
         )
     }.flowOn(Dispatchers.Default) // whole-library work; keep it off the main thread
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeShelves())
@@ -1878,15 +1912,15 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Plays a fresh Your Mix; every call draws a new one (see [yourMix]). */
-    fun playYourMix(startAfter: Job? = null): Job? {
+    /** Plays Your Mix: today's songs, the ones Home's collage shows, or a newly dealt mix when [fresh]. */
+    fun playYourMix(startAfter: Job? = null, fresh: Boolean = false): Job? {
         val library = allServerTracks.value
         if (library.isEmpty()) return null
-        val recent = _recentTrackIds.value
+        val today = yourMixTracks.value
         return viewModelScope.launch {
             // Scoring the whole library is too slow for the main thread on big libraries; it
             // would stall the hero's launch animation.
-            val picks = withContext(Dispatchers.Default) { yourMix(library, recent) }
+            val picks = if (!fresh && today.isNotEmpty()) today else withContext(Dispatchers.Default) { dealYourMix(library) }
             if (picks.isEmpty()) return@launch
             // The player opens on the first song: start decoding its cover now, during the zoom,
             // so the player shows the cover rather than an empty tile while it loads.
@@ -2296,6 +2330,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 }
 
 private const val PREF_RECENT_TRACKS = "home_recent_track_ids"
+private const val PREF_YOUR_MIX = "your_mix_today"
 private const val PREF_FAVOURITE_ARTISTS = "favourite_artist_ids"
 private const val PREF_HOME_INTRO_SEEN = "intro_home_learns_seen"
 private val LosslessSuffixes = setOf("FLAC", "ALAC", "WAV", "AIFF", "AIF", "APE", "WV", "DSF", "DFF")
@@ -2335,7 +2370,9 @@ data class HomeShelves(
     val mostPlayed: List<SubsonicTrack> = emptyList(),
     val recentlyPlayed: List<SubsonicAlbum> = emptyList(),
     val rediscover: List<SubsonicAlbum> = emptyList(),
-    val mixes: List<LibraryMix> = emptyList()
+    val mixes: List<LibraryMix> = emptyList(),
+    /** What Your Mix plays today. */
+    val yourMix: List<SubsonicTrack> = emptyList()
 ) {
     fun tracksFor(kind: HomeShelfKind): List<SubsonicTrack>? = when (kind) {
         HomeShelfKind.JUMP_BACK_IN -> jumpBackIn
