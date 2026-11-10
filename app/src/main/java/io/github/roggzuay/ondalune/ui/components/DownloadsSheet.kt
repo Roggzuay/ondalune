@@ -1,6 +1,13 @@
 package io.github.roggzuay.ondalune.ui.components
 
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
@@ -60,7 +67,7 @@ fun DownloadsSheet(
     onPause: (List<String>) -> Unit,
     onResume: (List<String>) -> Unit,
     onRetry: (List<String>) -> Unit,
-    onRemove: (String) -> Unit,
+    onRemove: (List<String>) -> Unit,
     onOpenTrack: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -70,6 +77,11 @@ fun DownloadsSheet(
     val paused = byState[OfflineDownloadState.PAUSED].orEmpty().sortedWith(order)
     val failed = byState[OfflineDownloadState.FAILED].orEmpty().sortedWith(order)
     val saved = downloads.filter { it.isCompleted }.sortedByDescending { it.updatedAtMs }
+    // Saved songs picked for removal. Long-press one to start; then a tap adds or drops a song.
+    var picked by remember { mutableStateOf(emptySet<String>()) }
+    val selection = picked.intersect(saved.mapTo(HashSet()) { it.trackId })
+    var confirmRemove by remember { mutableStateOf(false) }
+    fun toggle(id: String) { picked = if (id in selection) selection - id else selection + id }
 
     // ModalBottomSheet rises from the bottom edge; skipPartiallyExpanded lets it open in one motion.
     ModalBottomSheet(
@@ -77,6 +89,23 @@ fun DownloadsSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = Modifier.testTag("downloads_sheet")
     ) {
+        BackHandler(enabled = selection.isNotEmpty()) { picked = emptySet() }
+        if (selection.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
+            ) {
+                IconButton(onClick = { picked = emptySet() }) { Icon(Icons.Filled.Clear, contentDescription = "Stop selecting") }
+                Text("${selection.size} selected", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                val all = selection.size == saved.size
+                TextButton(onClick = { picked = if (all) emptySet() else saved.mapTo(HashSet()) { it.trackId } }) {
+                    Text(if (all) "Select none" else "Select all")
+                }
+                IconButton(onClick = { confirmRemove = true }) {
+                    Icon(Icons.Outlined.DeleteOutline, contentDescription = "Remove selected downloads")
+                }
+            }
+        }
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(start = 20.dp, end = 8.dp, bottom = 32.dp)
@@ -131,18 +160,37 @@ fun DownloadsSheet(
                 DownloadRow(
                     d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
                     Icons.Filled.Refresh to { onRetry(listOf(d.trackId)) }, "Retry download",
-                    Icons.Filled.Clear to { onRemove(d.trackId) }, "Remove from list"
+                    Icons.Filled.Clear to { onRemove(listOf(d.trackId)) }, "Remove from list"
                 ) { Detail(d.errorMessage.ifBlank { "Download failed" }, MaterialTheme.colorScheme.error) }
             }
             section("Saved on this phone", saved) { d ->
                 DownloadRow(
-                    d, trackFor(d.trackId), { onOpenTrack(d.trackId) },
-                    Icons.Outlined.DeleteOutline to { onRemove(d.trackId) }, "Remove download"
+                    d, trackFor(d.trackId), { if (selection.isEmpty()) onOpenTrack(d.trackId) else toggle(d.trackId) },
+                    Icons.Outlined.DeleteOutline to { onRemove(listOf(d.trackId)) }, "Remove download",
+                    selected = d.trackId in selection,
+                    selecting = selection.isNotEmpty(),
+                    onLongClick = { toggle(d.trackId) }
                 ) {
                     Detail("${d.artist} · ${formatBytes(d.totalBytes)}")
                 }
             }
         }
+    }
+    if (confirmRemove) {
+        val count = selection.size
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text(if (count == 1) "Remove 1 download?" else "Remove $count downloads?") },
+            text = { Text("They come off this phone and stay in your library to stream.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(selection.toList())
+                    picked = emptySet()
+                    confirmRemove = false
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -185,26 +233,40 @@ private fun DownloadRow(
     firstLabel: String,
     second: Pair<ImageVector, () -> Unit>? = null,
     secondLabel: String = "",
+    selected: Boolean = false,
+    /** Picking songs to remove: a tap picks, and the row's own buttons step aside. */
+    selecting: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
     detail: @Composable () -> Unit
 ) {
+    val haptics = LocalHapticFeedbackManager.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClickLabel = "Open album and play", onClick = onOpen)
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                onClickLabel = if (selecting) "Select" else "Open album and play",
+                onLongClickLabel = onLongClick?.let { "Select" },
+                onLongClick = onLongClick?.let { { haptics?.performSubtleTick(); it() } },
+                onClick = onOpen
+            )
             .padding(vertical = 6.dp)
             .testTag("download_row_${download.trackId}")
     ) {
         if (track != null) {
-            ExpressiveArtwork(
-                seedHex = track.paletteSeedHex,
-                accentHex = track.accentHex,
-                artStyleIndex = track.artStyleIndex,
-                coverArtUrl = track.coverArtUrl,
-                styleShape = LocalStyleSpec.current.rowArtShape,
-                modifier = Modifier.size(44.dp)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                ExpressiveArtwork(
+                    seedHex = track.paletteSeedHex,
+                    accentHex = track.accentHex,
+                    artStyleIndex = track.artStyleIndex,
+                    coverArtUrl = track.coverArtUrl,
+                    styleShape = LocalStyleSpec.current.rowArtShape,
+                    modifier = Modifier.size(44.dp)
+                )
+                if (selected) SelectedBadge()
+            }
             Spacer(Modifier.size(12.dp))
         }
         Column(Modifier.weight(1f)) {
@@ -212,7 +274,7 @@ private fun DownloadRow(
             detail()
         }
         Spacer(Modifier.size(4.dp))
-        val haptics = LocalHapticFeedbackManager.current
+        if (selecting) return@Row
         IconButton(onClick = { haptics?.performSubtleTick(); first.second() }) {
             Icon(first.first, contentDescription = firstLabel, modifier = Modifier.size(20.dp))
         }
