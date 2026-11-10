@@ -173,6 +173,9 @@ import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
 import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import io.github.roggzuay.ondalune.ui.viewmodel.FavouritesFilterTab
+import io.github.roggzuay.ondalune.ui.viewmodel.LibraryQueries
+import io.github.roggzuay.ondalune.data.model.LibrarySortOption
+import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.widget.OndaluneMediaBridge
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -241,6 +244,9 @@ fun FavouritesCollectionScreen(
     onSmartShuffleTracks: (List<SubsonicTrack>) -> Unit = {},
     viewMode: LibraryViewMode = LibraryViewMode.LIST,
     onSetViewMode: (LibraryViewMode) -> Unit = {},
+    sortPreference: TabDisplayPreference = TabDisplayPreference(),
+    onSetSortOption: (LibrarySortOption) -> Unit = {},
+    onToggleSortDirection: () -> Unit = {},
     scrollToTopSignal: Int = 0
 ) {
     val activeAlbum = remember(albums, selectedAlbumId) {
@@ -264,7 +270,7 @@ fun FavouritesCollectionScreen(
         return
     }
 
-    val starredTracks = remember(tracks) { tracks.filter { it.starred } }
+    val starredTracks = remember(tracks, sortPreference) { LibraryQueries.sortTracks(tracks.filter { it.starred }, sortPreference) }
     val starredAlbums = remember(albums) { albums.filter { it.starred } }
     var optionsTrack by remember { mutableStateOf<SubsonicTrack?>(null) }
     val selection = LocalTrackSelection.current
@@ -291,7 +297,15 @@ fun FavouritesCollectionScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
-                        ViewModeMenuButton(viewMode = viewMode, onSetViewMode = onSetViewMode)
+                        ViewModeMenuButton(
+                            viewMode = viewMode,
+                            onSetViewMode = onSetViewMode,
+                            sortOptions = TabDisplayPreference.supportedSortOptionsFor("FAVOURITES"),
+                            sortOption = sortPreference.sortOption,
+                            ascending = sortPreference.ascending,
+                            onSetSortOption = onSetSortOption,
+                            onToggleSortDirection = onToggleSortDirection
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(

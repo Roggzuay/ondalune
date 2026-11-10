@@ -242,8 +242,8 @@ interface OndaluneDao {
     @Query("DELETE FROM subsonic_tracks WHERE serverId = :serverId AND id IN (:trackIds)")
     suspend fun deleteTracks(serverId: Long, trackIds: List<String>)
 
-    @Query("UPDATE subsonic_tracks SET starred = :starred WHERE id = :trackId")
-    suspend fun updateTrackStarred(trackId: String, starred: Boolean)
+    @Query("UPDATE subsonic_tracks SET starred = :starred, starredAtMs = :starredAtMs WHERE id = :trackId")
+    suspend fun updateTrackStarred(trackId: String, starred: Boolean, starredAtMs: Long)
 
     @Query("UPDATE subsonic_tracks SET playCount = playCount + 1 WHERE id = :trackId")
     suspend fun incrementPlayCount(trackId: String)
@@ -325,7 +325,7 @@ interface OndaluneDao {
         LocalFolder::class,
         LocalFileRecord::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -473,6 +473,15 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /** 9: when each song was hearted, for the Favourites "Recently Favourited" sort. The next sync fills it in. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!hasColumn(db, "subsonic_tracks", "starredAtMs")) {
+                    db.execSQL("ALTER TABLE subsonic_tracks ADD COLUMN starredAtMs INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -480,7 +489,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

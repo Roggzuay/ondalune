@@ -240,7 +240,7 @@ class OndaluneRepository(
 
     suspend fun toggleStarTrack(server: SubsonicServerConfig, track: SubsonicTrack) {
         val newStarred = !track.starred
-        dao.updateTrackStarred(track.id, newStarred)
+        dao.updateTrackStarred(track.id, newStarred, if (newStarred) System.currentTimeMillis() else 0L)
         sourceFor(server).setFavourite(server, track.id, newStarred)
     }
 
@@ -345,6 +345,7 @@ class OndaluneRepository(
             }
             fresh += if (old == null) track else track.copy(
                 starred = old.starred,
+                starredAtMs = old.starredAtMs,
                 playCount = old.playCount,
                 artistBio = old.artistBio,
                 artistImageUrl = old.artistImageUrl

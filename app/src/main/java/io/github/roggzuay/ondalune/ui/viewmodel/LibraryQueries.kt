@@ -126,6 +126,9 @@ object LibraryQueries {
             LibrarySortOption.MOST_PLAYED -> tracks.sortedWith(
                 compareBy<SubsonicTrack> { it.playCount }.thenBy { it.starred }.thenBy { it.title.lowercase() }
             )
+            LibrarySortOption.RECENTLY_FAVOURITED -> tracks.sortedWith(
+                compareBy<SubsonicTrack> { it.starredAtMs }.thenByDescending { it.title.lowercase() }
+            )
             else -> tracks.sortedBy { it.title.lowercase() }
         }
         return if (pref.sortOption == LibrarySortOption.NAME_DESC) {

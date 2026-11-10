@@ -452,6 +452,7 @@ class OpenSubsonicClient {
             bitDepth = s.optInt("bitDepth", 0),
             samplingRate = s.optInt("samplingRate", 0),
             starred = s.has("starred"),
+            starredAtMs = isoToMs(s.optString("starred")),
             trackNumber = s.optInt("track", fallbackTrackNumber),
             year = s.optInt("year", album?.optInt("year", 0) ?: 0),
             genre = s.optJSONArray("genres")
@@ -1005,4 +1006,14 @@ internal fun parseRemotePlaylist(p: JSONObject): RemotePlaylist? {
         coverArtId = p.optString("coverArt"),
         changed = p.optString("changed")
     )
+}
+
+/** Epoch ms for an ISO 8601 time such as "2024-03-01T12:34:56.789Z" or "…+03:00" (fractions dropped), or 0. */
+internal fun isoToMs(iso: String): Long {
+    if (iso.length < 19) return 0L
+    val zone = iso.substring(19).dropWhile { it == '.' || it.isDigit() }
+        .let { if (it.isEmpty() || it == "Z") "+0000" else it.replace(":", "") }
+    return runCatching {
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.US).parse(iso.take(19) + zone)!!.time
+    }.getOrDefault(0L)
 }

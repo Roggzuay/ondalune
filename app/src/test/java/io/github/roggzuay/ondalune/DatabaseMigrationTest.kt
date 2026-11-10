@@ -86,4 +86,25 @@ class DatabaseMigrationTest {
             db.query("SELECT COUNT(*) FROM local_folders").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
         }
     }
+
+    @Test
+    fun `8 to 9 keeps songs and their hearts, with no star date yet`() {
+        helper.createDatabase("migration-test-9", 8).use { db ->
+            db.execSQL(
+                "INSERT INTO subsonic_tracks (id, serverId, title, artist, artistId, album, albumId, durationSec, bitRate, suffix, " +
+                    "bitDepth, samplingRate, starred, trackNumber, year, genre, folderPath, coverArtUrl, artistImageUrl, artistBio, " +
+                    "artStyleIndex, paletteSeedHex, accentHex, bpm, musicalKey, syncedLyricsRaw, playCount, userRating) " +
+                    "VALUES ('s1', 7, 'Song', 'Artist', 'ar1', 'Album', 'al1', 200, 320, 'FLAC', 16, 44100, 1, 1, 2020, 'Jazz', '/', '', '', '', " +
+                    "0, '#000000', '#FFFFFF', 0, '', '', 5, 4)"
+            )
+        }
+        helper.runMigrationsAndValidate("migration-test-9", 9, true, OndaluneDatabase.MIGRATION_8_9).use { db ->
+            db.query("SELECT title, starred, starredAtMs FROM subsonic_tracks").use { c ->
+                c.moveToFirst()
+                assertEquals("Song", c.getString(0))
+                assertEquals(1, c.getInt(1))
+                assertEquals(0L, c.getLong(2))
+            }
+        }
+    }
 }
