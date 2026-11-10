@@ -70,6 +70,8 @@ import io.github.roggzuay.ondalune.data.model.SubsonicFolder
 import io.github.roggzuay.ondalune.data.model.SubsonicGenre
 import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
+import io.github.roggzuay.ondalune.data.model.StreamQuality
+import io.github.roggzuay.ondalune.data.model.streamQuality
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
@@ -111,6 +113,7 @@ import kotlin.random.Random
 import io.github.roggzuay.ondalune.data.model.TempoInfo
 import io.github.roggzuay.ondalune.data.model.tempoOf
 import io.github.roggzuay.ondalune.data.local.AnalysisState
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.provider.DocumentsContract
 import io.github.roggzuay.ondalune.data.model.LocalFolder
@@ -235,6 +238,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         .map { list -> list.firstOrNull { it.isLocalSource } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+
+    /** On mobile data (or any metered network, like a phone's hotspot), where streams use the mobile quality. */
+    fun onMobileData(): Boolean =
+        getApplication<Application>().getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == true
+
+    /** [track]'s library row, streaming at the quality set for the network the phone is on now. */
+    private fun streamServerFor(track: SubsonicTrack): SubsonicServerConfig {
+        val quality = settings.customization.value.streamQuality(onMobileData())
+        return serverFor(track).copy(transcodeFormat = quality.format, maxBitRate = quality.maxBitRate)
+    }
 
     /** The library row [track] belongs to: its server, or this phone. */
     private fun serverFor(track: SubsonicTrack): SubsonicServerConfig =
@@ -694,7 +707,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val audioQuality: StateFlow<AudioQuality?> by lazy {
         combine(playback.currentTrack, audioEngine.playingStream, activeProcessing, _outputDevice, isPlayingOfflineFile) { track, playing, processing, device, offline ->
             track ?: return@combine null
-            val server = serverFor(track)
+            val server = streamServerFor(track)
             val convertedBy = server.takeUnless { offline || track.isOnDevice || it.isDemoServer || it.transcodeFormat == "RAW" }
                 ?.let { s -> listOfNotNull(s.transcodeFormat, s.maxBitRate.takeIf { it > 0 }?.let { "up to $it kbps" }).joinToString(", ") }
             val opened = playing?.let { p ->
@@ -894,7 +907,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             override val equalizer get() = _equalizerPreset.value
             override val recentTrackIds get() = _recentTrackIds.value
             override val songFeatures get() = this@OndaluneViewModel.songFeatures.value
-            override fun serverFor(track: SubsonicTrack) = this@OndaluneViewModel.serverFor(track)
+            override fun serverFor(track: SubsonicTrack) = streamServerFor(track)
             override fun onTrackStarted(track: SubsonicTrack, server: SubsonicServerConfig) {
                 loadLyricsForTrack(track)
                 if (settings.autoScrobble) {
@@ -1750,14 +1763,13 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         _statusBanner.value = "Download bandwidth limit set to ${limit.label}"
     }
 
-    fun setMobileQuality(format: String, maxBitRate: Int) {
+    /** Sets the streaming quality for mobile data or Wi-Fi; it applies from the next song. */
+    fun setStreamQuality(mobile: Boolean, quality: StreamQuality) {
         settings.update {
-            it.copy(
-                mobileTranscodeFormat = format,
-                mobileMaxBitRate = maxBitRate
-            )
+            if (mobile) it.copy(mobileTranscodeFormat = quality.format, mobileMaxBitRate = quality.maxBitRate)
+            else it.copy(wifiTranscodeFormat = quality.format, wifiMaxBitRate = quality.maxBitRate)
         }
-        _statusBanner.value = "Cellular quality set to $format • ${maxBitRate}kbps"
+        _statusBanner.value = "${if (mobile) "Mobile data" else "Wi-Fi"}: ${quality.label}"
     }
 
     fun setWidgetLayoutMode(mode: WidgetLayoutMode) {
@@ -2026,21 +2038,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             downloadManager.clearTemporaryCache(_activeServerId.value)
             _statusBanner.value = "Cleared temporary audio cache"
-        }
-    }
-
-    fun updateTranscodeProfile(format: String, maxBitRate: Int) {
-        val currentServer = activeServer()
-        val updated = currentServer.copy(transcodeFormat = format, maxBitRate = maxBitRate)
-        settings.update {
-            it.copy(
-                wifiTranscodeFormat = format,
-                wifiMaxBitRate = maxBitRate
-            )
-        }
-        viewModelScope.launch {
-            database.dao().updateServer(updated)
-            _statusBanner.value = "Wi-Fi Streaming set to $format • ${if (maxBitRate == 0) "no bitrate limit" else "${maxBitRate}kbps"}"
         }
     }
 

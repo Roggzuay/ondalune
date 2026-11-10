@@ -6,6 +6,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SegmentedButton
 import io.github.roggzuay.ondalune.data.model.SourceType
+import io.github.roggzuay.ondalune.data.model.StreamQualities
+import io.github.roggzuay.ondalune.data.model.StreamQuality
+import io.github.roggzuay.ondalune.data.model.streamQuality
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlaybackSettingsRow
 import io.github.roggzuay.ondalune.ui.components.SupportDeveloperCard
 import io.github.roggzuay.ondalune.ui.components.AboutLicencesRow
@@ -418,8 +421,7 @@ fun SettingsCustomizationScreen(
     onSetAutoScrobble: (Boolean) -> Unit,
     onSetPauseOnHeadphoneDisconnect: (Boolean) -> Unit = {},
     onSetFallbackArtistToAlbumArt: (Boolean) -> Unit = {},
-    onUpdateWifiQuality: (String, Int) -> Unit,
-    onUpdateMobileQuality: (String, Int) -> Unit,
+    onSetStreamQuality: (mobile: Boolean, StreamQuality) -> Unit,
     onSetDownloadSpeedLimit: (DownloadSpeedLimit) -> Unit,
     onSetReadAheadBuffer: (Int) -> Unit,
     onSetWidgetLayoutMode: (WidgetLayoutMode) -> Unit = {},
@@ -784,7 +786,7 @@ fun SettingsCustomizationScreen(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Preset: ${activeEqPreset.label} • Stream: ${if (activeServer.maxBitRate == 0) "RAW Lossless" else "${activeServer.transcodeFormat} ${activeServer.maxBitRate} kbps"}",
+                                    text = "Preset: ${activeEqPreset.label} • Wi-Fi: ${settings.streamQuality(false).badge} • Mobile: ${settings.streamQuality(true).badge}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                                 )
@@ -839,88 +841,42 @@ fun SettingsCustomizationScreen(
                         }
                     }
 
-                    Text(
-                        text = "Wi-Fi / LAN Streaming Quality",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    val wifiProfiles = listOf(
-                        Triple("RAW", 0, "Original file, not converted"),
-                        Triple("OPUS", 320, "Opus 320 kbps Studio Transparent"),
-                        Triple("MP3", 256, "MP3 256 kbps High Compatibility"),
-                        Triple("MP3", 192, "MP3 192 kbps Balanced")
-                    )
-                    wifiProfiles.forEach { (fmt, br, label) ->
-                        val active = activeServer.transcodeFormat == fmt && activeServer.maxBitRate == br
-                        SpringPressableSurface(
-                            onClick = { onUpdateWifiQuality(fmt, br) },
-                            color = if (active) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            cornerRadius = 18.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("wifi_quality_${fmt.lowercase()}_$br")
-                        ) {
-                            Row(
+                    listOf(false, true).forEach { mobile ->
+                        Text(
+                            text = if (mobile) "Mobile Data Streaming Quality" else "Wi-Fi / LAN Streaming Quality",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        StreamQualities.forEach { quality ->
+                            val active = settings.streamQuality(mobile) == quality
+                            SpringPressableSurface(
+                                onClick = { onSetStreamQuality(mobile, quality) },
+                                color = if (active) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                cornerRadius = 18.dp,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .testTag("${if (mobile) "mobile" else "wifi"}_quality_${quality.format.lowercase()}_${quality.maxBitRate}")
                             ) {
-                                Text(text = label, style = MaterialTheme.typography.labelLarge)
-                                if (active) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = LocalContentColor.current,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = "Cellular / Mobile Streaming Quality",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    val mobileProfiles = listOf(
-                        Triple("OPUS", 320, "Opus 320 kbps High Fidelity"),
-                        Triple("OPUS", 192, "Opus 192 kbps Recommended"),
-                        Triple("OPUS", 128, "Opus 128 kbps Data Saver")
-                    )
-                    mobileProfiles.forEach { (fmt, br, label) ->
-                        val active = settings.mobileTranscodeFormat == fmt && settings.mobileMaxBitRate == br
-                        SpringPressableSurface(
-                            onClick = { onUpdateMobileQuality(fmt, br) },
-                            color = if (active) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            cornerRadius = 18.dp,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = label, style = MaterialTheme.typography.labelLarge)
-                                if (active) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = LocalContentColor.current,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = quality.label, style = MaterialTheme.typography.labelLarge)
+                                    if (active) {
+                                        Icon(
+                                            imageVector = Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            tint = LocalContentColor.current,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -3278,9 +3234,10 @@ fun SonicLabModalOverlay(
     songAnalysisOn: Boolean,
     activePreset: EqualizerPreset,
     customBandsDb: List<Float>,
-    activeTranscodeFormat: String = "RAW",
-    activeMaxBitRate: Int = 0,
-    onUpdateTranscodeProfile: (String, Int) -> Unit = { _, _ -> },
+    /** The quality set for the network the phone is on now ([onMobileData]). */
+    streamQuality: StreamQuality,
+    onMobileData: Boolean,
+    onSetStreamQuality: (StreamQuality) -> Unit,
     onSelectPreset: (EqualizerPreset) -> Unit,
     onUpdateBand: (Int, Float) -> Unit,
     onPlayMix: (LibraryMix) -> Unit,
@@ -3289,12 +3246,6 @@ fun SonicLabModalOverlay(
 ) {
     BackHandler(onBack = onClose)
     val bandLabels = listOf("60Hz", "230Hz", "910Hz", "3.6kHz", "14kHz")
-    val bitrateProfiles = listOf(
-        Triple("RAW", 0, "Original file • not converted"),
-        Triple("OPUS", 320, "OPUS • 320 kbps Studio"),
-        Triple("OPUS", 192, "OPUS • 192 kbps Balanced"),
-        Triple("MP3", 320, "MP3 • 320 kbps High")
-    )
 
     SwipeDownDismissModalContainer(
         onClose = onClose,
@@ -3362,20 +3313,23 @@ fun SonicLabModalOverlay(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Bitrate & Streaming Performance",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Bitrate & Streaming Performance",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = if (onMobileData) "On mobile data now" else "On Wi-Fi now",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = if (activeTranscodeFormat == "RAW" || activeMaxBitRate == 0) {
-                                            "Lossless"
-                                        } else {
-                                            "$activeTranscodeFormat ${activeMaxBitRate}k"
-                                        },
+                                        text = streamQuality.badge,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -3383,11 +3337,14 @@ fun SonicLabModalOverlay(
                                 }
                             }
 
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                items(bitrateProfiles) { (fmt, rate, label) ->
-                                    val selected = activeTranscodeFormat == fmt && activeMaxBitRate == rate
+                            LazyRow(
+                                state = rememberLazyListState(StreamQualities.indexOf(streamQuality).coerceAtLeast(0)),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                items(StreamQualities) { quality ->
+                                    val selected = streamQuality == quality
                                     SpringPressableSurface(
-                                        onClick = { onUpdateTranscodeProfile(fmt, rate) },
+                                        onClick = { onSetStreamQuality(quality) },
                                         color = if (selected) {
                                             MaterialTheme.colorScheme.primaryContainer
                                         } else {
@@ -3401,7 +3358,7 @@ fun SonicLabModalOverlay(
                                             modifier = Modifier.padding(horizontal = 14.dp)
                                         ) {
                                             Text(
-                                                text = label,
+                                                text = quality.label,
                                                 style = MaterialTheme.typography.labelLarge,
                                                 color = if (selected) {
                                                     MaterialTheme.colorScheme.primary
@@ -3710,6 +3667,8 @@ private fun EqResponseCurveCanvas(
 @Composable
 fun UserServerInfoModal(
     activeServer: SubsonicServerConfig,
+    /** The streaming quality for the network the phone is on now. */
+    streamProfile: String,
     servers: List<SubsonicServerConfig>,
     pingDiagnostic: PingDiagnosticResult?,
     isSyncing: Boolean,
@@ -3861,11 +3820,7 @@ fun UserServerInfoModal(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = if (activeServer.maxBitRate == 0) {
-                                                "RAW Lossless"
-                                            } else {
-                                                "${activeServer.transcodeFormat} ${activeServer.maxBitRate}k"
-                                            },
+                                            text = streamProfile,
                                             style = MaterialTheme.typography.titleSmall
                                         )
                                     }
