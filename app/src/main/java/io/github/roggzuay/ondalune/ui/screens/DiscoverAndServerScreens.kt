@@ -1995,6 +1995,8 @@ fun SettingsCustomizationScreen(
 
                     MusicFoldersCard(musicFolders)
 
+                    BackgroundScanCard(musicFolders)
+
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     Text(

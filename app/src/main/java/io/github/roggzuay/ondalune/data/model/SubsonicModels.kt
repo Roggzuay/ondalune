@@ -766,6 +766,8 @@ data class PlayerCustomizationSettings(
     val autoScrobble: Boolean = true,
     /** Look through the picked music folders for changes each time Ondalune opens. */
     val rescanFoldersOnLaunch: Boolean = true,
+    /** Hours between background library scans (servers and picked folders); 0 = never. */
+    val librarySyncHours: Int = 0,
     val animatedSquigglyWave: Boolean = true,
     val hapticWobbleButtons: Boolean = true,
     val highRefreshRate120Hz: Boolean = true,

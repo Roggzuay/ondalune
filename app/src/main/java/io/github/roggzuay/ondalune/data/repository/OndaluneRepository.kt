@@ -1,10 +1,12 @@
 package io.github.roggzuay.ondalune.data.repository
 
+import android.content.Context
 import kotlinx.coroutines.flow.map
 import io.github.roggzuay.ondalune.data.model.TrackOverride
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
 import io.github.roggzuay.ondalune.data.local.OndaluneDao
+import io.github.roggzuay.ondalune.data.local.OndaluneDatabase
 import io.github.roggzuay.ondalune.data.model.AlbumListType
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
@@ -24,6 +26,7 @@ import kotlinx.coroutines.ensureActive
 import io.github.roggzuay.ondalune.data.model.LocalFolder
 import io.github.roggzuay.ondalune.data.source.FolderPermissions
 import io.github.roggzuay.ondalune.data.source.FolderReader
+import io.github.roggzuay.ondalune.data.source.MusicSources
 import io.github.roggzuay.ondalune.data.source.folderLocation
 import io.github.roggzuay.ondalune.data.source.folderTrackFrom
 import io.github.roggzuay.ondalune.data.source.isInside
@@ -495,5 +498,22 @@ class OndaluneRepository(
 
     fun deriveFolders(tracks: List<SubsonicTrack>): List<SubsonicFolder> =
         DemoSubsonicCatalog.deriveFoldersFromTracks(tracks)
+
+    /** The server in use (never this phone's music), or null before the first launch seeded one. */
+    suspend fun activeServer(): SubsonicServerConfig? = dao.getActiveServer()?.takeUnless { it.isLocalSource }
+
+    companion object {
+        /** The app's repository; [client] is shared with the player when there is one. */
+        fun from(context: Context, client: OpenSubsonicClient = OpenSubsonicClient()): OndaluneRepository {
+            val app = context.applicationContext
+            return OndaluneRepository(
+                OndaluneDatabase.getInstance(app).dao(),
+                client,
+                sourceFor = { MusicSources.forServer(app, client, it) },
+                folderPermissions = FolderPermissions(app),
+                jellyfin = MusicSources.jellyfin(app)
+            )
+        }
+    }
 }
 

@@ -1019,7 +1019,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                                 onRescan = viewModel::rescanMusicFolder,
                                                 onRescanAll = viewModel::rescanAllMusicFolders,
                                                 onCancelScan = viewModel::cancelFolderScan,
-                                                onSetRescanOnLaunch = viewModel::setRescanFoldersOnLaunch
+                                                onSetRescanOnLaunch = viewModel::setRescanFoldersOnLaunch,
+                                                backgroundScanHours = customizationSettings.librarySyncHours,
+                                                onSetBackgroundScanHours = viewModel::setLibrarySyncHours
                                             )
                                         )
                                     }
