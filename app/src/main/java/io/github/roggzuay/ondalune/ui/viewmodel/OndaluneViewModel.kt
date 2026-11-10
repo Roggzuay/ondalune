@@ -79,6 +79,8 @@ import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.data.network.OpenSubsonicClient
 import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
+import io.github.roggzuay.ondalune.auto.AutoLibrary
+import io.github.roggzuay.ondalune.auto.AutoQueue
 import io.github.roggzuay.ondalune.data.repository.LibrarySyncWorker
 import io.github.roggzuay.ondalune.data.repository.OndaluneRepository
 import io.github.roggzuay.ondalune.ui.components.AppIconLauncherManager
@@ -199,6 +201,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
     private val bridgeSeek: (Long) -> Unit = { posMs -> viewModelScope.launch { seekTo(posMs) } }
+    private val bridgePlayMediaId: (String) -> Unit = { mediaId -> playFromCar { it.queueFor(mediaId) } }
+    // "Play some music", with nothing named, is Your Mix.
+    private val bridgePlaySearch: (String) -> Unit = { query ->
+        if (query.isNotBlank()) playFromCar { it.search(query) } else viewModelScope.launch {
+            withTimeoutOrNull(CAR_LIBRARY_WAIT_MS) { allServerTracks.first { it.isNotEmpty() } } ?: return@launch
+            playYourMix()
+        }
+    }
     val downloadManager = OndaluneDownloadManager(application, database.dao(), client, viewModelScope)
     private val songAnalysis = SongAnalysis(application)
 
@@ -796,6 +806,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }.flowOn(Dispatchers.Default) // whole-library work; keep it off the main thread
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeShelves())
 
+    /** The library as Android Auto browses it; worked out only while a car is connected. */
+    val autoLibrary: StateFlow<AutoLibrary> = combine(tracks, albums, playlists, homeShelves, downloadedIds) { songs, albumList, lists, home, downloaded ->
+        AutoLibrary(songs, albumList, lists, home.yourMix, home.jumpBackIn, home.mostPlayed, downloaded)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AutoLibrary())
+
+    /** Plays what the car asked for once the library is in memory: a car can start the app cold. */
+    private fun playFromCar(pick: (AutoLibrary) -> AutoQueue?) {
+        viewModelScope.launch {
+            val library = withTimeoutOrNull(CAR_LIBRARY_WAIT_MS) { autoLibrary.first { !it.isEmpty } } ?: return@launch
+            withContext(Dispatchers.Default) { pick(library) }?.let { playback.playTrack(it.start, it.tracks) }
+        }
+    }
+
     private val _homeIntroSeen = MutableStateFlow(prefs.getBoolean(PREF_HOME_INTRO_SEEN, false))
     /** Whether "A Home that learns" has been shown (once, when the library first has mixes). */
     val homeIntroSeen: StateFlow<Boolean> = _homeIntroSeen.asStateFlow()
@@ -991,6 +1014,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
         OndaluneMediaBridge.onCommand = bridgeCommand
         OndaluneMediaBridge.onSeekTo = bridgeSeek
+        OndaluneMediaBridge.onPlayFromMediaId = bridgePlayMediaId
+        OndaluneMediaBridge.onPlayFromSearch = bridgePlaySearch
         checkForUpdate()
         UpdateCheckWorker.schedule(application, settings.customization.value.checkForUpdates)
         LibrarySyncWorker.schedule(application, settings.customization.value.librarySyncHours)
@@ -2326,10 +2351,13 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         // seeked. Detached, the bridge drives the engine directly. A newer screen's handlers stay.
         if (OndaluneMediaBridge.onCommand === bridgeCommand) OndaluneMediaBridge.onCommand = null
         if (OndaluneMediaBridge.onSeekTo === bridgeSeek) OndaluneMediaBridge.onSeekTo = null
+        if (OndaluneMediaBridge.onPlayFromMediaId === bridgePlayMediaId) OndaluneMediaBridge.onPlayFromMediaId = null
+        if (OndaluneMediaBridge.onPlayFromSearch === bridgePlaySearch) OndaluneMediaBridge.onPlayFromSearch = null
     }
 }
 
 private const val PREF_RECENT_TRACKS = "home_recent_track_ids"
+private const val CAR_LIBRARY_WAIT_MS = 10_000L
 private const val PREF_YOUR_MIX = "your_mix_today"
 private const val PREF_FAVOURITE_ARTISTS = "favourite_artist_ids"
 private const val PREF_HOME_INTRO_SEEN = "intro_home_learns_seen"

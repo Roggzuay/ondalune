@@ -141,6 +141,8 @@ class OndalunePlaybackService : Service() {
     // Swiping Ondalune away in Recents closes it, player included. Its controls lived in the
     // closed screen, so music left running after it could no longer be paused or seeked.
     override fun onTaskRemoved(rootIntent: Intent?) {
+        // With a car connected the controls are on its screen, so the music carries on.
+        if (OndaluneMediaBridge.carConnected) return super.onTaskRemoved(rootIntent)
         OndaluneMediaBridge.closePlayer(applicationContext)
         releaseLocks()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
@@ -296,6 +298,17 @@ object OndaluneMediaBridge {
     @Volatile
     var onSeekTo: ((Long) -> Unit)? = null
 
+    /** Android Auto: the id of a tapped row, and a spoken "play …" request. Set by the player. */
+    @Volatile
+    var onPlayFromMediaId: ((String) -> Unit)? = null
+
+    @Volatile
+    var onPlayFromSearch: ((String) -> Unit)? = null
+
+    /** A car is browsing: its controls are on the car's screen, so the session outlives the phone's. */
+    @Volatile
+    var carConnected = false
+
     @Volatile
     private var lastTrack: SubsonicTrack? = null
 
@@ -413,6 +426,9 @@ object OndaluneMediaBridge {
         refreshAllWidgets(context.applicationContext)
     }
 
+    /** The session's token, for Android Auto; makes the session when nothing has played yet. */
+    fun sessionToken(context: Context): MediaSession.Token = ensureMediaSession(context).sessionToken
+
     private fun ensureMediaSession(context: Context): MediaSession {
         val existing = mediaSession
         if (existing != null) return existing
@@ -453,7 +469,19 @@ object OndaluneMediaBridge {
                             dispatchCommand(appCtx, MediaBridgeCommand.TOGGLE_STAR)
                         }
                     }
+
+                    override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
+                        onPlayFromMediaId?.invoke(mediaId ?: return)
+                    }
+
+                    override fun onPlayFromSearch(query: String?, extras: Bundle?) {
+                        onPlayFromSearch?.invoke(query.orEmpty())
+                    }
                 })
+                // A car can connect before anything has played; it reads what it may ask for here.
+                setPlaybackState(
+                    PlaybackState.Builder().setActions(SESSION_ACTIONS).setState(PlaybackState.STATE_NONE, 0L, 0f).build()
+                )
                 isActive = true
                 mediaSession = this
             }
@@ -660,6 +688,15 @@ object OndaluneMediaBridge {
         }
     }
 
+    private const val SESSION_ACTIONS = PlaybackState.ACTION_PLAY or
+        PlaybackState.ACTION_PAUSE or
+        PlaybackState.ACTION_PLAY_PAUSE or
+        PlaybackState.ACTION_SKIP_TO_NEXT or
+        PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+        PlaybackState.ACTION_SEEK_TO or
+        PlaybackState.ACTION_PLAY_FROM_MEDIA_ID or
+        PlaybackState.ACTION_PLAY_FROM_SEARCH
+
     private fun buildPlaybackState(
         isPlaying: Boolean,
         isBuffering: Boolean,
@@ -667,13 +704,6 @@ object OndaluneMediaBridge {
         playbackSpeed: Float,
         isStarred: Boolean
     ): PlaybackState {
-        val actions = PlaybackState.ACTION_PLAY or
-            PlaybackState.ACTION_PAUSE or
-            PlaybackState.ACTION_PLAY_PAUSE or
-            PlaybackState.ACTION_SKIP_TO_NEXT or
-            PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-            PlaybackState.ACTION_SEEK_TO
-
         val stateCode = when {
             isBuffering -> PlaybackState.STATE_BUFFERING
             isPlaying -> PlaybackState.STATE_PLAYING
@@ -687,7 +717,7 @@ object OndaluneMediaBridge {
         ).build()
 
         return PlaybackState.Builder()
-            .setActions(actions)
+            .setActions(SESSION_ACTIONS)
             .addCustomAction(starCustomAction)
             .setState(
                 stateCode,
