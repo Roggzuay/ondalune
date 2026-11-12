@@ -10,6 +10,7 @@ import io.github.roggzuay.ondalune.data.model.LyricsAvailability
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.data.model.dolbyCodecOfContentType
 import io.github.roggzuay.ondalune.data.model.RemotePlaylist
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import java.io.File
@@ -454,6 +455,9 @@ class OpenSubsonicClient {
             suffix = s.optString("suffix", "").uppercase(),
             bitDepth = s.optInt("bitDepth", 0),
             samplingRate = s.optInt("samplingRate", 0),
+            channelCount = s.optInt("channelCount", 0),
+            // Few servers name the codec; a Dolby content type says as much for .ec3 or .ac3 files.
+            codec = s.optString("codec", "").lowercase().ifBlank { dolbyCodecOfContentType(s.optString("contentType", "")) },
             starred = s.has("starred"),
             starredAtMs = isoToMs(s.optString("starred")),
             trackNumber = s.optInt("track", fallbackTrackNumber),

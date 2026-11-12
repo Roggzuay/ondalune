@@ -325,7 +325,7 @@ interface OndaluneDao {
         LocalFolder::class,
         LocalFileRecord::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -482,6 +482,18 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /** Songs learn their channel count and codec from the server (for Dolby and surround files). */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!hasColumn(db, "subsonic_tracks", "channelCount")) {
+                    db.execSQL("ALTER TABLE subsonic_tracks ADD COLUMN channelCount INTEGER NOT NULL DEFAULT 0")
+                }
+                if (!hasColumn(db, "subsonic_tracks", "codec")) {
+                    db.execSQL("ALTER TABLE subsonic_tracks ADD COLUMN codec TEXT NOT NULL DEFAULT ''")
+                }
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -489,7 +501,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

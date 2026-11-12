@@ -69,7 +69,7 @@ class AudioQualityTest {
     @Test
     fun `surround audio is said to play as stereo`() {
         val q = audioQualityOf(song("M4A"), opened("audio/eac3", 48000, channels = 6), null, emptyList(), null)!!
-        assertTrue(q.output.any { it.second == "5.1 audio plays as stereo" })
+        assertTrue(q.output.any { it.second.startsWith("5.1 audio is mixed down to stereo") })
         assertTrue("never claims Atmos", q.label.contains("Atmos").not())
     }
 

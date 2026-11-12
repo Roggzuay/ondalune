@@ -1,9 +1,13 @@
 package io.github.roggzuay.ondalune.audio
 
 import android.content.Context
+import android.media.AudioFormat
 import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.Build
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import java.io.File
@@ -86,18 +90,56 @@ internal class WavPcmSource(file: File) : PcmSource {
     }
 }
 
+/**
+ * The audio track of a file or stream as the extractor sees it, selected and ready to read. The
+ * engine looks at [mime] before deciding how the song plays; whoever takes it must [release] it.
+ */
+internal class OpenedAudio(val extractor: MediaExtractor, val format: MediaFormat) {
+    val mime: String = format.getString(MediaFormat.KEY_MIME).orEmpty().lowercase()
+    fun release() = runCatching { extractor.release() }
+
+    companion object {
+        /** Opens [path]'s first audio track; null when there is none or the container can't be read. */
+        fun open(context: Context, path: String): OpenedAudio? {
+            val extractor = MediaExtractor()
+            return try {
+                extractor.setDataSourceOf(context, path)
+                val trackIndex = (0 until extractor.trackCount).firstOrNull {
+                    extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/")
+                } ?: run {
+                    extractor.release()
+                    return null
+                }
+                extractor.selectTrack(trackIndex)
+                OpenedAudio(extractor, extractor.getTrackFormat(trackIndex))
+            } catch (_: Throwable) {
+                runCatching { extractor.release() }
+                null
+            }
+        }
+    }
+}
+
+/** This phone has no decoder for a Dolby stream; the song is reported instead of handed to MediaPlayer. */
+internal class NoDecoderException(val mime: String) : Exception("No decoder for $mime")
+
 /** Any compressed file or HTTP stream Android can decode (FLAC, MP3, AAC, Opus, Vorbis, WAV). */
 internal class CodecPcmSource private constructor(
     private val extractor: MediaExtractor,
     private val codec: MediaCodec,
     rate: Int,
     channelCount: Int,
+    channelMask: Int,
     private val durationUs: Long,
     override val stream: DecodedStream
 ) : PcmSource {
     override var sampleRate = rate
         private set
     private var channels = channelCount
+    private var mask = channelMask
+    private var downmix = Downmix(channelCount, channelMask)
+    /** Some decoders (Dolby ones among them) put out float samples; the rest 16-bit. */
+    private var floatOutput = false
     private val info = MediaCodec.BufferInfo()
     private var inputEos = false
     private var outputEos = false
@@ -173,14 +215,17 @@ internal class CodecPcmSource private constructor(
                 val f = codec.outputFormat
                 if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
                 if (f.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                mask = f.intOr(MediaFormat.KEY_CHANNEL_MASK)
+                if (downmix.channels != channels || mask != 0) downmix = Downmix(channels, mask)
+                floatOutput = f.intOr(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
             }
             outIndex >= 0 -> {
                 val outBuf = codec.getOutputBuffer(outIndex)
                 if (outBuf != null && info.size > 0) {
                     outBuf.position(info.offset)
                     outBuf.limit(info.offset + info.size)
-                    val shorts = outBuf.order(ByteOrder.nativeOrder()).asShortBuffer()
-                    val frameCount = (info.size / 2) / channels
+                    val bytesPerSample = if (floatOutput) 4 else 2
+                    val frameCount = (info.size / bytesPerSample) / channels
                     if (size == 0) {
                         head = 0
                         anchorUs = info.presentationTimeUs
@@ -190,11 +235,11 @@ internal class CodecPcmSource private constructor(
                         head = 0
                     }
                     if (fifo.size < size + frameCount * 2) fifo = fifo.copyOf(size + frameCount * 2)
-                    for (f in 0 until frameCount) {
-                        val left = shorts.get(f * channels)
-                        fifo[size + f * 2] = left
-                        fifo[size + f * 2 + 1] = if (channels >= 2) shorts.get(f * channels + 1) else left
-                    }
+                    // Surround is folded to stereo here (centre and surrounds into both or one side) rather
+                    // than keeping only the first two channels, which would drop the vocals of a 5.1 mix.
+                    val samples = outBuf.order(ByteOrder.nativeOrder())
+                    if (floatOutput) downmix.toStereo(samples.asFloatBuffer(), frameCount, fifo, size / 2)
+                    else downmix.toStereo(samples.asShortBuffer(), frameCount, fifo, size / 2)
                     size += frameCount * 2
                 }
                 codec.releaseOutputBuffer(outIndex, false)
@@ -204,20 +249,25 @@ internal class CodecPcmSource private constructor(
     }
 
     companion object {
-        /** Opens [path] and decodes the first audio so the real sample rate is known; null if unsupported. */
-        fun open(context: Context, path: String): CodecPcmSource? {
-            val extractor = MediaExtractor()
+        /**
+         * Decodes [opened] (which it takes over, released even on failure) far enough that the real
+         * sample rate is known; null if nothing here decodes it. A Dolby stream this phone has no
+         * decoder for throws [NoDecoderException] instead.
+         */
+        fun from(opened: OpenedAudio): CodecPcmSource? {
+            val extractor = opened.extractor
+            val format = opened.format
+            var created: MediaCodec? = null
             return try {
-                extractor.setDataSourceOf(context, path)
-                val trackIndex = (0 until extractor.trackCount).firstOrNull {
-                    extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty().startsWith("audio/")
-                } ?: run {
+                val stream = DecodedStream.of(format, decoder = "")
+                val (codec, decodesAs) = createDecoder(opened.mime) ?: run {
                     extractor.release()
+                    if (isDolbyMime(opened.mime)) throw NoDecoderException(opened.mime)
                     return null
                 }
-                extractor.selectTrack(trackIndex)
-                val format = extractor.getTrackFormat(trackIndex)
-                val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+                // An E-AC-3 decoder plays Atmos (JOC) streams as their 5.1 core, under its own type.
+                if (decodesAs != opened.mime) format.setString(MediaFormat.KEY_MIME, decodesAs)
+                created = codec
                 codec.configure(format, null, null, 0)
                 codec.start()
                 val source = CodecPcmSource(
@@ -225,19 +275,64 @@ internal class CodecPcmSource private constructor(
                     codec,
                     if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100,
                     if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1) else 2,
+                    format.intOr(MediaFormat.KEY_CHANNEL_MASK),
                     if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L,
-                    DecodedStream.of(format, codec.name)
+                    stream.copy(decoder = codec.name)
                 )
                 var attempts = 0
                 while (source.size == 0 && !source.outputEos && attempts++ < 400) source.pump()
                 source
+            } catch (e: NoDecoderException) {
+                throw e
             } catch (_: Throwable) {
+                runCatching { created?.release() }
                 runCatching { extractor.release() }
                 null
             }
         }
+
+        /**
+         * The decoder for [mime] and the type it is set up for. Dolby streams go to the phone's own
+         * (vendor) decoder when it has one, which is the only kind there is for them; everything
+         * else keeps Android's usual choice.
+         */
+        private fun createDecoder(mime: String): Pair<MediaCodec, String>? {
+            if (isDolbyMime(mime)) {
+                for ((name, type) in dolbyDecodersFor(mime)) {
+                    runCatching { MediaCodec.createByCodecName(name) }.getOrNull()?.let { return it to type }
+                }
+                return null
+            }
+            return runCatching { MediaCodec.createDecoderByType(mime) }.getOrNull()?.let { it to mime }
+        }
     }
 }
+
+/** Every decoder Android lists, read once: listing them is slow on some phones. */
+private val decoderInfos: List<MediaCodecInfo> by lazy {
+    runCatching { MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filterNot { it.isEncoder } }.getOrDefault(emptyList())
+}
+
+/**
+ * This phone's decoders for a Dolby [mime], best first, with the type each is set up for: its own
+ * vendor ones before any software one, and for Atmos (E-AC-3 JOC) the plain E-AC-3 decoders after
+ * the JOC ones, since those still play the 5.1 core.
+ */
+internal fun dolbyDecodersFor(mime: String): List<Pair<String, String>> {
+    val wanted = mime.lowercase()
+    val types = if (wanted == "audio/eac3-joc") listOf(wanted, "audio/eac3") else listOf(wanted)
+    return types.flatMap { type ->
+        decoderInfos
+            .filter { info -> info.supportedTypes.any { it.equals(type, ignoreCase = true) } }
+            .sortedByDescending { info ->
+                if (Build.VERSION.SDK_INT >= 29) (if (info.isVendor) 2 else 0) + (if (info.isHardwareAccelerated) 1 else 0)
+                else if (info.name.startsWith("OMX.google.") || info.name.startsWith("c2.android.")) 0 else 2
+            }
+            .map { it.name to type }
+    }.distinctBy { it.first }
+}
+
+internal fun MediaFormat.intOr(key: String) = if (containsKey(key)) runCatching { getInteger(key) }.getOrDefault(0) else 0
 
 /** A song lined up in the mixer: its decoded audio and the ReplayGain it plays at. */
 internal class QueuedSource(
@@ -413,7 +508,5 @@ data class DecodedStream(
             },
             decoder = decoder
         )
-
-        private fun MediaFormat.intOr(key: String) = if (containsKey(key)) runCatching { getInteger(key) }.getOrDefault(0) else 0
     }
 }

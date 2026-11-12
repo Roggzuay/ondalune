@@ -105,7 +105,7 @@ fun AudioDetailsSheet(quality: AudioQuality, spatialAudio: Boolean?, dolbyDecode
                 "Dolby",
                 listOf(
                     "" to if (dolbyDecoders.isEmpty()) "No Dolby decoders on this phone" else "This phone can decode ${dolbyDecoders.joinToString(", ")}",
-                    "" to "Ondalune plays every song through its own stereo engine, so Dolby Atmos and Dolby processing are not used, whatever the phone supports"
+                    "" to "The phone's own sound effects (such as Dolby Atmos in the phone's settings) may still apply to Ondalune's output"
                 )
             )
             Spacer(Modifier.height(16.dp))

@@ -972,6 +972,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetGapless = viewModel.settings::setGaplessPlayback,
                                             onSetAutoplay = viewModel.settings::setAutoplaySimilar,
                                             onSetFindLyricsOnline = viewModel.settings::setFindLyricsOnline,
+                                            onSetDolbyPassthrough = viewModel.settings::setDolbyPassthrough,
                                             onSetSongAnalysis = viewModel::setSongAnalysis,
                                             songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + allServerTracks.count { it.isOnDevice }} songs on this phone analysed",
                                             onSetReplayGain = viewModel.settings::setReplayGainMode,
