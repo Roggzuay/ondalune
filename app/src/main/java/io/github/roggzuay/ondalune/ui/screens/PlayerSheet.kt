@@ -133,9 +133,8 @@ class PlayerSheetState {
             alpha = contentAlpha
             return@graphicsLayer
         }
-        val s = lerp(miniArt.width / full.width, 1f, f)
-        scaleX = s
-        scaleY = s
+        scaleX = lerp(miniArt.width / full.width, 1f, f)
+        scaleY = lerp(miniArt.height / full.height, 1f, f)
         translationX = (miniArt.center.x - full.center.x) * (1f - f)
         translationY = (miniArt.center.y - full.center.y) * (1f - f)
     }

@@ -34,10 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.roggzuay.ondalune.data.model.AudioQuality
 
-/** The compact quality line under the cover: "FLAC · 24-bit / 96 kHz · Lossless". Tap for details. */
+/** The compact quality line under the seek bar: "FLAC · 24-bit / 96 kHz". Tap for details. */
 @Composable
 fun AudioQualityChip(quality: AudioQuality, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val text = listOfNotNull(quality.label, quality.tag).joinToString(" · ")
+    val text = quality.label
+    val spoken = listOfNotNull(quality.label, quality.tag).joinToString(", ")
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.small,
@@ -46,7 +47,7 @@ fun AudioQualityChip(quality: AudioQuality, onClick: () -> Unit, modifier: Modif
             .testTag("audio_quality_chip")
             .semantics {
                 role = Role.Button
-                contentDescription = "Audio quality: $text. Show details"
+                contentDescription = "Audio quality: $spoken. Show details"
             }
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {

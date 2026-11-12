@@ -226,8 +226,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val isBuffering by viewModel.isBuffering.collectAsStateWithLifecycle()
-    val reverbProcessingMode by viewModel.reverbProcessingMode.collectAsStateWithLifecycle()
-    val isPlayingOfflineFile by viewModel.isPlayingOfflineFile.collectAsStateWithLifecycle()
     val downloadsMap by viewModel.downloadsMap.collectAsStateWithLifecycle()
     val offlineStorageSummary by viewModel.offlineStorageSummary.collectAsStateWithLifecycle()
 
@@ -272,7 +270,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isCutoutSyncActive by viewModel.isCutoutSyncActive.collectAsStateWithLifecycle()
 
     val nowPlayingTab by viewModel.nowPlayingTab.collectAsStateWithLifecycle()
-    val artworkShapeMode by viewModel.artworkShapeMode.collectAsStateWithLifecycle()
     val shuffleMode by viewModel.playback.shuffleMode.collectAsStateWithLifecycle()
     val shuffleEnabled by viewModel.playback.shuffleEnabled.collectAsStateWithLifecycle()
     val repeatOneEnabled by viewModel.playback.repeatOneEnabled.collectAsStateWithLifecycle()
@@ -940,7 +937,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             speedPitchState = speedPitchState,
                                             reverbState = reverbState,
                                             sleepTimerState = sleepTimerState,
-                                            artworkShapeMode = artworkShapeMode,
                                             activeEqPreset = eqPreset,
                                             servers = servers,
                                             activeServer = activeServer,
@@ -963,7 +959,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetHomeSections = viewModel.settings::setHomeSections,
                                             onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onSetPlayerBackgroundStyle = viewModel::setPlayerBackgroundStyle,
-                                            onSetArtworkShape = viewModel::setArtworkShapeMode,
                                             onSetAnimatedSquiggly = viewModel.settings::setAnimatedSquigglyWave,
                                             onSetHapticFeedback = viewModel.settings::setHapticFeedbackEnabled,
                                             onSetHighRefreshRate120Hz = viewModel::setHighRefreshRate120Hz,
@@ -1098,6 +1093,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 isPlaying = isPlaying,
                                 isBuffering = isBuffering,
                                 positionMs = positionMs,
+                                audiblePositionMs = viewModel::audiblePositionMs,
                                 durationMs = durationMs,
                                 speedPitchState = speedPitchState,
                                 reverbState = reverbState,
@@ -1111,12 +1107,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 showPlayerStarButton = customizationSettings.showPlayerStarButton,
                                 unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                 backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,
-                                artworkShapeMode = artworkShapeMode,
                                 activeTab = nowPlayingTab,
                                 lyrics = currentLyrics,
                                 lyricsResult = currentLyricsResult,
-                                reverbProcessingMode = reverbProcessingMode,
-                                isPlayingOfflineFile = isPlayingOfflineFile,
                                 download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
                                     PlayerDownload(
                                         state = downloadsMap[activeTrack.id],
@@ -1130,7 +1123,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 eqPreset = eqPreset,
                                 onCollapse = { viewModel.setPlayerExpanded(false) },
                                 onSelectTab = viewModel::selectNowPlayingTab,
-                                onCycleArtworkShape = viewModel::cycleArtworkShapeMode,
                                 onTogglePlay = viewModel.playback::togglePlayPause,
                                 onSkipPrevious = viewModel.playback::skipPrevious,
                                 onSwipePrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },

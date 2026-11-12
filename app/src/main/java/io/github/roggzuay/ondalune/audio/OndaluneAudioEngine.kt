@@ -9,6 +9,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaExtractor
@@ -82,6 +83,12 @@ class OndaluneAudioEngine(
     private val isPcmPipelineActive = AtomicBoolean(false)
     private val isPcmPaused = AtomicBoolean(false)
     private val pendingSeekMs = AtomicLong(-1L)
+
+    private val audibleClock = AudibleClock()
+    private val audibleStamp = AudioTimestamp()
+    private var audibleStampTrack: AudioTrack? = null
+    private var audibleStampOk = false
+    private var audibleStampReadNanos = 0L
 
     @Volatile
     private var currentEqPreset: EqualizerPreset = EqualizerPreset.FLAT_STUDIO
@@ -412,6 +419,7 @@ class OndaluneAudioEngine(
                 }.getOrNull()
 
                 audioTrack = trackOut
+                audibleClock.restart()
                 _playingStream.value = PlayingStream(first.source.stream, ownPipeline = true, outputSampleRate = sampleRate)
                 trackOut?.let { at ->
                     applySpeedAndPitchToAudioTrack(at, _playbackSpeed.value, _playbackPitch.value)
@@ -429,6 +437,7 @@ class OndaluneAudioEngine(
                     val seekReqMs = pendingSeekMs.getAndSet(-1L)
                     if (seekReqMs >= 0L) {
                         mixer.current.source.seekTo(seekReqMs)
+                        audibleClock.seekApplied(sampleRate)
                         mixer.cancelFade()
                         reverbDspProcessor.clearDelayLines()
                     }
@@ -453,6 +462,7 @@ class OndaluneAudioEngine(
                             eqPreset = currentEqPreset
                         )
                         val written = trackOut?.write(buffer, 0, result.frames * 2) ?: 0
+                        if (written > 0) audibleClock.wrote(written / 2, mixer.current.positionMs(), sampleRate)
                         // In local JVM unit tests where AudioTrack.write returns immediately without blocking:
                         if (written <= 0) {
                             val frameDurationMs = ((result.frames * 1000L) / sampleRate.toLong()).coerceAtLeast(8L)
@@ -749,6 +759,7 @@ class OndaluneAudioEngine(
         _positionMs.value = clamped
         reverbDspProcessor.clearDelayLines()
         if (isPcmPipelineActive.get()) {
+            audibleClock.seekRequested(clamped)
             pendingSeekMs.set(clamped)
             return
         }
@@ -756,6 +767,39 @@ class OndaluneAudioEngine(
             mediaPlayer?.seekTo(clamped.toInt())
         } catch (_: Exception) {
         }
+    }
+
+    /**
+     * The position leaving the speaker. [positionMs] is the decoder's read head, which runs ahead of
+     * it by whatever the AudioTrack still holds; lyrics follow this one. It only reads the
+     * AudioTrack's counters. Main thread.
+     */
+    fun audiblePositionMs(): Long {
+        val track = audioTrack
+        if (track == null || !isPcmPipelineActive.get()) {
+            return runCatching { mediaPlayer?.takeIf { it.isPlaying }?.currentPosition?.toLong() }.getOrNull() ?: _positionMs.value
+        }
+        return runCatching {
+            val playing = track.playState == AudioTrack.PLAYSTATE_PLAYING
+            val now = System.nanoTime()
+            if (track !== audibleStampTrack) {
+                audibleStampTrack = track
+                audibleStampOk = false
+                audibleStampReadNanos = 0L
+            }
+            if (playing && now - audibleStampReadNanos > AudibleStampRefreshNanos) {
+                audibleStampOk = track.getTimestamp(audibleStamp)
+                audibleStampReadNanos = now
+            }
+            audibleClock.positionMs(
+                sampleRate = track.sampleRate,
+                head = track.playbackHeadPosition,
+                playing = playing,
+                stampFrames = if (audibleStampOk) audibleStamp.framePosition else -1L,
+                stampAgeNanos = now - audibleStamp.nanoTime,
+                speed = _playbackSpeed.value
+            )
+        }.getOrDefault(_positionMs.value)
     }
 
     /**
@@ -1106,3 +1150,6 @@ class OndaluneAudioEngine(
 
 /** How long before a song ends (plus the crossfade) the next one is opened and buffered. */
 private const val PrepareLeadMs = 12_000
+
+/** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
+private const val AudibleStampRefreshNanos = 250_000_000L

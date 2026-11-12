@@ -121,12 +121,12 @@ fun PlayerBackdrop(
                     Brush.linearGradient(listOf(colors.c0.copy(alpha = 0.55f), colors.c3.copy(alpha = 0.35f), base))
                 )
             }
-            // Legibility: colour sings at the top and settles behind the controls.
+            // Legibility: the cover lies over the top; from the title down the colour settles.
             drawRect(
                 Brush.verticalGradient(
-                    0f to base.copy(alpha = 0.10f),
-                    0.5f to base.copy(alpha = 0.28f),
-                    1f to base.copy(alpha = 0.72f)
+                    0f to base.copy(alpha = 0.30f),
+                    0.45f to base.copy(alpha = 0.56f),
+                    1f to base.copy(alpha = 0.78f)
                 )
             )
         }

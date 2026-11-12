@@ -44,7 +44,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.animation.animateColorAsState
@@ -87,9 +86,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,6 +111,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -143,7 +140,6 @@ import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.DockStyle
-import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.parseHexColor
 import kotlinx.coroutines.launch
@@ -685,7 +681,8 @@ fun ExpressiveSquigglySlider(
     showRemainingTime: Boolean = false,
     activeColor: Color = MaterialTheme.colorScheme.primary,
     inactiveColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    accentColor: Color = MaterialTheme.colorScheme.tertiary
+    accentColor: Color = MaterialTheme.colorScheme.tertiary,
+    centerLabel: @Composable (() -> Unit)? = null
 ) {
     val safeDuration = durationMs.coerceAtLeast(1000L)
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
@@ -896,17 +893,21 @@ fun ExpressiveSquigglySlider(
             }
         }
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 6.dp)
         ) {
             Text(
                 text = formatDurationMs(effectiveElapsedMs),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.CenterStart)
             )
+            if (centerLabel != null) {
+                // Side padding keeps the label clear of the two times at any font scale.
+                Box(Modifier.align(Alignment.Center).padding(horizontal = 52.dp)) { centerLabel() }
+            }
             Text(
                 text = if (showRemainingTime) {
                     "-${formatDurationMs((safeDuration - effectiveElapsedMs).coerceAtLeast(0L))}"
@@ -914,7 +915,8 @@ fun ExpressiveSquigglySlider(
                     formatDurationMs(safeDuration)
                 },
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterEnd)
             )
         }
     }
@@ -1093,7 +1095,9 @@ fun ExpressiveArtwork(
     monogramText: String = "",
     modifier: Modifier = Modifier,
     /** Overrides the theme's artwork cut (track rows use the theme's smaller row shape). */
-    styleShape: ArtShape? = null
+    styleShape: ArtShape? = null,
+    /** Fills its bounds edge to edge: no cut, no border. The player's background artwork. */
+    fullBleed: Boolean = false
 ) {
     // Border/placeholder tint: the cover's real colours once extracted (server hints are guesses,
     // and painted a colourful rim around black-and-white covers).
@@ -1126,8 +1130,9 @@ fun ExpressiveArtwork(
     )
     val spec = LocalStyleSpec.current
     val themeShape = styleShape ?: spec.artShape
-    val standard = !spec.artBorder
+    val standard = !spec.artBorder || fullBleed
     val shape = when {
+        fullBleed -> RectangleShape
         shapeMode == ArtworkShapeMode.VINYL -> CircleShape
         // Only the squircle theme morphs into the playing cookie; other themes keep their cut.
         themeShape != ArtShape.SQUIRCLE || cookieProgress == 0f ->
@@ -1423,30 +1428,22 @@ fun PullSyncIndicator(
 /**
  * M3 Expressive transport: a real [ButtonGroup] so the pressed button widens and its neighbours
  * yield. Play/pause is the hero — it morphs pill ↔ squircle with the playback state and swaps to
- * a [LoadingIndicator] while buffering. Previous/next are tonal so their press squish shows;
- * shuffle and repeat are plain icons that take the accent colour when on.
+ * a [LoadingIndicator] while buffering. Previous/next are tonal so their press squish shows.
  */
 @Composable
 fun ExpressiveTransportGroup(
     isPlaying: Boolean,
     isBuffering: Boolean,
-    shuffleEnabled: Boolean,
-    repeatOneEnabled: Boolean,
-    shuffleMode: ShuffleMode,
-    onToggleShuffle: () -> Unit,
     onSkipPrevious: () -> Unit,
     onTogglePlay: () -> Unit,
     onSkipNext: () -> Unit,
-    onToggleRepeatOne: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val haptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
     val sideHeight = 64.dp
-    val shuffleSource = remember { MutableInteractionSource() }
     val prevSource = remember { MutableInteractionSource() }
     val playSource = remember { MutableInteractionSource() }
     val nextSource = remember { MutableInteractionSource() }
-    val repeatSource = remember { MutableInteractionSource() }
 
     val playCorner by animateDpAsState(
         targetValue = if (isPlaying) 28.dp else 44.dp,
@@ -1469,30 +1466,6 @@ fun ExpressiveTransportGroup(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        customItem(
-            buttonGroupContent = {
-                IconToggleButton(
-                    checked = shuffleEnabled,
-                    onCheckedChange = {
-                        haptics.performToggleOption(!shuffleEnabled)
-                        onToggleShuffle()
-                    },
-                    shapes = IconButtonDefaults.toggleableShapes(),
-                    interactionSource = shuffleSource,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(sideHeight)
-                        .animateWidth(shuffleSource)
-                        .testTag("shuffle_button")
-                ) {
-                    Icon(
-                        imageVector = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
-                        contentDescription = "Cycle Shuffle Mode (${shuffleMode.label})"
-                    )
-                }
-            },
-            menuContent = {}
-        )
         customItem(
             buttonGroupContent = {
                 FilledTonalIconButton(
@@ -1569,27 +1542,6 @@ fun ExpressiveTransportGroup(
                         .testTag("skip_next_button")
                 ) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "Next Track", modifier = Modifier.size(30.dp))
-                }
-            },
-            menuContent = {}
-        )
-        customItem(
-            buttonGroupContent = {
-                IconToggleButton(
-                    checked = repeatOneEnabled,
-                    onCheckedChange = {
-                        haptics.performToggleOption(!repeatOneEnabled)
-                        onToggleRepeatOne()
-                    },
-                    shapes = IconButtonDefaults.toggleableShapes(),
-                    interactionSource = repeatSource,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(sideHeight)
-                        .animateWidth(repeatSource)
-                        .testTag("repeat_button")
-                ) {
-                    Icon(Icons.Filled.RepeatOne, contentDescription = "Toggle Repeat One")
                 }
             },
             menuContent = {}

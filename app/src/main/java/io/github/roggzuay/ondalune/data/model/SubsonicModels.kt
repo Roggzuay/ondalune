@@ -243,8 +243,22 @@ data class RemotePlaylist(
 /** One row per server playlist, so syncing again updates it instead of adding a copy. */
 fun serverPlaylistKey(serverId: Long, remoteId: String) = "srv:$serverId:$remoteId"
 
+/**
+ * One lyric line. [timeMs] is when it starts. [endMs] is when the singer stops, and is set only when
+ * the source says so (a word tag after the last word, or an empty timed line): from there until the
+ * next line starts nobody is singing. [words] is empty unless the source timed each word.
+ */
 data class LyricLine(
     val timeMs: Long,
+    val text: String,
+    val endMs: Long? = null,
+    val words: List<LyricWord> = emptyList()
+)
+
+/** A sung word, or syllable, with the time it starts and the time it ends. [text] keeps its trailing space. */
+data class LyricWord(
+    val startMs: Long,
+    val endMs: Long,
     val text: String
 )
 

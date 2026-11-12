@@ -1,6 +1,9 @@
 package io.github.roggzuay.ondalune.data.network
 
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
+import io.github.roggzuay.ondalune.data.lyrics.closePhrases
+import io.github.roggzuay.ondalune.data.lyrics.parseLrc
+import io.github.roggzuay.ondalune.data.lyrics.timedLine
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricsAvailability
@@ -750,7 +753,7 @@ class OpenSubsonicClient {
         track: SubsonicTrack
     ): TrackLyricsResult = withContext(Dispatchers.IO) {
         if (track.syncedLyricsRaw.isNotBlank()) {
-            val lrcLines = parseLrcString(track.syncedLyricsRaw)
+            val lrcLines = parseLrc(track.syncedLyricsRaw)
             if (lrcLines.isNotEmpty()) {
                 return@withContext TrackLyricsResult(
                     availability = LyricsAvailability.SYNCED,
@@ -790,27 +793,28 @@ class OpenSubsonicClient {
                                 val linesArr = firstBlock?.optJSONArray("line")
                                 if (linesArr != null && linesArr.length() > 0) {
                                     var hasExplicitStart = false
+                                    // The server leaves its offset for the client to apply: positive means sooner.
+                                    val offsetMs = firstBlock.optLong("offset", 0L)
                                     val parsedSynced = mutableListOf<LyricLine>()
                                     val plainLines = mutableListOf<String>()
                                     for (i in 0 until linesArr.length()) {
                                         val lineObj = linesArr.optJSONObject(i) ?: continue
                                         val textVal = lineObj.optString("value", "").trim()
-                                        if (textVal.isEmpty()) continue
-                                        plainLines.add(textVal)
-                                        if (lineObj.has("start")) {
-                                            hasExplicitStart = true
-                                            parsedSynced.add(
-                                                LyricLine(
-                                                    timeMs = lineObj.optLong("start", 0L).coerceAtLeast(0L),
-                                                    text = textVal
-                                                )
-                                            )
+                                        // Some servers pass word timing through inside the text.
+                                        val line = if (lineObj.has("start")) {
+                                            timedLine(textVal, (lineObj.optLong("start", 0L) - offsetMs).coerceAtLeast(0L), offsetMs)
+                                        } else null
+                                        val text = line?.text ?: textVal
+                                        if (text.isNotEmpty()) plainLines.add(text)
+                                        if (line != null) {
+                                            if (text.isNotEmpty()) hasExplicitStart = true
+                                            parsedSynced.add(line)
                                         }
                                     }
                                     if (isSyncedBlock && hasExplicitStart && parsedSynced.isNotEmpty()) {
                                         return@withContext TrackLyricsResult(
                                             availability = LyricsAvailability.SYNCED,
-                                            syncedLines = parsedSynced.sortedBy { it.timeMs },
+                                            syncedLines = parsedSynced.closePhrases(),
                                             plainLyrics = plainLines.joinToString("\n"),
                                             sourceLabel = "OpenSubsonic Synced Lyrics"
                                         )
@@ -851,7 +855,7 @@ class OpenSubsonicClient {
                                 ?.trim()
                                 .orEmpty()
                             if (rawValue.isNotBlank()) {
-                                val maybeLrc = parseLrcString(rawValue)
+                                val maybeLrc = parseLrc(rawValue)
                                 if (maybeLrc.isNotEmpty()) {
                                     return@withContext TrackLyricsResult(
                                         availability = LyricsAvailability.SYNCED,
@@ -971,24 +975,6 @@ class OpenSubsonicClient {
         } catch (t: Throwable) {
             tempFile.delete()
             Result.failure(t)
-        }
-    }
-
-    fun parseLrcString(raw: String): List<LyricLine> {
-        if (raw.isBlank()) return emptyList()
-        return raw.lines().mapNotNull { line ->
-            val trimmed = line.trim()
-            if (!trimmed.startsWith("[")) return@mapNotNull null
-            val closeIdx = trimmed.indexOf(']')
-            if (closeIdx <= 1) return@mapNotNull null
-            val timePart = trimmed.substring(1, closeIdx)
-            val textPart = trimmed.substring(closeIdx + 1).trim()
-            val parts = timePart.split(":")
-            if (parts.size != 2) return@mapNotNull null
-            val mins = parts[0].toLongOrNull() ?: return@mapNotNull null
-            val secs = parts[1].toDoubleOrNull() ?: return@mapNotNull null
-            val totalMs = (mins * 60_000L) + (secs * 1000.0).toLong()
-            LyricLine(timeMs = totalMs, text = textPart)
         }
     }
 }

@@ -1,6 +1,7 @@
 package io.github.roggzuay.ondalune.data.network
 
 import io.github.roggzuay.ondalune.data.local.OndaluneCredentialSecurity
+import io.github.roggzuay.ondalune.data.lyrics.closePhrases
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricsAvailability
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
@@ -167,7 +168,7 @@ class JellyfinClient(private val deviceId: String, private val appVersion: Strin
         if (parsed.all { it.has("Start") }) {
             TrackLyricsResult(
                 LyricsAvailability.SYNCED,
-                parsed.map { LyricLine(it.getLong("Start") / TICKS_PER_MS, it.optString("Text")) },
+                parsed.map { LyricLine(it.getLong("Start") / TICKS_PER_MS, it.optString("Text").trim()) }.closePhrases(),
                 sourceLabel = "Jellyfin"
             )
         } else {
