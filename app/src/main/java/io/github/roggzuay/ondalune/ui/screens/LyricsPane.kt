@@ -69,6 +69,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.roggzuay.ondalune.data.lyrics.LyricsQuality
+import io.github.roggzuay.ondalune.data.lyrics.LyricsSource
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
 import io.github.roggzuay.ondalune.data.lyrics.isResting
 import io.github.roggzuay.ondalune.data.lyrics.lineIndexAt
 import io.github.roggzuay.ondalune.data.lyrics.sungFraction
@@ -98,7 +109,9 @@ internal fun SyncedLyricsPane(
     audiblePositionMs: () -> Long,
     isPlaying: Boolean,
     onSeekToLyric: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    source: LyricsSource = LyricsSource(),
+    onOpenSource: () -> Unit = {}
 ) {
     val lineStyle = TextStyle(
         fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
@@ -168,10 +181,46 @@ internal fun SyncedLyricsPane(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Your server didn't return synced or plain lyrics, and none are embedded in the file.",
+                    text = if (source.offers > 0) "Your server has none. Possible matches were found on LRCLIB; pick the right one."
+                    else "Your server didn't return synced or plain lyrics, and none are embedded in the file.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(16.dp))
+                FilledTonalButton(onClick = onOpenSource, modifier = Modifier.testTag("find_lyrics_button")) {
+                    Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (source.offers > 0) "Choose lyrics" else "Find lyrics")
+                }
+            }
+        }
+        // Where these lyrics come from, and the way to change them.
+        if (lyrics.isNotEmpty() || lyricsResult.plainTextLines.isNotEmpty()) {
+            val offer = source.fromServer && source.offers > 0 && source.serverQuality != LyricsQuality.WORDS
+            Surface(
+                onClick = onOpenSource,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f),
+                contentColor = if (offer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 4.dp)
+                    .heightIn(min = 48.dp)
+                    .padding(vertical = 6.dp)
+                    .semantics { contentDescription = "Lyrics source: ${source.label}. Change lyrics" }
+                    .testTag("lyrics_source_chip")
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(
+                        text = if (offer) "Better-timed lyrics may be online · Choose" else source.label.ifEmpty { "Lyrics" },
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
             }
         }
     }

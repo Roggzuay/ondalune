@@ -223,6 +223,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val playbackQueue by viewModel.playback.playbackQueue.collectAsStateWithLifecycle()
     val currentLyrics by viewModel.currentLyrics.collectAsStateWithLifecycle()
     val currentLyricsResult by viewModel.currentLyricsResult.collectAsStateWithLifecycle()
+    val lyricsSource by viewModel.lyricsSource.collectAsStateWithLifecycle()
+    val lyricsSearch by viewModel.lyricsSearch.collectAsStateWithLifecycle()
 
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val isBuffering by viewModel.isBuffering.collectAsStateWithLifecycle()
@@ -969,6 +971,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetCrossfadeSeconds = viewModel.settings::setCrossfadeSeconds,
                                             onSetGapless = viewModel.settings::setGaplessPlayback,
                                             onSetAutoplay = viewModel.settings::setAutoplaySimilar,
+                                            onSetFindLyricsOnline = viewModel.settings::setFindLyricsOnline,
                                             onSetSongAnalysis = viewModel::setSongAnalysis,
                                             songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + allServerTracks.count { it.isOnDevice }} songs on this phone analysed",
                                             onSetReplayGain = viewModel.settings::setReplayGainMode,
@@ -1110,6 +1113,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 activeTab = nowPlayingTab,
                                 lyrics = currentLyrics,
                                 lyricsResult = currentLyricsResult,
+                                lyricsSource = lyricsSource,
+                                lyricsSearch = lyricsSearch,
+                                onSearchLyrics = viewModel::searchLyrics,
+                                onChooseLyrics = viewModel::chooseLyrics,
+                                onUseServerLyrics = viewModel::useServerLyrics,
+                                onRestoreLyrics = viewModel::restorePreviousLyrics,
                                 download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
                                     PlayerDownload(
                                         state = downloadsMap[activeTrack.id],
