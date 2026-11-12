@@ -8,7 +8,6 @@ import io.github.roggzuay.ondalune.data.lyrics.RankedCandidate
 import io.github.roggzuay.ondalune.ui.components.LyricsSourceSheet
 import io.github.roggzuay.ondalune.ui.components.frosted
 import dev.chrisbanes.haze.HazeState
-import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -107,6 +106,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -116,6 +116,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -172,8 +173,6 @@ import androidx.compose.animation.ExitTransition
 import io.github.roggzuay.ondalune.data.model.AudioQuality
 import io.github.roggzuay.ondalune.ui.components.AudioQualityChip
 import io.github.roggzuay.ondalune.ui.components.AudioDetailsSheet
-import androidx.compose.material3.FilledTonalIconToggleButton
-import androidx.compose.material3.IconToggleButtonShapes
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.material.icons.filled.RepeatOne
@@ -184,7 +183,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.geometry.Size
@@ -560,14 +559,27 @@ fun NowPlayingStudioOverlay(
             val availWidth = maxWidth
             val availHeight = maxHeight
             val wide = availWidth > availHeight * 1.08f
-            // The cover is a full-width square at the top, or the leading pane of a window that is
-            // wider than it is tall.
-            val heroWidth = if (wide) minOf(availHeight, availWidth * 0.58f) else availWidth
-            val heroHeight = if (wide) availHeight else availWidth
             val sidePadding = if (availWidth < 380.dp) 16.dp else 22.dp
             val insets = WindowInsets.safeDrawing.asPaddingValues()
-            // Where the controls begin, in root pixels: the cover has faded out by this line.
-            var controlsTop by remember { mutableFloatStateOf(Float.NaN) }
+            // The controls' height and their title row's, in pixels. Sizes rather than positions:
+            // they hold still while the player's own layer scales during an opening.
+            var controlsHeight by remember { mutableIntStateOf(0) }
+            var titleRowHeight by remember { mutableIntStateOf(0) }
+            // The cover fills the width at the top and reaches down behind the title and artist,
+            // fading out by the progress bar, so the picture is the room the controls sit in rather
+            // than a square set above them. Its height follows the layout: the window less the
+            // controls, plus their title row and the gap under it. Never shorter than it is wide
+            // (a short phone keeps the whole picture) and, in a window wider than it is tall, the
+            // leading pane at full height.
+            val heroWidth = if (wide) minOf(availHeight, availWidth * 0.58f) else availWidth
+            val heroHeight = when {
+                wide -> availHeight
+                controlsHeight == 0 -> availWidth
+                else -> with(LocalDensity.current) {
+                    (availHeight - insets.calculateBottomPadding() - (controlsHeight - titleRowHeight).toDp())
+                        .coerceIn(availWidth, availHeight)
+                }
+            }
             // Read in layer and draw blocks only: it moves every frame of the change.
             val lyricsShown = animateFloatAsState(
                 targetValue = if (lyricsOpen) 1f else 0f,
@@ -598,9 +610,9 @@ fun NowPlayingStudioOverlay(
                 wide = wide,
                 lyricsOpen = lyricsOpen,
                 lyricsShown = { lyricsShown.value },
-                controlsTop = { controlsTop },
                 topBarHeight = insets.calculateTopPadding() + 60.dp,
-                sizePx = with(LocalDensity.current) { max(heroWidth, heroHeight).roundToPx() },
+                heroWidth = heroWidth,
+                heroHeight = heroHeight,
                 onSkipNext = onSkipNext,
                 onSkipPrevious = onSwipePrevious,
                 onSwipeDownDelta = onSwipeDownDelta,
@@ -651,7 +663,7 @@ fun NowPlayingStudioOverlay(
             }
             val controls = @Composable { area: Modifier ->
                 Box(
-                    modifier = area.onGloballyPositioned { controlsTop = it.positionInRoot().y },
+                    modifier = area.onSizeChanged { controlsHeight = it.height },
                     propagateMinConstraints = true
                 ) {
                     PlayerControls(
@@ -681,6 +693,7 @@ fun NowPlayingStudioOverlay(
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
+                        onTitleRowHeight = { titleRowHeight = it },
                         modifier = openingContent
                     )
                 }
@@ -707,11 +720,13 @@ fun NowPlayingStudioOverlay(
                     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                         topBar()
                         lyricsSlot(Modifier.weight(1f).widthIn(max = 620.dp).fillMaxWidth())
-                        // On a tall screen the controls start where the cover ends and spread out
-                        // below it; on a short one they keep their own height and overlap its fade.
+                        // On a tall screen the controls start a square cover's height down and
+                        // spread out from there; on a short one they keep their own height. The
+                        // cover's height follows them, never the other way round, so they hold
+                        // still while it grows behind the title.
                         controls(
                             Modifier.widthIn(max = 620.dp).heightIn(
-                                min = (availHeight - heroHeight - insets.calculateBottomPadding() + 10.dp).coerceIn(0.dp, 440.dp)
+                                min = (availHeight - availWidth - insets.calculateBottomPadding() + 10.dp).coerceIn(0.dp, 440.dp)
                             )
                         )
                     }
@@ -768,8 +783,12 @@ fun NowPlayingStudioOverlay(
 
 /**
  * The cover as the player's backdrop: full width at the top (the leading pane when [wide]),
- * melting into the background where the controls begin. With the lyrics open it stays, blurred
- * and dimmed, behind them.
+ * melting into the background behind the title, or towards the controls beside it. With the
+ * lyrics open it stays, blurred and dimmed, behind them.
+ *
+ * The picture is drawn as a square of the hero's height, centred, so it is cropped at the sides
+ * rather than squeezed: the same square the mini player's thumbnail shows, which is what lets
+ * the one grow out of the other.
  *
  * Dragging it sideways skips tracks; dragging it down closes the player.
  */
@@ -781,9 +800,9 @@ private fun PlayerHero(
     wide: Boolean,
     lyricsOpen: Boolean,
     lyricsShown: () -> Float,
-    controlsTop: () -> Float,
     topBarHeight: Dp,
-    sizePx: Int,
+    heroWidth: Dp,
+    heroHeight: Dp,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSwipeDownDelta: (Float) -> Unit,
@@ -816,6 +835,9 @@ private fun PlayerHero(
     }
 
     val context = LocalContext.current
+    // The picture's square is as tall as the hero; the hero is never wider than it is tall.
+    val sizePx = with(LocalDensity.current) { heroHeight.roundToPx() }
+    val widthPx = with(LocalDensity.current) { heroWidth.toPx() }
     fun coverRequest(url: String) = artworkCacheKey(url).let { key ->
         ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(sizePx).build()
     }
@@ -858,8 +880,7 @@ private fun PlayerHero(
 
     val surface = MaterialTheme.colorScheme.surface
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val topScrim = with(LocalDensity.current) { (topBarHeight + 28.dp).toPx() }
-    val overlap = with(LocalDensity.current) { 20.dp.toPx() }
+    val topScrim = with(LocalDensity.current) { (topBarHeight + 44.dp).toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
     val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val behindLyrics by remember(lyricsShown) { derivedStateOf { lyricsShown() > 0f } }
@@ -946,8 +967,8 @@ private fun PlayerHero(
     ) {
         Box(
             Modifier
-                .fillMaxSize()
-                .then(sheet.artTransform())
+                .requiredSize(heroHeight)
+                .then(sheet.artTransform(widthPx))
                 .graphicsLayer {
                     // Straight sideways, no tilt: rotating around the centre made the leading
                     // edge dip, as if the cover rode a wheel.
@@ -967,24 +988,45 @@ private fun PlayerHero(
                     val shown = sheet.contentAlpha
                     val lyric = lyricsShown()
                     if (lyric > 0f) drawRect(surface, alpha = (if (blurs) 0.74f else 0.86f) * lyric)
-                    // Keeps the top bar readable on a bright cover.
+                    // Keeps the top bar readable on a bright cover: full strength through the bar,
+                    // fading out only below it.
                     drawRect(
-                        Brush.verticalGradient(0f to surface.copy(alpha = 0.6f * shown), 1f to Color.Transparent, endY = topScrim),
+                        Brush.verticalGradient(
+                            0f to surface.copy(alpha = 0.72f * shown),
+                            0.6f to surface.copy(alpha = 0.5f * shown),
+                            1f to Color.Transparent,
+                            endY = topScrim
+                        ),
                         size = Size(size.width, topScrim)
                     )
-                    // The cover melts into the background towards the controls. The fade comes in
-                    // with the rest of the player, so the cover leaves the mini player whole.
+                    // The cover melts into the background over its last two fifths: behind the
+                    // title and artist, which sit on the tail of the fade, or towards the controls
+                    // beside it. The fade comes in with the rest of the player, so the cover
+                    // leaves the mini player whole.
                     fun kept(alpha: Float) = Color.Black.copy(alpha = lerp(1f, alpha, shown))
                     val stops = arrayOf(0f to kept(1f), 0.4f to kept(0.6f), 0.75f to kept(0.2f), 1f to kept(0f))
+                    val span = size.height * 0.4f
+                    // As it thins out under the title the picture leans towards the surface colour
+                    // too, so the text keeps its contrast on a bright cover in the dark theme and
+                    // on a dark one in the light theme.
+                    if (!wide) drawRect(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to surface.copy(alpha = 0.6f * shown),
+                            startY = size.height - span,
+                            endY = size.height
+                        ),
+                        topLeft = Offset(0f, size.height - span),
+                        size = Size(size.width, span)
+                    )
                     val fade = if (wide) {
-                        val from = size.width * 0.6f
-                        if (rtl) Brush.horizontalGradient(*stops, startX = size.width - from, endX = 0f)
-                        else Brush.horizontalGradient(*stops, startX = from, endX = size.width)
+                        // The pane is the middle of this square; the fade runs from inside it to
+                        // its far edge.
+                        val inset = (size.width - widthPx) / 2f
+                        if (rtl) Brush.horizontalGradient(*stops, startX = size.width - inset - widthPx * 0.6f, endX = inset)
+                        else Brush.horizontalGradient(*stops, startX = inset + widthPx * 0.6f, endX = size.width - inset)
                     } else {
-                        val edge = controlsTop().let {
-                            if (it.isNaN()) size.height else (it - sheet.fullArt.top + overlap).coerceIn(0f, size.height)
-                        }
-                        Brush.verticalGradient(*stops, startY = edge - size.height * 0.3f, endY = edge)
+                        Brush.verticalGradient(*stops, startY = size.height - span, endY = size.height)
                     }
                     drawRect(fade, blendMode = BlendMode.DstIn)
                 }
@@ -1034,8 +1076,9 @@ private fun PlayerHero(
                                 .align(Alignment.Center)
                                 .requiredSize(160.dp)
                                 .graphicsLayer {
-                                    scaleX = sheet.fullArt.width / size.width
-                                    scaleY = sheet.fullArt.height / size.height
+                                    // A square over a square: no stretch.
+                                    scaleX = sizePx / size.width
+                                    scaleY = scaleX
                                     alpha = lyricsShown()
                                 }
                                 .blur(20.dp)
@@ -1066,6 +1109,8 @@ private fun PlayerTopBar(
     onResetSpeedPitch: () -> Unit,
     onSpeedResetHintShown: () -> Unit
 ) {
+    // A soft halo in the scrim colour keeps the small text readable on busy covers.
+    val scrimShadow = Shadow(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), blurRadius = 12f)
     Row(
         modifier = Modifier.fillMaxWidth().height(50.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1074,51 +1119,52 @@ private fun PlayerTopBar(
         ExpressiveBounceIconButton(
             onClick = onCollapse,
             size = 48.dp,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag("collapse_player_button")
         ) {
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Minimize Player")
         }
 
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            // It sits on the cover, so it brings its own backing.
-            val backing = Modifier
-                .clip(cornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
             if (playingFromPlaylist != null) {
                 // Playing from a playlist: name it, and tapping it opens its page.
                 Column(
-                    modifier = backing
+                    modifier = Modifier
+                        .clip(cornerShape(14.dp))
                         .clickable { onOpenPlaylist(playingFromPlaylist.id) }
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .testTag("now_playing_playlist_link")
+                        .testTag("now_playing_playlist_link"),
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = "PLAYING FROM PLAYLIST",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(shadow = scrimShadow),
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = playingFromPlaylist.name,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, shadow = scrimShadow),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             } else {
-                Column(backing.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                     Text(
                         text = server.name,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(shadow = scrimShadow),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Now Playing",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelMedium.copy(shadow = scrimShadow),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1
                     )
@@ -1144,21 +1190,16 @@ private fun PlayerTopBar(
             // Long-press belongs to the reset, not to showing the tooltip.
             enableUserInput = false
         ) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                ExpressiveBounceIconButton(
-                    onClick = onOpenSpeedPitchSheet,
-                    onLongClick = onResetSpeedPitch,
-                    active = speedShaped,
-                    size = 48.dp,
-                    containerColor = if (speedShaped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = if (speedShaped) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("open_speed_pitch_pill")
-                ) {
-                    Icon(Icons.Filled.Speed, contentDescription = "Speed, Pitch & Live Reverb Settings", modifier = Modifier.size(22.dp))
-                }
-                if (speedShaped) {
-                    Box(Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                }
+            ExpressiveBounceIconButton(
+                onClick = onOpenSpeedPitchSheet,
+                onLongClick = onResetSpeedPitch,
+                active = speedShaped,
+                size = 48.dp,
+                containerColor = Color.Transparent,
+                contentColor = if (speedShaped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("open_speed_pitch_pill")
+            ) {
+                Icon(Icons.Filled.Speed, contentDescription = "Speed, Pitch & Live Reverb Settings", modifier = Modifier.size(22.dp))
             }
         }
 
@@ -1166,14 +1207,13 @@ private fun PlayerTopBar(
             onClick = onOpenSonicLab,
             active = soundShaped,
             size = 48.dp,
-            containerColor = if (soundShaped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-            contentColor = if (soundShaped) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+            containerColor = Color.Transparent,
+            contentColor = if (soundShaped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag("open_sonic_lab_pill")
         ) {
             Icon(
                 imageVector = Icons.Filled.Equalizer,
                 contentDescription = "Sonic Lab: equalizer",
-                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -1209,6 +1249,7 @@ private fun PlayerControls(
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
+    onTitleRowHeight: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scroll = rememberScrollState()
@@ -1219,7 +1260,11 @@ private fun PlayerControls(
         // Spare height goes between the rows; the spacers are the least they stand apart.
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // The cover reaches down behind this row; it needs to know how tall the row is.
+        Row(
+            modifier = Modifier.fillMaxWidth().onSizeChanged { onTitleRowHeight(it.height) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     text = track.title,
@@ -1323,11 +1368,7 @@ private fun PlayerControls(
                 tag = "now_playing_tab_queue",
                 modifier = Modifier.weight(1f)
             )
-            // Shuffle and repeat are one joined pair.
             Row(Modifier.weight(2f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                val leading = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 6.dp, bottomEnd = 6.dp)
-                val trailing = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 24.dp, bottomEnd = 24.dp)
-                val pressed = RoundedCornerShape(10.dp)
                 PlayerToggle(
                     checked = shuffleEnabled,
                     onToggle = {
@@ -1337,8 +1378,7 @@ private fun PlayerControls(
                     icon = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
                     description = "Cycle Shuffle Mode (${shuffleMode.label})",
                     tag = "shuffle_button",
-                    modifier = Modifier.weight(1f),
-                    shapes = IconButtonDefaults.toggleableShapes(leading, pressed, leading)
+                    modifier = Modifier.weight(1f)
                 )
                 PlayerToggle(
                     checked = repeatOneEnabled,
@@ -1349,23 +1389,17 @@ private fun PlayerControls(
                     icon = Icons.Filled.RepeatOne,
                     description = "Toggle Repeat One",
                     tag = "repeat_button",
-                    modifier = Modifier.weight(1f),
-                    shapes = IconButtonDefaults.toggleableShapes(trailing, pressed, trailing)
+                    modifier = Modifier.weight(1f)
                 )
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) {
-                PlayerToggle(
-                    checked = sleepTimerActive,
-                    onToggle = onOpenSleepTimerSheet,
-                    icon = Icons.Filled.Bedtime,
-                    description = "Sleep Timer",
-                    tag = "open_sleep_timer_pill",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (sleepTimerActive) {
-                    Box(Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                }
-            }
+            PlayerToggle(
+                checked = sleepTimerActive,
+                onToggle = onOpenSleepTimerSheet,
+                icon = Icons.Filled.Bedtime,
+                description = "Sleep Timer",
+                tag = "open_sleep_timer_pill",
+                modifier = Modifier.weight(1f)
+            )
             download?.let { PlayerDownloadButton(it, Modifier.weight(1f)) }
         }
     }
@@ -1403,7 +1437,16 @@ private fun PlayerProgress(
     )
 }
 
-/** One of the tonal toggles in the player's bottom row. */
+/** Just the icon, with no backing: the theme colour when on, quiet when off. */
+@Composable
+private fun playerToggleColors() = IconButtonDefaults.iconToggleButtonColors(
+    containerColor = Color.Transparent,
+    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    checkedContainerColor = Color.Transparent,
+    checkedContentColor = MaterialTheme.colorScheme.primary
+)
+
+/** One of the icon toggles in the player's bottom row. */
 @Composable
 private fun PlayerToggle(
     checked: Boolean,
@@ -1411,13 +1454,13 @@ private fun PlayerToggle(
     icon: ImageVector,
     description: String,
     tag: String,
-    modifier: Modifier = Modifier,
-    shapes: IconToggleButtonShapes = IconButtonDefaults.toggleableShapes()
+    modifier: Modifier = Modifier
 ) {
-    FilledTonalIconToggleButton(
+    IconToggleButton(
         checked = checked,
         onCheckedChange = { onToggle() },
-        shapes = shapes,
+        colors = playerToggleColors(),
+        shapes = IconButtonDefaults.toggleableShapes(),
         modifier = modifier.height(48.dp).testTag(tag)
     ) {
         Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
@@ -1737,7 +1780,7 @@ class PlayerDownload(
     val onRemove: () -> Unit
 )
 
-/** The shared [DownloadButton] (cloud, spinner, progress ring, done) in the player's toggle shape. */
+/** The shared [DownloadButton] (cloud, spinner, progress ring, done) as a bare icon toggle. */
 @Composable
 private fun PlayerDownloadButton(download: PlayerDownload, modifier: Modifier = Modifier) {
     val status = remember(download.state) { downloadStatusOf(listOf(download.state)) }
@@ -1749,9 +1792,10 @@ private fun PlayerDownloadButton(download: PlayerDownload, modifier: Modifier = 
         onRemove = download.onRemove,
         modifier = modifier
     ) { onClick, content ->
-        FilledTonalIconToggleButton(
+        IconToggleButton(
             checked = status.phase == DownloadPhase.SAVED,
             onCheckedChange = { onClick() },
+            colors = playerToggleColors(),
             shapes = IconButtonDefaults.toggleableShapes(),
             modifier = Modifier
                 .fillMaxWidth()

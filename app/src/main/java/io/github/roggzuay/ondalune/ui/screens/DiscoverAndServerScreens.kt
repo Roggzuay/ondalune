@@ -87,6 +87,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -209,6 +210,11 @@ enum class SettingsExpandableSection(
         title = "Playback",
         subtitle = "Speed & pitch, shuffle, autoplay, song analysis, refresh rate, haptics",
         icon = Icons.Filled.Tune
+    ),
+    LYRICS(
+        title = "Lyrics",
+        subtitle = "Find lyrics online, change a song's lyrics",
+        icon = Icons.Filled.Lyrics
     ),
     WIDGET_NOTIFICATION(
         title = "Widget & notification",
@@ -481,6 +487,7 @@ fun SettingsCustomizationScreen(
             SettingsExpandableSection.EQ_BITRATE to true,
             SettingsExpandableSection.APPEARANCE_THEME to true,
             SettingsExpandableSection.PLAYBACK_DSP to false,
+            SettingsExpandableSection.LYRICS to false,
             SettingsExpandableSection.WIDGET_NOTIFICATION to false,
             SettingsExpandableSection.SERVER_HUB to false
         )
@@ -1638,14 +1645,6 @@ fun SettingsCustomizationScreen(
                     )
 
                     SettingsToggleRow(
-                        title = "Find missing lyrics online",
-                        subtitle = "When your server has no lyrics, or none timed to the words, looks the song up on LRCLIB by title, artist, album and length. Never sends the audio. Off: only your server's lyrics",
-                        checked = settings.findLyricsOnline,
-                        onCheckedChange = onSetFindLyricsOnline,
-                        testTag = "toggle_find_lyrics_online"
-                    )
-
-                    SettingsToggleRow(
                         title = "Song analysis",
                         subtitle = "Off unless you turn it on. Reads up to 45 seconds of each song stored on this phone (downloads and your own music), on the phone, to estimate tempo and energy for mood mixes and smoother autoplay. Nothing is uploaded, and turning it off deletes the results.",
                         checked = settings.songAnalysis,
@@ -1732,6 +1731,48 @@ fun SettingsCustomizationScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Lyrics: the online lookup switch, and how to change what a song shows.
+        if (shownSection == null || shownSection == SettingsExpandableSection.LYRICS) item {
+            val isExpanded = expandedMap[SettingsExpandableSection.LYRICS] == true
+            ExpandableSettingsSectionCard(
+                section = SettingsExpandableSection.LYRICS,
+                badgeText = if (settings.findLyricsOnline) "Online" else "Server only",
+                isExpanded = isExpanded,
+                onToggleExpand = {
+                    expandedMap[SettingsExpandableSection.LYRICS] = !isExpanded
+                },
+                testTag = "settings_section_lyrics"
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    SettingsToggleRow(
+                        title = "Find missing lyrics online",
+                        subtitle = "When your server has no lyrics, or none timed to the words, looks the song up on LRCLIB by title, artist, album and length. Never sends the audio. Off: only your server's lyrics",
+                        checked = settings.findLyricsOnline,
+                        onCheckedChange = onSetFindLyricsOnline,
+                        testTag = "toggle_find_lyrics_online"
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.testTag("lyrics_change_instructions")
+                    ) {
+                        Text(text = "Change a song's lyrics", style = MaterialTheme.typography.titleSmall)
+                        SettingsStepRow(1, "Play the song and open the full player.")
+                        SettingsStepRow(2, "Tap the lyrics button at the bottom left.")
+                        SettingsStepRow(
+                            3,
+                            "Tap the label under the lyrics (for example \"Your server · Line synced\") to search LRCLIB, preview a version and use it, go back to your server's lyrics, or undo."
+                        )
+                        Text(
+                            text = "Lyrics you pick are kept on this phone; your server's files aren't changed. Typing your own words or timings isn't available yet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -2222,6 +2263,23 @@ private fun ExpandableSettingsSectionCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsStepRow(number: Int, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "$number.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(18.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

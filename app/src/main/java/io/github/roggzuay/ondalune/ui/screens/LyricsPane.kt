@@ -212,7 +212,7 @@ internal fun SyncedLyricsPane(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
-                        text = if (offer) "Better-timed lyrics may be online · Choose" else source.label.ifEmpty { "Lyrics" },
+                        text = if (offer) "Better-timed lyrics may be online · Choose" else "${source.label.ifEmpty { "Lyrics" }} · Change",
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
