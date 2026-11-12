@@ -131,11 +131,13 @@ internal fun SyncedLyricsPane(
             )
         }
 
+    // The "back to current line" button takes the chip's corner while it shows.
+    var followButtonShown by remember(lyrics) { mutableStateOf(false) }
     Box(modifier.fillMaxSize().testTag("full_area_blurred_lyrics_pane")) {
         when {
             // Another track's lyrics start over: scroll position, follow state and clock.
             lyrics.isNotEmpty() -> key(lyrics) {
-                SyncedLines(lyrics, lineStyle, audiblePositionMs, isPlaying, onSeekToLyric, edgeFade)
+                SyncedLines(lyrics, lineStyle, audiblePositionMs, isPlaying, onSeekToLyric, { followButtonShown = it }, edgeFade)
             }
 
             lyricsResult.plainTextLines.isNotEmpty() -> LazyColumn(
@@ -194,32 +196,39 @@ internal fun SyncedLyricsPane(
                 }
             }
         }
-        // Where these lyrics come from, and the way to change them.
+        // Where these lyrics come from, and the way to change them. It steps aside, quickly, while
+        // the button that brings the lyrics back stands in its place.
         if (lyrics.isNotEmpty() || lyricsResult.plainTextLines.isNotEmpty()) {
             val offer = source.fromServer && source.offers > 0 && source.serverQuality != LyricsQuality.WORDS
-            Surface(
-                onClick = onOpenSource,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f),
-                contentColor = if (offer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(bottom = 4.dp)
-                    .heightIn(min = 48.dp)
-                    .padding(vertical = 6.dp)
-                    .semantics { contentDescription = "Lyrics source: ${source.label}. Change lyrics" }
-                    .testTag("lyrics_source_chip")
+            AnimatedVisibility(
+                visible = !followButtonShown,
+                enter = fadeIn(tween(180)),
+                exit = fadeOut(tween(120)),
+                modifier = Modifier.align(Alignment.BottomStart)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text(
-                        text = if (offer) "Better-timed lyrics may be online · Choose" else "${source.label.ifEmpty { "Lyrics" }} · Change",
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                Surface(
+                    onClick = onOpenSource,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f),
+                    contentColor = if (offer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .heightIn(min = 48.dp)
+                        .padding(vertical = 6.dp)
+                        .semantics { contentDescription = "Lyrics source: ${source.label}. Change lyrics" }
+                        .testTag("lyrics_source_chip")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(
+                            text = if (offer) "Better-timed lyrics may be online · Choose" else "${source.label.ifEmpty { "Lyrics" }} · Change",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
@@ -233,6 +242,7 @@ private fun SyncedLines(
     audiblePositionMs: () -> Long,
     isPlaying: Boolean,
     onSeekToLyric: (Long) -> Unit,
+    onFollowButtonShown: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -295,8 +305,10 @@ private fun SyncedLines(
             }
         }
 
+        val followButton = !follow && activeIdx >= 0
+        LaunchedEffect(followButton) { onFollowButtonShown(followButton) }
         AnimatedVisibility(
-            visible = !follow && activeIdx >= 0,
+            visible = followButton,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
