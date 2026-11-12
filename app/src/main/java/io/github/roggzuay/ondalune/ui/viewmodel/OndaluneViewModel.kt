@@ -2348,10 +2348,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             lyricsKeyNow = key
             val fromServer = withContext(Dispatchers.IO) { lyricsService.fromServer(key) { repository.fetchLyricsResult(server, track) } }
             serverLyrics = fromServer
-            publishLyrics(withContext(Dispatchers.IO) { lyricsService.current(key, fromServer) })
+            val shown = withContext(Dispatchers.IO) { lyricsService.current(key, fromServer) }
+            publishLyrics(shown)
             if (settings.customization.value.findLyricsOnline) {
                 val found = withContext(Dispatchers.IO) { lyricsService.discover(key, track.lyricsQuery(), fromServer) }
-                publishLyrics(found ?: _currentLyricsResult.value)
+                publishLyrics(found ?: shown)
             }
         }
     }
@@ -2364,7 +2365,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         _currentLyricsResult.value = result
         _currentLyrics.value = result.syncedLines
         OndaluneMediaBridge.updateLyrics(getApplication(), track.id, result)
-        val fromServer = result === serverLyrics
+        val fromServer = result == serverLyrics
         _lyricsSource.value = LyricsSource(
             label = (if (fromServer) "Your server · " else "LRCLIB · ") + result.quality().label,
             detail = if (fromServer) "Your server · ${serverLyrics.quality().label}" else result.sourceLabel,

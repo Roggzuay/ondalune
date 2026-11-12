@@ -106,7 +106,7 @@ class ExampleRobolectricTest {
     @Test
     fun `player background animation styles app icon variants and expandable settings sections are defined`() {
         assertEquals(5, PlayerBackgroundAnimationStyle.entries.size)
-        assertEquals(6, SettingsExpandableSection.entries.size)
+        assertEquals(7, SettingsExpandableSection.entries.size)
         assertEquals(4, io.github.roggzuay.ondalune.data.model.AppIconVariant.entries.size)
         val defaultSettings = PlayerCustomizationSettings()
         assertEquals(io.github.roggzuay.ondalune.data.model.AppIconVariant.MOONLIGHT, defaultSettings.appIconVariant)

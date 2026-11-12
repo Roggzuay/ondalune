@@ -124,19 +124,32 @@ class PlayerSheetState {
             }
         }
 
-    /** Places the full player's cover over the mini player's thumbnail and moves it into place as the player opens. */
-    fun artTransform(): Modifier = Modifier.graphicsLayer {
+    /**
+     * Places the full player's cover over the mini player's thumbnail and moves it into place as
+     * the player opens. The cover's layer is a square centred on [fullArt] (as tall as the hero,
+     * wider than it by the sides that are cropped away), so it scales evenly: at 0 the whole
+     * square is the thumbnail, and on the way its clip opens from that square to the hero's
+     * frame, [heroWidth] wide.
+     */
+    fun artTransform(heroWidth: Float): Modifier = Modifier.graphicsLayer {
         val f = fraction
         val full = fullArt
+        // The square layer overhangs the hero's frame at the sides: in a window wider than it is
+        // tall that would be the controls' pane, so the frame is always the clip at rest.
+        val frame = Rect(Offset((size.width - heroWidth) / 2f, 0f), Size(heroWidth, size.height))
+        clip = true
+        shape = RoundedFrame(frame, 0f)
         if (f >= 1f || fromHero || full.isEmpty) return@graphicsLayer
         if (miniArt == Rect.Zero) {
             alpha = contentAlpha
             return@graphicsLayer
         }
-        scaleX = lerp(miniArt.width / full.width, 1f, f)
-        scaleY = lerp(miniArt.height / full.height, 1f, f)
+        val scale = lerp(miniArt.width / size.width, 1f, f)
+        scaleX = scale
+        scaleY = scale
         translationX = (miniArt.center.x - full.center.x) * (1f - f)
         translationY = (miniArt.center.y - full.center.y) * (1f - f)
+        shape = RoundedFrame(lerp(Rect(Offset.Zero, size), frame, f), 0f)
     }
 }
 
