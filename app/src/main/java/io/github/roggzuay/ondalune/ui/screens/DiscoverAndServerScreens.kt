@@ -425,6 +425,7 @@ fun SettingsCustomizationScreen(
     onSetCrossfadeSeconds: (Int) -> Unit,
     onSetGapless: (Boolean) -> Unit,
     onSetAutoplay: (Boolean) -> Unit = {},
+    onSetFindLyricsOnline: (Boolean) -> Unit = {},
     onSetSongAnalysis: (Boolean) -> Unit = {},
     /** "12 of 40 songs on this phone analysed", while song analysis is on. */
     songAnalysisStatus: String? = null,
@@ -1634,6 +1635,14 @@ fun SettingsCustomizationScreen(
                         checked = settings.autoplaySimilar,
                         onCheckedChange = onSetAutoplay,
                         testTag = "toggle_autoplay"
+                    )
+
+                    SettingsToggleRow(
+                        title = "Find missing lyrics online",
+                        subtitle = "When your server has no lyrics, or none timed to the words, looks the song up on LRCLIB by title, artist, album and length. Never sends the audio. Off: only your server's lyrics",
+                        checked = settings.findLyricsOnline,
+                        onCheckedChange = onSetFindLyricsOnline,
+                        testTag = "toggle_find_lyrics_online"
                     )
 
                     SettingsToggleRow(

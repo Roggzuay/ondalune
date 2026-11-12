@@ -72,6 +72,16 @@ import io.github.roggzuay.ondalune.data.model.streamQuality
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
+import io.github.roggzuay.ondalune.data.lyrics.LrcLibClient
+import io.github.roggzuay.ondalune.data.lyrics.LyricsOverlay
+import io.github.roggzuay.ondalune.data.lyrics.LyricsQuery
+import io.github.roggzuay.ondalune.data.lyrics.LyricsSearch
+import io.github.roggzuay.ondalune.data.lyrics.LyricsService
+import io.github.roggzuay.ondalune.data.lyrics.LyricsSource
+import io.github.roggzuay.ondalune.data.lyrics.LyricsStore
+import io.github.roggzuay.ondalune.data.lyrics.RankedCandidate
+import io.github.roggzuay.ondalune.data.lyrics.lyricsKey
+import io.github.roggzuay.ondalune.data.lyrics.quality
 import io.github.roggzuay.ondalune.data.model.WidgetLayoutMode
 import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
 import io.github.roggzuay.ondalune.data.network.AppUpdate
@@ -385,6 +395,20 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         TrackLyricsResult(availability = LyricsAvailability.UNAVAILABLE)
     )
     val currentLyricsResult: StateFlow<TrackLyricsResult> = _currentLyricsResult.asStateFlow()
+
+    private val lyricsService = LyricsService(
+        LyricsStore(application),
+        LrcLibClient("Ondalune/${BuildConfig.VERSION_NAME} (https://github.com/Roggzuay/ondalune)")
+    )
+    private var lyricsJob: Job? = null
+    private var lyricsTrack: SubsonicTrack? = null
+    private var lyricsKeyNow = ""
+    /** The playing song's lyrics from its server, before lyrics found or chosen elsewhere. */
+    private var serverLyrics = TrackLyricsResult()
+    private val _lyricsSource = MutableStateFlow(LyricsSource())
+    val lyricsSource: StateFlow<LyricsSource> = _lyricsSource.asStateFlow()
+    private val _lyricsSearch = MutableStateFlow(LyricsSearch())
+    val lyricsSearch: StateFlow<LyricsSearch> = _lyricsSearch.asStateFlow()
 
     private val _isPlayerExpanded = MutableStateFlow(false)
     val isPlayerExpanded: StateFlow<Boolean> = _isPlayerExpanded.asStateFlow()
@@ -2315,11 +2339,71 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun loadLyricsForTrack(track: SubsonicTrack) {
+        lyricsJob?.cancel()
+        lyricsTrack = track
+        _lyricsSearch.value = LyricsSearch()
+        lyricsJob = viewModelScope.launch {
+            val server = serverFor(track)
+            val key = lyricsKey(server.id, track.id)
+            lyricsKeyNow = key
+            val fromServer = withContext(Dispatchers.IO) { lyricsService.fromServer(key) { repository.fetchLyricsResult(server, track) } }
+            serverLyrics = fromServer
+            publishLyrics(withContext(Dispatchers.IO) { lyricsService.current(key, fromServer) })
+            if (settings.customization.value.findLyricsOnline) {
+                val found = withContext(Dispatchers.IO) { lyricsService.discover(key, track.lyricsQuery(), fromServer) }
+                publishLyrics(found ?: _currentLyricsResult.value)
+            }
+        }
+    }
+
+    private fun SubsonicTrack.lyricsQuery() = LyricsQuery(title, artist, album, durationSec)
+
+    private suspend fun publishLyrics(result: TrackLyricsResult) {
+        val track = lyricsTrack ?: return
+        val overlay = withContext(Dispatchers.IO) { lyricsService.overlay(lyricsKeyNow) }
+        _currentLyricsResult.value = result
+        _currentLyrics.value = result.syncedLines
+        OndaluneMediaBridge.updateLyrics(getApplication(), track.id, result)
+        val fromServer = result === serverLyrics
+        _lyricsSource.value = LyricsSource(
+            label = (if (fromServer) "Your server · " else "LRCLIB · ") + result.quality().label,
+            detail = if (fromServer) "Your server · ${serverLyrics.quality().label}" else result.sourceLabel,
+            fromServer = fromServer,
+            serverQuality = serverLyrics.quality(),
+            canRestore = overlay?.previous != null,
+            offers = if (overlay?.state == LyricsOverlay.State.NONE_FOUND) overlay.offers else 0
+        )
+    }
+
+    /** For the lyrics picker: LRCLIB's records for these words, best match to the song first. */
+    fun searchLyrics(title: String, artist: String) {
+        val track = lyricsTrack ?: return
+        _lyricsSearch.value = LyricsSearch(title, artist, searching = true)
         viewModelScope.launch {
-            val result = repository.fetchLyricsResult(serverFor(track), track)
-            _currentLyricsResult.value = result
-            _currentLyrics.value = result.syncedLines
-            OndaluneMediaBridge.updateLyrics(getApplication(), track.id, result)
+            _lyricsSearch.value = try {
+                LyricsSearch(title, artist, searched = true, results = lyricsService.search(track.lyricsQuery(), title, artist))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                LyricsSearch(title, artist, searched = true, error = "LRCLIB can't be reached right now. Try again in a moment.")
+            }
+        }
+    }
+
+    /** Uses the picked record for the playing song from now on. */
+    fun chooseLyrics(choice: RankedCandidate) = changeLyrics { key -> lyricsService.choose(key, choice.candidate, choice.score, serverLyrics) }
+
+    /** Back to the server's lyrics for the playing song. */
+    fun useServerLyrics() = changeLyrics { key -> lyricsService.useServer(key, serverLyrics) }
+
+    /** Undoes the last change to the playing song's lyrics. */
+    fun restorePreviousLyrics() = changeLyrics { key -> lyricsService.restorePrevious(key, serverLyrics) }
+
+    private fun changeLyrics(change: (String) -> TrackLyricsResult) {
+        val key = lyricsKeyNow.ifEmpty { return }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { change(key) }
+            if (key == lyricsKeyNow) publishLyrics(result)
         }
     }
 

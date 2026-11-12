@@ -2,6 +2,10 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.lyrics.LyricsSearch
+import io.github.roggzuay.ondalune.data.lyrics.LyricsSource
+import io.github.roggzuay.ondalune.data.lyrics.RankedCandidate
+import io.github.roggzuay.ondalune.ui.components.LyricsSourceSheet
 import io.github.roggzuay.ondalune.ui.components.frosted
 import dev.chrisbanes.haze.HazeState
 import androidx.compose.ui.unit.max
@@ -473,11 +477,30 @@ fun NowPlayingStudioOverlay(
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
     backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
     unifiedMaterialYouColor: Boolean = false,
+    lyricsSource: LyricsSource = LyricsSource(),
+    lyricsSearch: LyricsSearch = LyricsSearch(),
+    onSearchLyrics: (String, String) -> Unit = { _, _ -> },
+    onChooseLyrics: (RankedCandidate) -> Unit = {},
+    onUseServerLyrics: () -> Unit = {},
+    onRestoreLyrics: () -> Unit = {},
 ) {
     val isUpNextBottomSheetOpen = activeTab == NowPlayingSheetTab.QUEUE
     var showAudioDetails by remember { mutableStateOf(false) }
     if (showAudioDetails && audioQuality != null) {
         AudioDetailsSheet(audioQuality, remember { spatialAudio() }, dolbyDecoders, onDismiss = { showAudioDetails = false })
+    }
+    var showLyricsSource by remember { mutableStateOf(false) }
+    if (showLyricsSource) {
+        LyricsSourceSheet(
+            track = track,
+            source = lyricsSource,
+            search = lyricsSearch,
+            onSearch = onSearchLyrics,
+            onChoose = onChooseLyrics,
+            onUseServer = onUseServerLyrics,
+            onRestore = onRestoreLyrics,
+            onDismiss = { showLyricsSource = false }
+        )
     }
     BackHandler {
         if (activeTab != NowPlayingSheetTab.COVER) onSelectTab(NowPlayingSheetTab.COVER) else onCollapse()
@@ -619,7 +642,9 @@ fun NowPlayingStudioOverlay(
                             audiblePositionMs = audiblePositionMs,
                             isPlaying = isPlaying,
                             onSeekToLyric = onSeek,
-                            modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha }
+                            modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha },
+                            source = lyricsSource,
+                            onOpenSource = { showLyricsSource = true }
                         )
                     }
                 }

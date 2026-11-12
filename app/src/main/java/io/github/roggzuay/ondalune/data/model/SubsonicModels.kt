@@ -774,6 +774,8 @@ data class PlayerCustomizationSettings(
     val gaplessPlayback: Boolean = true,
     /** When the queue runs out, keep playing songs like the last ones (see autoplayPicks). */
     val autoplaySimilar: Boolean = true,
+    /** Look up missing or better-timed lyrics on LRCLIB by title, artist, album and length. */
+    val findLyricsOnline: Boolean = true,
     /** Optional on-device analysis of songs stored on the phone (tempo, energy); off until switched on. */
     val songAnalysis: Boolean = false,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,
