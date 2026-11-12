@@ -889,7 +889,7 @@ private fun PlayerHero(
 
     val surface = MaterialTheme.colorScheme.surface
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val topScrim = with(LocalDensity.current) { (topBarHeight + 16.dp).toPx() }
+    val topFade = with(LocalDensity.current) { (topBarHeight + 12.dp).toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
     val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val behindLyrics by remember(lyricsShown) { derivedStateOf { lyricsShown() > 0f } }
@@ -1002,20 +1002,6 @@ private fun PlayerHero(
                     val left = (size.width - frame.width) / 2f
                     val top = (size.height - frame.height) / 2f
                     val bottom = top + frame.height
-                    // Keeps the top bar readable on a bright cover: it holds through the bar (the
-                    // bare icons need about this much on a near-white picture) and is gone just
-                    // below it.
-                    drawRect(
-                        Brush.verticalGradient(
-                            0f to surface.copy(alpha = 0.56f * shown),
-                            0.6f to surface.copy(alpha = 0.5f * shown),
-                            1f to Color.Transparent,
-                            startY = top,
-                            endY = top + topScrim
-                        ),
-                        topLeft = Offset(0f, top),
-                        size = Size(size.width, topScrim)
-                    )
                     // The cover melts into the background over its last three tenths: behind the
                     // title and artist, which sit on the tail of the fade, or towards the controls
                     // beside it. The fade comes in with the rest of the player, so the cover
@@ -1036,6 +1022,21 @@ private fun PlayerHero(
                         topLeft = Offset(0f, bottom - span),
                         size = Size(size.width, span)
                     )
+                    // The top bar's bare icons sit on the start of the cover, which comes up from the
+                    // backdrop (below): the cover leans towards the surface colour there so they keep
+                    // their contrast on a bright picture in the dark theme and a dark one in the
+                    // light theme. It is part of the cover, so it fades in with it and leaves no edge.
+                    drawRect(
+                        Brush.verticalGradient(
+                            0f to surface.copy(alpha = 0.5f * shown),
+                            0.55f to surface.copy(alpha = 0.45f * shown),
+                            1f to Color.Transparent,
+                            startY = top,
+                            endY = top + topFade
+                        ),
+                        topLeft = Offset(0f, top),
+                        size = Size(size.width, topFade)
+                    )
                     val fade = if (wide) {
                         // From inside the pane to its far edge.
                         if (rtl) Brush.horizontalGradient(*stops, startX = size.width - left - frame.width * 0.6f, endX = left)
@@ -1044,6 +1045,12 @@ private fun PlayerHero(
                         Brush.verticalGradient(*stops, startY = bottom - span, endY = bottom)
                     }
                     drawRect(fade, blendMode = BlendMode.DstIn)
+                    // The top edge starts out as the backdrop itself and the cover comes up from it,
+                    // so the status bar strip above and the picture below are one colour with no
+                    // edge between them. The bare icons of the top bar sit on the first, mostly
+                    // backdrop part of the fade, and the picture is whole just below the bar.
+                    val rise = Array(TopFadeCurve.size) { i -> i / (TopFadeCurve.size - 1f) to kept(TopFadeCurve[i]) }
+                    drawRect(Brush.verticalGradient(*rise, startY = top, endY = top + topFade), blendMode = BlendMode.DstIn)
                 }
         ) {
             // With the lyrics up the picture eases back a little, behind them.
@@ -1103,6 +1110,16 @@ private fun PlayerHero(
             }
         }
     }
+}
+
+/**
+ * How much of the cover shows at each twelfth of the way down its top fade: it eases in from nothing
+ * and levels off at whole, so neither end of the fade has a visible line.
+ */
+private val TopFadeCurve = FloatArray(13) { i ->
+    val t = i / 12f
+    val x = t * t
+    x * x * (3f - 2f * x)
 }
 
 /** Identifies the picture a track shows, so songs from one album keep the same cover on screen. */
