@@ -124,6 +124,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -163,9 +164,11 @@ import io.github.roggzuay.ondalune.ui.components.downloadStatusOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
@@ -561,23 +564,26 @@ fun NowPlayingStudioOverlay(
             val wide = availWidth > availHeight * 1.08f
             val sidePadding = if (availWidth < 380.dp) 16.dp else 22.dp
             val insets = WindowInsets.safeDrawing.asPaddingValues()
-            // The controls' height and their title row's, in pixels. Sizes rather than positions:
-            // they hold still while the player's own layer scales during an opening.
+            // The controls' height and where their title row ends inside them, in pixels. Both are
+            // measured within the controls, not on screen, so they hold still while the player's
+            // own layer scales during an opening.
             var controlsHeight by remember { mutableIntStateOf(0) }
-            var titleRowHeight by remember { mutableIntStateOf(0) }
-            // The cover fills the width at the top and reaches down behind the title and artist,
-            // fading out by the progress bar, so the picture is the room the controls sit in rather
-            // than a square set above them. Its height follows the layout: the window less the
-            // controls, plus their title row and the gap under it. Never shorter than it is wide
-            // (a short phone keeps the whole picture) and, in a window wider than it is tall, the
-            // leading pane at full height.
+            var titleRowBottom by remember { mutableIntStateOf(0) }
+            // The cover starts under the top bar, below the status bar (which would cover part of
+            // the picture), fills the width and reaches down behind the title and artist, fading
+            // out just above the progress bar: the picture is the room the controls sit in rather
+            // than a square set above them. Its height follows the layout: from the status bar to
+            // the title row's end and a little past it. On a short window the controls take more
+            // of the height and it stays a wide band; in a window wider than it is tall it is the
+            // leading pane, from the status bar down.
+            val topInset = insets.calculateTopPadding()
             val heroWidth = if (wide) minOf(availHeight, availWidth * 0.58f) else availWidth
             val heroHeight = when {
-                wide -> availHeight
+                wide -> availHeight - topInset
                 controlsHeight == 0 -> availWidth
                 else -> with(LocalDensity.current) {
-                    (availHeight - insets.calculateBottomPadding() - (controlsHeight - titleRowHeight).toDp())
-                        .coerceIn(availWidth, availHeight)
+                    (availHeight - insets.calculateBottomPadding() - topInset - (controlsHeight - titleRowBottom).toDp())
+                        .coerceIn(availWidth * 0.7f, availHeight - topInset)
                 }
             }
             // Read in layer and draw blocks only: it moves every frame of the change.
@@ -610,7 +616,7 @@ fun NowPlayingStudioOverlay(
                 wide = wide,
                 lyricsOpen = lyricsOpen,
                 lyricsShown = { lyricsShown.value },
-                topBarHeight = insets.calculateTopPadding() + 60.dp,
+                topBarHeight = 60.dp,
                 heroWidth = heroWidth,
                 heroHeight = heroHeight,
                 onSkipNext = onSkipNext,
@@ -619,6 +625,7 @@ fun NowPlayingStudioOverlay(
                 onSwipeDownFinish = onSwipeDownFinish,
                 modifier = Modifier
                     .align(if (wide) Alignment.TopStart else Alignment.TopCenter)
+                    .padding(top = topInset)
                     .size(heroWidth, heroHeight)
             )
 
@@ -693,7 +700,7 @@ fun NowPlayingStudioOverlay(
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
-                        onTitleRowHeight = { titleRowHeight = it },
+                        onTitleRowBottom = { titleRowBottom = it },
                         modifier = openingContent
                     )
                 }
@@ -721,9 +728,10 @@ fun NowPlayingStudioOverlay(
                         topBar()
                         lyricsSlot(Modifier.weight(1f).widthIn(max = 620.dp).fillMaxWidth())
                         // On a tall screen the controls start a square cover's height down and
-                        // spread out from there; on a short one they keep their own height. The
-                        // cover's height follows them, never the other way round, so they hold
-                        // still while it grows behind the title.
+                        // spread out from there, the title last of all above the progress bar; on
+                        // a short one they keep their own height. The cover's height follows them,
+                        // never the other way round, so they hold still while it grows behind the
+                        // title.
                         controls(
                             Modifier.widthIn(max = 620.dp).heightIn(
                                 min = (availHeight - availWidth - insets.calculateBottomPadding() + 10.dp).coerceIn(0.dp, 440.dp)
@@ -786,9 +794,9 @@ fun NowPlayingStudioOverlay(
  * melting into the background behind the title, or towards the controls beside it. With the
  * lyrics open it stays, blurred and dimmed, behind them.
  *
- * The picture is drawn as a square of the hero's height, centred, so it is cropped at the sides
- * rather than squeezed: the same square the mini player's thumbnail shows, which is what lets
- * the one grow out of the other.
+ * The picture is drawn as a square of the hero's longer side, centred, so it is cropped rather
+ * than squeezed: the same square the mini player's thumbnail shows, which is what lets the one
+ * grow out of the other.
  *
  * Dragging it sideways skips tracks; dragging it down closes the player.
  */
@@ -835,9 +843,10 @@ private fun PlayerHero(
     }
 
     val context = LocalContext.current
-    // The picture's square is as tall as the hero; the hero is never wider than it is tall.
-    val sizePx = with(LocalDensity.current) { heroHeight.roundToPx() }
-    val widthPx = with(LocalDensity.current) { heroWidth.toPx() }
+    // The picture's square takes the hero's longer side, so the hero is a window onto it.
+    val artSide = max(heroWidth, heroHeight)
+    val sizePx = with(LocalDensity.current) { artSide.roundToPx() }
+    val frame = with(LocalDensity.current) { Size(heroWidth.toPx(), heroHeight.toPx()) }
     fun coverRequest(url: String) = artworkCacheKey(url).let { key ->
         ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(sizePx).build()
     }
@@ -880,7 +889,7 @@ private fun PlayerHero(
 
     val surface = MaterialTheme.colorScheme.surface
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val topScrim = with(LocalDensity.current) { (topBarHeight + 44.dp).toPx() }
+    val topScrim = with(LocalDensity.current) { (topBarHeight + 16.dp).toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
     val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val behindLyrics by remember(lyricsShown) { derivedStateOf { lyricsShown() > 0f } }
@@ -967,8 +976,8 @@ private fun PlayerHero(
     ) {
         Box(
             Modifier
-                .requiredSize(heroHeight)
-                .then(sheet.artTransform(widthPx))
+                .requiredSize(artSide)
+                .then(sheet.artTransform(frame))
                 .graphicsLayer {
                     // Straight sideways, no tilt: rotating around the centre made the leading
                     // edge dip, as if the cover rode a wheel.
@@ -988,45 +997,51 @@ private fun PlayerHero(
                     val shown = sheet.contentAlpha
                     val lyric = lyricsShown()
                     if (lyric > 0f) drawRect(surface, alpha = (if (blurs) 0.74f else 0.86f) * lyric)
-                    // Keeps the top bar readable on a bright cover: full strength through the bar,
-                    // fading out only below it.
+                    // The hero is the middle of this square; everything below is placed from its
+                    // frame, not the square's edges.
+                    val left = (size.width - frame.width) / 2f
+                    val top = (size.height - frame.height) / 2f
+                    val bottom = top + frame.height
+                    // Keeps the top bar readable on a bright cover: it holds through the bar (the
+                    // bare icons need about this much on a near-white picture) and is gone just
+                    // below it.
                     drawRect(
                         Brush.verticalGradient(
-                            0f to surface.copy(alpha = 0.72f * shown),
+                            0f to surface.copy(alpha = 0.56f * shown),
                             0.6f to surface.copy(alpha = 0.5f * shown),
                             1f to Color.Transparent,
-                            endY = topScrim
+                            startY = top,
+                            endY = top + topScrim
                         ),
+                        topLeft = Offset(0f, top),
                         size = Size(size.width, topScrim)
                     )
-                    // The cover melts into the background over its last two fifths: behind the
+                    // The cover melts into the background over its last three tenths: behind the
                     // title and artist, which sit on the tail of the fade, or towards the controls
                     // beside it. The fade comes in with the rest of the player, so the cover
                     // leaves the mini player whole.
                     fun kept(alpha: Float) = Color.Black.copy(alpha = lerp(1f, alpha, shown))
-                    val stops = arrayOf(0f to kept(1f), 0.4f to kept(0.6f), 0.75f to kept(0.2f), 1f to kept(0f))
-                    val span = size.height * 0.4f
+                    val stops = arrayOf(0f to kept(1f), 0.4f to kept(0.7f), 0.75f to kept(0.22f), 1f to kept(0f))
+                    val span = frame.height * 0.3f
                     // As it thins out under the title the picture leans towards the surface colour
                     // too, so the text keeps its contrast on a bright cover in the dark theme and
                     // on a dark one in the light theme.
                     if (!wide) drawRect(
                         Brush.verticalGradient(
                             0f to Color.Transparent,
-                            1f to surface.copy(alpha = 0.6f * shown),
-                            startY = size.height - span,
-                            endY = size.height
+                            1f to surface.copy(alpha = 0.38f * shown),
+                            startY = bottom - span,
+                            endY = bottom
                         ),
-                        topLeft = Offset(0f, size.height - span),
+                        topLeft = Offset(0f, bottom - span),
                         size = Size(size.width, span)
                     )
                     val fade = if (wide) {
-                        // The pane is the middle of this square; the fade runs from inside it to
-                        // its far edge.
-                        val inset = (size.width - widthPx) / 2f
-                        if (rtl) Brush.horizontalGradient(*stops, startX = size.width - inset - widthPx * 0.6f, endX = inset)
-                        else Brush.horizontalGradient(*stops, startX = inset + widthPx * 0.6f, endX = size.width - inset)
+                        // From inside the pane to its far edge.
+                        if (rtl) Brush.horizontalGradient(*stops, startX = size.width - left - frame.width * 0.6f, endX = left)
+                        else Brush.horizontalGradient(*stops, startX = left + frame.width * 0.6f, endX = size.width - left)
                     } else {
-                        Brush.verticalGradient(*stops, startY = size.height - span, endY = size.height)
+                        Brush.verticalGradient(*stops, startY = bottom - span, endY = bottom)
                     }
                     drawRect(fade, blendMode = BlendMode.DstIn)
                 }
@@ -1249,103 +1264,111 @@ private fun PlayerControls(
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
-    onTitleRowHeight: (Int) -> Unit,
+    onTitleRowBottom: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scroll = rememberScrollState()
+    // The title and artist sit on the tail of the cover's fade: a soft halo in the surface colour
+    // keeps them readable whatever the picture.
+    val coverShadow = Shadow(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), blurRadius = 12f)
     Column(
         // It scrolls only when it can't fit (a small window, a large font): a scrolling column
         // would take the pull down that closes the player.
         modifier = modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0),
-        // Spare height goes between the rows; the spacers are the least they stand apart.
+        // Spare height goes between the rows, in equal gaps; the paddings are the least they stand
+        // apart. The first gap is above the title, so it stays right over the progress bar and the
+        // room goes to the picture.
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // The cover reaches down behind this row; it needs to know how tall the row is.
-        Row(
-            modifier = Modifier.fillMaxWidth().onSizeChanged { onTitleRowHeight(it.height) },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.headlineSmallEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier)
+        Column {
+            // The cover reaches down behind this row; it needs to know where the row ends.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { onTitleRowBottom((it.positionInParent().y + it.size.height).roundToInt()) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = track.title,
+                        style = MaterialTheme.typography.headlineSmallEmphasized.copy(shadow = coverShadow),
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .widthIn(max = 200.dp)
-                            .clip(cornerShape(8.dp))
-                            .clickable(onClick = onOpenArtist)
-                            .testTag("now_playing_artist_link")
+                        modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
                     )
-                    Text(
-                        text = " — ",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val trackActions = LocalTrackActions.current
-                    Text(
-                        text = track.album,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .clip(cornerShape(8.dp))
-                            .clickable { trackActions?.openAlbum(track) }
-                            .testTag("now_playing_album_link")
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = track.artist,
+                            style = MaterialTheme.typography.titleMediumEmphasized.copy(shadow = coverShadow),
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .widthIn(max = 200.dp)
+                                .clip(cornerShape(8.dp))
+                                .clickable(onClick = onOpenArtist)
+                                .testTag("now_playing_artist_link")
+                        )
+                        Text(
+                            text = " — ",
+                            style = MaterialTheme.typography.titleMedium.copy(shadow = coverShadow),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val trackActions = LocalTrackActions.current
+                        Text(
+                            text = track.album,
+                            style = MaterialTheme.typography.titleMedium.copy(shadow = coverShadow),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .clip(cornerShape(8.dp))
+                                .clickable { trackActions?.openAlbum(track) }
+                                .testTag("now_playing_album_link")
+                        )
+                    }
+                }
+                if (showStarButton) {
+                    Spacer(Modifier.width(12.dp))
+                    IconToggleButton(
+                        checked = track.starred,
+                        onCheckedChange = { onToggleStar() },
+                        shapes = IconButtonDefaults.toggleableShapes(),
+                        modifier = Modifier.size(56.dp).testTag("now_playing_star_button")
+                    ) {
+                        Icon(
+                            imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = "Star on OpenSubsonic Server"
+                        )
+                    }
                 }
             }
-            if (showStarButton) {
-                Spacer(Modifier.width(12.dp))
-                IconToggleButton(
-                    checked = track.starred,
-                    onCheckedChange = { onToggleStar() },
-                    shapes = IconButtonDefaults.toggleableShapes(),
-                    modifier = Modifier.size(56.dp).testTag("now_playing_star_button")
-                ) {
-                    Icon(
-                        imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = "Star on OpenSubsonic Server"
-                    )
-                }
-            }
+            Spacer(Modifier.height(14.dp))
+            PlayerProgress(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                isPlaying = isPlaying,
+                animatedWaveEnabled = animatedWaveEnabled,
+                showRemainingTime = showRemainingTime,
+                audioQuality = audioQuality,
+                onSeek = onSeek,
+                onOpenAudioDetails = onOpenAudioDetails
+            )
         }
 
-        Spacer(Modifier.height(10.dp))
-        PlayerProgress(
-            positionMs = positionMs,
-            durationMs = durationMs,
-            isPlaying = isPlaying,
-            animatedWaveEnabled = animatedWaveEnabled,
-            showRemainingTime = showRemainingTime,
-            audioQuality = audioQuality,
-            onSeek = onSeek,
-            onOpenAudioDetails = onOpenAudioDetails
-        )
-
-        Spacer(Modifier.height(10.dp))
         ExpressiveTransportGroup(
             isPlaying = isPlaying,
             isBuffering = isBuffering,
             onSkipPrevious = onSkipPrevious,
             onTogglePlay = onTogglePlay,
-            onSkipNext = onSkipNext
+            onSkipNext = onSkipNext,
+            modifier = Modifier.padding(top = 10.dp)
         )
 
-        Spacer(Modifier.height(14.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

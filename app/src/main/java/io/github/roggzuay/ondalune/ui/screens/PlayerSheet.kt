@@ -126,19 +126,19 @@ class PlayerSheetState {
 
     /**
      * Places the full player's cover over the mini player's thumbnail and moves it into place as
-     * the player opens. The cover's layer is a square centred on [fullArt] (as tall as the hero,
-     * wider than it by the sides that are cropped away), so it scales evenly: at 0 the whole
-     * square is the thumbnail, and on the way its clip opens from that square to the hero's
-     * frame, [heroWidth] wide.
+     * the player opens. The cover's layer is a square centred on [fullArt] (the hero's longer
+     * side, overhanging it where the picture is cropped away), so it scales evenly: at 0 the
+     * whole square is the thumbnail, and on the way its clip opens from that square to the
+     * hero's [frame].
      */
-    fun artTransform(heroWidth: Float): Modifier = Modifier.graphicsLayer {
+    fun artTransform(frame: Size): Modifier = Modifier.graphicsLayer {
         val f = fraction
         val full = fullArt
-        // The square layer overhangs the hero's frame at the sides: in a window wider than it is
-        // tall that would be the controls' pane, so the frame is always the clip at rest.
-        val frame = Rect(Offset((size.width - heroWidth) / 2f, 0f), Size(heroWidth, size.height))
+        // The square overhangs the hero: at the sides into the controls' pane of a window wider
+        // than it is tall, or above and below it on a short one. The frame is the clip at rest.
+        val rest = Rect(Offset((size.width - frame.width) / 2f, (size.height - frame.height) / 2f), frame)
         clip = true
-        shape = RoundedFrame(frame, 0f)
+        shape = RoundedFrame(rest, 0f)
         if (f >= 1f || fromHero || full.isEmpty) return@graphicsLayer
         if (miniArt == Rect.Zero) {
             alpha = contentAlpha
@@ -149,7 +149,7 @@ class PlayerSheetState {
         scaleY = scale
         translationX = (miniArt.center.x - full.center.x) * (1f - f)
         translationY = (miniArt.center.y - full.center.y) * (1f - f)
-        shape = RoundedFrame(lerp(Rect(Offset.Zero, size), frame, f), 0f)
+        shape = RoundedFrame(lerp(Rect(Offset.Zero, size), rest, f), 0f)
     }
 }
 
