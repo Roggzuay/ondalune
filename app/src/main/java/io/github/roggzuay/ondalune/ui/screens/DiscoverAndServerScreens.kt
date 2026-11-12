@@ -432,6 +432,7 @@ fun SettingsCustomizationScreen(
     onSetGapless: (Boolean) -> Unit,
     onSetAutoplay: (Boolean) -> Unit = {},
     onSetFindLyricsOnline: (Boolean) -> Unit = {},
+    onSetDolbyPassthrough: (Boolean) -> Unit = {},
     onSetSongAnalysis: (Boolean) -> Unit = {},
     /** "12 of 40 songs on this phone analysed", while song analysis is on. */
     songAnalysisStatus: String? = null,
@@ -1634,6 +1635,14 @@ fun SettingsCustomizationScreen(
                         checked = settings.gaplessPlayback,
                         onCheckedChange = onSetGapless,
                         testTag = "toggle_gapless"
+                    )
+
+                    SettingsToggleRow(
+                        title = "Play Dolby audio with the phone's Dolby engine",
+                        subtitle = "Used only when the phone and its current output support it. EQ, effects and speed don't apply to those songs. Dolby songs stream as the original file, even on mobile data",
+                        checked = settings.dolbyPassthrough,
+                        onCheckedChange = onSetDolbyPassthrough,
+                        testTag = "toggle_dolby_passthrough"
                     )
 
                     SettingsToggleRow(

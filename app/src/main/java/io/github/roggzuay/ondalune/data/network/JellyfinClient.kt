@@ -202,6 +202,15 @@ private const val TICKS_PER_MS = 10_000L
 private fun jellyfinImageUrl(baseUrl: String, itemId: String, tag: String) =
     "${baseUrl.trim().trimEnd('/')}/Items/$itemId/Images/Primary?maxHeight=600&quality=90&tag=$tag"
 
+/**
+ * The codec of a Jellyfin audio stream ("flac", "eac3"), with E-AC-3 that carries Atmos told apart
+ * by the profile the server reads ("Dolby Digital Plus + Dolby Atmos").
+ */
+private fun jellyfinCodecOf(stream: JSONObject): String {
+    val codec = stream.optString("Codec").lowercase()
+    return if (codec == "eac3" && stream.optString("Profile").contains("atmos", ignoreCase = true)) "eac3-joc" else codec
+}
+
 /** The library track for one Jellyfin `Audio` item. */
 fun jellyfinTrackFrom(item: JSONObject, server: SubsonicServerConfig): SubsonicTrack {
     fun JSONArray?.strings() = this?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty()
@@ -230,6 +239,8 @@ fun jellyfinTrackFrom(item: JSONObject, server: SubsonicServerConfig): SubsonicT
         suffix = item.optString("Container").substringBefore(',').uppercase(),
         bitDepth = audio?.optInt("BitDepth") ?: 0,
         samplingRate = audio?.optInt("SampleRate") ?: 0,
+        channelCount = audio?.optInt("Channels") ?: 0,
+        codec = audio?.let(::jellyfinCodecOf).orEmpty(),
         starred = userData?.optBoolean("IsFavorite") == true,
         starredAtMs = if (userData?.optBoolean("IsFavorite") == true) isoToMs(item.optString("DateCreated")) else 0L,
         trackNumber = item.optInt("IndexNumber", 1).coerceAtLeast(1),

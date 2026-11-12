@@ -107,4 +107,26 @@ class DatabaseMigrationTest {
             }
         }
     }
+
+    @Test
+    fun `9 to 10 keeps songs, with channels and codec not yet known`() {
+        helper.createDatabase("migration-test-10", 9).use { db ->
+            db.execSQL(
+                "INSERT INTO subsonic_tracks (id, serverId, title, artist, artistId, album, albumId, durationSec, bitRate, suffix, " +
+                    "bitDepth, samplingRate, starred, starredAtMs, trackNumber, year, genre, folderPath, coverArtUrl, artistImageUrl, artistBio, " +
+                    "artStyleIndex, paletteSeedHex, accentHex, bpm, musicalKey, syncedLyricsRaw, playCount, userRating) " +
+                    "VALUES ('s1', 7, 'Song', 'Artist', 'ar1', 'Album', 'al1', 200, 640, 'M4A', 0, 48000, 1, 5, 1, 2020, 'Jazz', '/', '', '', '', " +
+                    "0, '#000000', '#FFFFFF', 0, '', '', 5, 4)"
+            )
+        }
+        helper.runMigrationsAndValidate("migration-test-10", 10, true, OndaluneDatabase.MIGRATION_9_10).use { db ->
+            db.query("SELECT title, suffix, channelCount, codec FROM subsonic_tracks").use { c ->
+                c.moveToFirst()
+                assertEquals("Song", c.getString(0))
+                assertEquals("M4A", c.getString(1))
+                assertEquals(0, c.getInt(2))
+                assertEquals("", c.getString(3))
+            }
+        }
+    }
 }

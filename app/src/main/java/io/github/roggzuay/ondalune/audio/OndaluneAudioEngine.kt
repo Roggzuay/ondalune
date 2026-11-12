@@ -21,6 +21,8 @@ import android.media.audiofx.PresetReverb
 import android.os.Build
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
+import io.github.roggzuay.ondalune.data.model.codecName
+import io.github.roggzuay.ondalune.data.model.dolbyMime
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
 import io.github.roggzuay.ondalune.data.model.ReverbProcessingMode
 import io.github.roggzuay.ondalune.data.model.ReverbState
@@ -71,6 +73,8 @@ class OndaluneAudioEngine(
 ) {
     private var mediaPlayer: MediaPlayer? = null
     private var audioTrack: AudioTrack? = null
+    /** Set only while a Dolby stream plays through the phone's own Dolby engine. */
+    private var dolby: DolbyPassthrough? = null
     private var pcmStreamingJob: Job? = null
     private var progressJob: Job? = null
 
@@ -154,7 +158,9 @@ class OndaluneAudioEngine(
         val decoded: DecodedStream?,
         /** True: Ondalune's own pipeline (16-bit stereo PCM to an AudioTrack); false: Android's MediaPlayer. */
         val ownPipeline: Boolean,
-        val outputSampleRate: Int
+        val outputSampleRate: Int,
+        /** True: the untouched Dolby stream goes to the phone's own Dolby engine; nothing of Ondalune's applies. */
+        val dolbyEngine: Boolean = false
     )
 
     private val _playingStream = MutableStateFlow<PlayingStream?>(null)
@@ -162,9 +168,16 @@ class OndaluneAudioEngine(
 
     /** The output device Android routes this engine's audio to right now, when it says. */
     fun routedOutput(): android.media.AudioDeviceInfo? =
-        audioTrack?.routedDevice ?: if (android.os.Build.VERSION.SDK_INT >= 28) mediaPlayer?.routedDevice else null
+        dolby?.routedDevice ?: audioTrack?.routedDevice ?: if (android.os.Build.VERSION.SDK_INT >= 28) mediaPlayer?.routedDevice else null
 
     var onTrackEnded: (() -> Unit)? = null
+
+    /** A song this phone can't decode (a Dolby stream with no decoder here); main thread, with the message to show. */
+    var onTrackUnplayable: ((SubsonicTrack, String) -> Unit)? = null
+
+    /** Hand Dolby streams to the phone's own Dolby engine when the output takes them (Settings). */
+    @Volatile
+    var dolbyPassthroughEnabled: Boolean = true
 
     // ---- Transitions: gapless hand-over, crossfade and ReplayGain ------------------------------
 
@@ -326,20 +339,22 @@ class OndaluneAudioEngine(
                 val (sourcePath, offline) = resolveSourcePath(track, server)
                 if (request != playRequest.get()) return@launch
                 _isPlayingOfflineFile.value = offline
-                // Real-time PCM DSP pipeline first; MediaPlayer + hardware session effects if the
-                // container can't be decoded to raw PCM.
-                val source = withContext(Dispatchers.IO) { openPcmSource(sourcePath) }
+                // Real-time PCM DSP pipeline first (a Dolby stream goes to the phone's own Dolby engine
+                // when it takes it); MediaPlayer + hardware session effects if the container can't be
+                // decoded to raw PCM.
+                val playable = withContext(Dispatchers.IO) { openForPlayback(sourcePath, track) }
                 // A slow stream can finish opening after another song was picked: never start both.
                 if (request != playRequest.get()) {
-                    source?.release()
+                    playable.release()
                     return@launch
                 }
-                if (source != null) {
-                    startPcmPipeline(
-                        QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
+                when (playable) {
+                    is Playable.Pcm -> startPcmPipeline(
+                        QueuedSource(track, playable.source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
                     )
-                } else {
-                    startMediaPlayerFallback(sourcePath, eqPreset)
+                    is Playable.Dolby -> startDolbyPassthrough(playable.audio, playable.output, track, sourcePath, fromMs = 0L)
+                    is Playable.NoDecoder -> reportUnplayable(track, cantDecode(playable.mime))
+                    Playable.None -> startMediaPlayerFallback(sourcePath, eqPreset)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -364,13 +379,136 @@ class OndaluneAudioEngine(
         return path to (offlineFile != null)
     }
 
-    /** Opens [path] for the PCM pipeline, or null if only MediaPlayer can play it. */
-    private fun openPcmSource(path: String): PcmSource? =
-        if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
-            runCatching { WavPcmSource(File(path)) }.getOrNull()
-        } else {
-            CodecPcmSource.open(context, path)
+    /** How a song can play: decoded into the PCM pipeline, as a Dolby stream for the phone's engine, or not at all here. */
+    private sealed class Playable {
+        class Pcm(val source: PcmSource) : Playable()
+        class Dolby(val audio: OpenedAudio, val output: DolbyPassthrough.Output) : Playable()
+        /** A Dolby stream ([mime]) this phone has no decoder for. */
+        class NoDecoder(val mime: String) : Playable()
+        /** Only MediaPlayer may manage this one. */
+        object None : Playable()
+
+        fun release() {
+            when (this) {
+                is Pcm -> source.release()
+                is Dolby -> audio.release()
+                else -> Unit
+            }
         }
+    }
+
+    /**
+     * Opens [path] for playback. A Dolby stream is left untouched for the phone's Dolby engine when
+     * that is on and the current output takes it; otherwise it is decoded like anything else, by
+     * the phone's own Dolby decoder, and reported when the phone has none. Blocking: IO thread.
+     */
+    private fun openForPlayback(path: String, track: SubsonicTrack): Playable {
+        if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
+            return runCatching { WavPcmSource(File(path)) }.getOrNull()?.let { Playable.Pcm(it) } ?: Playable.None
+        }
+        val audio = OpenedAudio.open(context, path) ?: run {
+            // Unopenable here. MediaPlayer gets its usual try, except for a Dolby song this phone
+            // couldn't decode in any container.
+            val dolbyMime = track.dolbyMime()
+            return if (dolbyMime != null && dolbyDecodersFor(dolbyMime).isEmpty()) Playable.NoDecoder(dolbyMime) else Playable.None
+        }
+        val mime = audio.mime
+        val isDolby = isDolbyMime(mime)
+        val output = if (isDolby && dolbyPassthroughEnabled) DolbyPassthrough.outputFor(audio) else null
+        val way = playPathFor(
+            mime,
+            passthroughOn = dolbyPassthroughEnabled,
+            outputTakesIt = output != null,
+            phoneDecodes = !isDolby || dolbyDecodersFor(mime).isNotEmpty()
+        )
+        return when (way) {
+            PlayPath.DOLBY_ENGINE -> Playable.Dolby(audio, output!!)
+            PlayPath.NO_DECODER -> {
+                audio.release()
+                Playable.NoDecoder(mime)
+            }
+            PlayPath.DECODE -> try {
+                CodecPcmSource.from(audio)?.let { Playable.Pcm(it) } ?: Playable.None
+            } catch (e: NoDecoderException) {
+                Playable.NoDecoder(e.mime)
+            }
+        }
+    }
+
+    /**
+     * Plays [audio] (a Dolby stream) through the phone's own Dolby engine from [fromMs]. Ondalune's
+     * DSP, gapless and crossfade don't apply; when the engine lets go of the stream (output change,
+     * write error) the same song carries on decoded from where it was.
+     */
+    private fun startDolbyPassthrough(audio: OpenedAudio, output: DolbyPassthrough.Output, track: SubsonicTrack, path: String, fromMs: Long) {
+        isPcmPipelineActive.set(false)
+        _reverbProcessingMode.value = ReverbProcessingMode.BYPASSED_DRY
+        val request = playRequest.get()
+        lateinit var passthrough: DolbyPassthrough
+        passthrough = DolbyPassthrough(audio, output, scope, object : DolbyPassthrough.Listener {
+            override fun onPosition(positionMs: Long) {
+                if (dolby === passthrough) _positionMs.value = positionMs.coerceIn(0L, _durationMs.value)
+            }
+
+            override fun onEnded() {
+                scope.launch(Dispatchers.Main) {
+                    if (dolby !== passthrough || request != playRequest.get()) return@launch
+                    dolby = null
+                    _isPlaying.value = false
+                    _positionMs.value = _durationMs.value
+                    onTrackEnded?.invoke()
+                }
+            }
+
+            override fun onFailed(positionMs: Long, reason: String) {
+                scope.launch(Dispatchers.Main) {
+                    if (dolby === passthrough && request == playRequest.get()) fallBackToDecoding(track, path, positionMs)
+                }
+            }
+        })
+        dolby = passthrough
+        passthrough.durationMs.takeIf { it > 1000L }?.let { _durationMs.value = it }
+        _playingStream.value = PlayingStream(passthrough.stream, ownPipeline = false, outputSampleRate = passthrough.sampleRate, dolbyEngine = true)
+        passthrough.setVolume(masterVolumeGain)
+        passthrough.start(fromMs)
+        _isBuffering.value = false
+        _isPlaying.value = true
+    }
+
+    /** The Dolby engine let go of [track] at [positionMs]: decode it from there, or report it. Main thread. */
+    private fun fallBackToDecoding(track: SubsonicTrack, path: String, positionMs: Long) {
+        val request = playRequest.get()
+        dolby?.stop()
+        dolby = null
+        _isBuffering.value = true
+        scope.launch {
+            val opened = withContext(Dispatchers.IO) { runCatching { OpenedAudio.open(context, path)?.let { CodecPcmSource.from(it) } } }
+            if (request != playRequest.get()) {
+                opened.getOrNull()?.release()
+                return@launch
+            }
+            val source = opened.getOrNull()
+            if (source == null) {
+                val noDecoder = opened.exceptionOrNull() as? NoDecoderException
+                reportUnplayable(track, if (noDecoder != null) cantDecode(noDecoder.mime) else "\"${track.title}\" stopped when the audio output changed")
+                return@launch
+            }
+            source.seekTo(positionMs)
+            _positionMs.value = positionMs
+            startPcmPipeline(QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode)))
+        }
+    }
+
+    private fun cantDecode(mime: String) = "This phone can't decode ${codecName(mime)}"
+
+    /** [track] can't play here: say so ([message]) and leave it to the app to move on. */
+    private fun reportUnplayable(track: SubsonicTrack, message: String) {
+        _isBuffering.value = false
+        _isPlaying.value = false
+        _playingStream.value = null
+        _audioSessionError.value = message
+        onTrackUnplayable?.invoke(track, message)
+    }
 
     /**
      * Real-time PCM pipeline: decoded audio -> [TransitionMixer] (ReplayGain, gapless hand-over,
@@ -537,10 +675,12 @@ class OndaluneAudioEngine(
 
     private suspend fun prepareNext(sampleRate: Int, session: Int) {
         val (track, server) = withContext(Dispatchers.Main) { nextTrackProvider?.invoke() } ?: return
-        val source = runCatching { openPcmSource(resolveSourcePath(track, server).first) }.getOrNull()
+        val playable = runCatching { openForPlayback(resolveSourcePath(track, server).first, track) }.getOrNull()
+        val source = (playable as? Playable.Pcm)?.source
         if (source == null || source.sampleRate != sampleRate) {
-            // A different sample rate needs a new AudioTrack, so this one starts the usual way.
-            source?.release()
+            // A different sample rate needs a new AudioTrack, and a Dolby stream for the phone's engine
+            // can't be mixed in at all, so this one starts the usual way.
+            playable?.release()
             unpreparableNextId = track.id
             return
         }
@@ -687,6 +827,17 @@ class OndaluneAudioEngine(
     }
 
     fun togglePlayPause() {
+        dolby?.let { stream ->
+            if (stream.isPaused) {
+                requestSystemAudioFocus()
+                stream.resume()
+                _isPlaying.value = true
+            } else {
+                stream.pause()
+                _isPlaying.value = false
+            }
+            return
+        }
         if (isPcmPipelineActive.get()) {
             val currentlyPaused = isPcmPaused.get()
             if (currentlyPaused) {
@@ -721,6 +872,13 @@ class OndaluneAudioEngine(
     }
 
     fun pausePlayback() {
+        dolby?.let {
+            it.pause()
+            masterVolumeGain = 1.0f
+            it.setVolume(1.0f)
+            _isPlaying.value = false
+            return
+        }
         if (isPcmPipelineActive.get()) {
             isPcmPaused.set(true)
             runCatching { audioTrack?.pause() }
@@ -744,6 +902,7 @@ class OndaluneAudioEngine(
     fun setOutputVolume(volume: Float) {
         val clean = volume.coerceIn(0.0f, 1.0f)
         masterVolumeGain = clean
+        dolby?.setVolume(clean)
         try {
             audioTrack?.setVolume(clean)
         } catch (_: Exception) {
@@ -758,6 +917,10 @@ class OndaluneAudioEngine(
         val clamped = targetMs.coerceIn(0L, _durationMs.value)
         _positionMs.value = clamped
         reverbDspProcessor.clearDelayLines()
+        dolby?.let {
+            it.seekTo(clamped)
+            return
+        }
         if (isPcmPipelineActive.get()) {
             audibleClock.seekRequested(clamped)
             pendingSeekMs.set(clamped)
@@ -775,6 +938,7 @@ class OndaluneAudioEngine(
      * AudioTrack's counters. Main thread.
      */
     fun audiblePositionMs(): Long {
+        dolby?.let { return runCatching { it.audiblePositionMs() }.getOrDefault(_positionMs.value) }
         val track = audioTrack
         if (track == null || !isPcmPipelineActive.get()) {
             return runCatching { mediaPlayer?.takeIf { it.isPlaying }?.currentPosition?.toLong() }.getOrNull() ?: _positionMs.value
@@ -1012,6 +1176,8 @@ class OndaluneAudioEngine(
         progressJob?.cancel()
         progressJob = null
         releaseEffectsInternal()
+        dolby?.stop()
+        dolby = null
         try {
             audioTrack?.stop()
         } catch (_: Exception) {

@@ -33,12 +33,17 @@ class PlaybackCoordinatorTest {
         override val isPlaying = MutableStateFlow(false)
         override val positionMs = MutableStateFlow(0L)
         val played = mutableListOf<String>()
+        /** Songs that never start playing here (as a Dolby song on a phone without a decoder). */
+        val unplayable = mutableSetOf<String>()
+        /** Called for an unplayable song as the real engine would, once it has tried to open it. */
+        var onUnplayable: ((SubsonicTrack) -> Unit)? = null
         var expectedNext: String? = null
         var paused = false
         var seekedTo: Long? = null
         override fun play(track: SubsonicTrack, server: SubsonicServerConfig, eq: EqualizerPreset) {
             played += track.id
-            isPlaying.value = true
+            isPlaying.value = track.id !in unplayable
+            if (track.id in unplayable) onUnplayable?.invoke(track)
         }
         override fun togglePlayPause() { isPlaying.value = !isPlaying.value }
         override fun pause() { paused = true; isPlaying.value = false }
@@ -60,7 +65,8 @@ class PlaybackCoordinatorTest {
         var lastPlayed: String? = null
         override fun serverFor(track: SubsonicTrack) = server
         override fun onTrackStarted(track: SubsonicTrack, server: SubsonicServerConfig) { started += track.id }
-        override fun showBanner(message: String) {}
+        val banners = mutableListOf<String>()
+        override fun showBanner(message: String) { banners += message }
         override fun saveLastPlayed(trackId: String) { lastPlayed = trackId }
         override fun saveQueue(trackIds: List<String>) { savedQueue = trackIds }
     }
@@ -215,5 +221,27 @@ class PlaybackCoordinatorTest {
         playback.playInOrder(mix)
         assertEquals(mix.map { it.id }, queueIds())
         assertFalse(playback.shuffleEnabled.value)
+    }
+
+    @Test
+    fun `a song this phone can't play is reported and skipped`() {
+        engine.unplayable += "t2"
+        playback.playTrack(songs[1], songs)
+        playback.onTrackUnplayable(songs[1], "This phone can't decode Dolby Digital Plus")
+        assertEquals("t3", playback.currentTrack.value?.id)
+        assertEquals(listOf("t2", "t3"), engine.played)
+        assertTrue(host.banners.last().startsWith("This phone can't decode Dolby Digital Plus"))
+        // A report about a song that is no longer current changes nothing.
+        playback.onTrackUnplayable(songs[1], "late")
+        assertEquals("t3", playback.currentTrack.value?.id)
+    }
+
+    @Test
+    fun `a queue where nothing can play stops after one round`() {
+        engine.unplayable += songs.map { it.id }
+        engine.onUnplayable = { playback.onTrackUnplayable(it, "This phone can't decode Dolby Digital") }
+        playback.playTrack(songs[0], songs)
+        assertEquals(listOf("t1", "t2", "t3", "t4", "t5", "t1"), engine.played)
+        assertTrue(host.banners.contains("This phone can't decode Dolby Digital"))
     }
 }

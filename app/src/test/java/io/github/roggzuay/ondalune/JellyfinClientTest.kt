@@ -57,6 +57,20 @@ class JellyfinClientTest {
     }
 
     @Test
+    fun `a Dolby song keeps its codec and channels, Atmos told apart by its profile`() {
+        fun song(stream: String) = jellyfinTrackFrom(
+            JSONObject("""{"Id":"d1","Name":"Atmos","Container":"m4a","MediaSources":[{"MediaStreams":[$stream]}]}"""), server
+        )
+        val atmos = song("""{"Type":"Audio","Codec":"eac3","Profile":"Dolby Digital Plus + Dolby Atmos","Channels":6,"SampleRate":48000}""")
+        assertEquals("eac3-joc", atmos.codec)
+        assertEquals(6, atmos.channelCount)
+        assertEquals("eac3", song("""{"Type":"Audio","Codec":"EAC3","Channels":6}""").codec)
+        // Nothing is made up when the server leaves them out.
+        assertEquals("", jellyfinTrackFrom(item, server).codec)
+        assertEquals(0, jellyfinTrackFrom(item, server).channelCount)
+    }
+
+    @Test
     fun `missing details fall back without inventing any`() {
         val t = jellyfinTrackFrom(JSONObject("""{"Id":"b2","Name":"","RunTimeTicks":0}"""), server)
         assertEquals("Untitled", t.title)

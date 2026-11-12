@@ -29,6 +29,9 @@ class AudioCapabilities(private val context: Context) {
         ).filter { it.first in types }.map { it.second }
     }
 
+    /** The Dolby stream types this phone can decode to PCM, including Atmos streams played as their 5.1 core. */
+    val dolbyDecodable: Set<String> by lazy { DolbyMimes.filter { dolbyDecodersFor(it).isNotEmpty() }.toSet() }
+
     /**
      * Whether Android's spatial audio would process Ondalune's stereo output right now: true or
      * false when the phone has it, null when it doesn't (or Android is older than 12L).

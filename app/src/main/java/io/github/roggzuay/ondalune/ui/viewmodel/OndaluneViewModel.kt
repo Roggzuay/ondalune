@@ -140,6 +140,7 @@ import io.github.roggzuay.ondalune.audio.AudioCapabilities
 import io.github.roggzuay.ondalune.data.model.AudioQuality
 import io.github.roggzuay.ondalune.data.model.OpenedStream
 import io.github.roggzuay.ondalune.data.model.audioQualityOf
+import io.github.roggzuay.ondalune.data.model.streamQualityFor
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
@@ -259,7 +260,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     /** [track]'s library row, streaming at the quality set for the network the phone is on now. */
     private fun streamServerFor(track: SubsonicTrack): SubsonicServerConfig {
-        val quality = settings.customization.value.streamQuality(onMobileData())
+        val quality = settings.customization.value.streamQualityFor(track, onMobileData())
         return serverFor(track).copy(transcodeFormat = quality.format, maxBitRate = quality.maxBitRate)
     }
 
@@ -739,15 +740,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                     bitrate = p.decoded?.bitrate ?: 0,
                     bitsPerSample = p.decoded?.bitsPerSample ?: 0,
                     ownPipeline = p.ownPipeline,
-                    outputSampleRate = p.outputSampleRate
+                    outputSampleRate = p.outputSampleRate,
+                    dolbyEngine = p.dolbyEngine
                 )
             }
-            audioQualityOf(track, opened, convertedBy, processing, device)
+            audioQualityOf(track, opened, convertedBy, processing, device, audioCapabilities.dolbyDecodable)
         }.onEach { refreshOutputDevice() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     }
 
-    /** The Dolby formats this phone decodes (none is used by Ondalune's stereo engine). */
+    /** The Dolby formats this phone decodes, by name. */
     val dolbyDecoders: List<String> get() = audioCapabilities.dolbyDecoders
 
     /** Whether Android's spatial audio applies to Ondalune's output now; null where there is none. */
@@ -1018,6 +1020,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         audioEngine.setReverbState(_reverbState.value)
 
         audioEngine.onTrackEnded = { playback.onTrackEnded() }
+        audioEngine.onTrackUnplayable = { track, message -> playback.onTrackUnplayable(track, message) }
         // Gapless and crossfade: the engine lines up whatever plays next and moves on by itself.
         audioEngine.nextTrackProvider = { playback.nextForEngine() }
         audioEngine.onTrackAdvanced = { track -> playback.onEngineAdvanced(track) }
@@ -1026,6 +1029,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 audioEngine.crossfadeMs = s.crossfadeSeconds * 1000
                 audioEngine.gaplessEnabled = s.gaplessPlayback
                 audioEngine.replayGainMode = s.replayGainMode
+                audioEngine.dolbyPassthroughEnabled = s.dolbyPassthrough
             }
         }
         OndaluneMediaBridge.onCommand = bridgeCommand

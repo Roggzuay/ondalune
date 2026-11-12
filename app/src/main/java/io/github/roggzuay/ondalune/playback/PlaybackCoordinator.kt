@@ -95,11 +95,17 @@ class PlaybackCoordinator(
 
     private var sleepTimerJob: Job? = null
 
+    /** Songs that couldn't play here one after another; coming back round to one ends the run. */
+    private val unplayableRun = HashSet<String>()
+
     init {
         scope.launch {
             combine(_playbackQueue, _currentTrack, _repeatOneEnabled, _sleepTimerState) { _, _, _, _ ->
                 upcomingTrack(extendQueue = false)?.id
             }.distinctUntilChanged().collect { engine.expectNextTrack(it) }
+        }
+        scope.launch {
+            engine.isPlaying.collect { if (it) unplayableRun.clear() }
         }
     }
 
@@ -134,6 +140,7 @@ class PlaybackCoordinator(
     }
 
     fun playTrack(track: SubsonicTrack, queueContext: List<SubsonicTrack>? = null) {
+        unplayableRun.clear()
         _queuePlaylistId.value = null
         val newQueue = queueContext?.ifEmpty { null } ?: host.library.ifEmpty { listOf(track) }
         _playbackQueue.value = buildQueueForMode(track, newQueue, _shuffleMode.value)
@@ -342,6 +349,21 @@ class PlaybackCoordinator(
         } else {
             skipNext()
         }
+    }
+
+    /**
+     * The engine can't play [track] on this phone ([message] says why): say so and move on to the
+     * next song, unless every song since the last one that played has failed the same way.
+     */
+    fun onTrackUnplayable(track: SubsonicTrack, message: String) {
+        if (_currentTrack.value?.id != track.id) return
+        if (!unplayableRun.add(track.id)) {
+            unplayableRun.clear()
+            host.showBanner(message)
+            return
+        }
+        skipNext()
+        host.showBanner("$message, so \"${track.title}\" was skipped")
     }
 
     // ---- Shuffle and repeat --------------------------------------------------------------

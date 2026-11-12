@@ -119,6 +119,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(findLyricsOnline = enabled) }
     }
 
+    fun setDolbyPassthrough(enabled: Boolean) {
+        update { it.copy(dolbyPassthrough = enabled) }
+    }
+
     fun setReplayGainMode(mode: ReplayGainMode) {
         update { it.copy(replayGainMode = mode) }
     }
@@ -222,6 +226,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             gaplessPlayback = prefs.getBoolean("cfg_gapless", defaults.gaplessPlayback),
             autoplaySimilar = prefs.getBoolean("cfg_autoplay", defaults.autoplaySimilar),
             findLyricsOnline = prefs.getBoolean("cfg_find_lyrics_online", defaults.findLyricsOnline),
+            dolbyPassthrough = prefs.getBoolean("cfg_dolby_passthrough", defaults.dolbyPassthrough),
             songAnalysis = prefs.getBoolean("cfg_song_analysis", defaults.songAnalysis),
             replayGainMode = ReplayGainMode.entries.find { it.name == prefs.getString("cfg_replay_gain", defaults.replayGainMode.name) } ?: defaults.replayGainMode,
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
@@ -280,6 +285,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_gapless", s.gaplessPlayback)
             .putBoolean("cfg_autoplay", s.autoplaySimilar)
             .putBoolean("cfg_find_lyrics_online", s.findLyricsOnline)
+            .putBoolean("cfg_dolby_passthrough", s.dolbyPassthrough)
             .putBoolean("cfg_song_analysis", s.songAnalysis)
             .putString("cfg_replay_gain", s.replayGainMode.name)
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)

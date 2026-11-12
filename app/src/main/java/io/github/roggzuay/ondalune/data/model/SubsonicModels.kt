@@ -135,7 +135,11 @@ data class SubsonicTrack(
     val rgTrackGain: Float? = null,
     val rgAlbumGain: Float? = null,
     val rgTrackPeak: Float? = null,
-    val rgAlbumPeak: Float? = null
+    val rgAlbumPeak: Float? = null,
+    /** Channels in the file as the server says (6 = 5.1); 0 when it doesn't. */
+    val channelCount: Int = 0,
+    /** The audio codec as the server names it ("flac", "eac3", "eac3-joc" for Atmos), from Jellyfin or a Dolby content type; blank when unknown. */
+    val codec: String = ""
 ) {
     /**
      * How strongly Smart Shuffle favours this song: a heart, and how much it is played (on a log
@@ -776,6 +780,11 @@ data class PlayerCustomizationSettings(
     val autoplaySimilar: Boolean = true,
     /** Look up missing or better-timed lyrics on LRCLIB by title, artist, album and length. */
     val findLyricsOnline: Boolean = true,
+    /**
+     * Hand Dolby songs to the phone's own Dolby engine when the phone and its output take them, and
+     * stream them as the original file even on mobile data (converting them removes the Dolby).
+     */
+    val dolbyPassthrough: Boolean = true,
     /** Optional on-device analysis of songs stored on the phone (tempo, energy); off until switched on. */
     val songAnalysis: Boolean = false,
     val replayGainMode: ReplayGainMode = ReplayGainMode.ALBUM,
@@ -817,6 +826,14 @@ fun PlayerCustomizationSettings.streamQuality(mobile: Boolean): StreamQuality {
     val (format, rate) = if (mobile) mobileTranscodeFormat to mobileMaxBitRate else wifiTranscodeFormat to wifiMaxBitRate
     return StreamQualities.find { it.format == format && it.maxBitRate == rate } ?: StreamQuality(format, rate, "$format • $rate kbps")
 }
+
+/**
+ * The quality [track] streams at: the one set for mobile data or Wi-Fi, except that a Dolby song
+ * comes as the original file while Dolby songs go to the phone's Dolby engine, since converting it
+ * would remove the Dolby.
+ */
+fun PlayerCustomizationSettings.streamQualityFor(track: SubsonicTrack, mobile: Boolean): StreamQuality =
+    if (dolbyPassthrough && track.mayHoldDolby()) StreamQualities.first() else streamQuality(mobile)
 
 enum class EqualizerPreset(
     val label: String,
