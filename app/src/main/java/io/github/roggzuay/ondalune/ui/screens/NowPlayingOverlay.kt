@@ -10,18 +10,15 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalDensity
 import io.github.roggzuay.ondalune.ui.components.LocalTrackActions
-import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import androidx.compose.foundation.shape.CornerSize
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.text.TextStyle
 import io.github.roggzuay.ondalune.ui.theme.LocalArtworkPalette
 import io.github.roggzuay.ondalune.ui.components.PlayerBackdrop
 import androidx.compose.animation.core.animateDpAsState
@@ -31,7 +28,6 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.material3.LoadingIndicator
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.foundation.basicMarquee
@@ -50,23 +46,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -74,7 +66,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -95,13 +86,11 @@ import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -120,20 +109,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -142,7 +127,6 @@ import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricsAvailability
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
-import io.github.roggzuay.ondalune.data.model.ReverbProcessingMode
 import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SleepTimerState
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
@@ -179,12 +163,33 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.foundation.gestures.animateScrollBy
 import io.github.roggzuay.ondalune.data.model.AudioQuality
 import io.github.roggzuay.ondalune.ui.components.AudioQualityChip
 import io.github.roggzuay.ondalune.ui.components.AudioDetailsSheet
+import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material3.IconToggleButtonShapes
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.util.lerp
+import android.os.Build
+import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Floating Pill/Squircle Mini-Player docked above the bottom navigation dock.
@@ -400,19 +405,17 @@ fun FloatingExpressiveMiniPlayer(
 }
 
 /**
- * Full-Screen Adaptive Opaque Material 3 Expressive Now Playing Studio Sheet.
+ * The full-screen player. The cover is its backdrop: full width at the top, melting into the
+ * background where the title and controls begin. Lyrics take the cover's place, over the same
+ * picture blurred and dimmed, while everything below stays where it is.
  *
- * Dynamically adapts to screen ratio and form factor:
- * - Supports vertical swipe-down-to-dismiss anywhere on the screen (including over the artwork)
- *   while still allowing taps on the artwork to morph its shape.
- * - Uses the user's chosen `PlayerBackgroundAnimationStyle` and respects `unifiedMaterialYouColor`.
- * - Slides the "Up Next Queue" up from the bottom as a partial Material 3 Bottom Sheet (~62% height)
- *   without covering the whole screen when the bottom-left Play Next button is pressed.
+ * Pulling down anywhere closes it into the mini player; the Up Next queue slides up as a partial
+ * bottom sheet.
  */
 @Composable
 fun NowPlayingStudioOverlay(
     sheet: PlayerSheetState,
-    /** The quality line under the cover; null hides it (setting off, or nothing known). */
+    /** The quality chip under the seek bar; null hides it (setting off, or nothing known). */
     audioQuality: AudioQuality? = null,
     spatialAudio: () -> Boolean? = { null },
     dolbyDecoders: List<String> = emptyList(),
@@ -421,20 +424,20 @@ fun NowPlayingStudioOverlay(
     isPlaying: Boolean,
     isBuffering: Boolean,
     positionMs: Long,
+    /** The position being heard right now; the lyrics follow this, not [positionMs]. */
+    audiblePositionMs: () -> Long,
     durationMs: Long,
     speedPitchState: SpeedPitchState,
     sleepTimerState: SleepTimerState,
     shuffleEnabled: Boolean,
     repeatOneEnabled: Boolean,
     animatedWaveEnabled: Boolean,
-    artworkShapeMode: ArtworkShapeMode,
     activeTab: NowPlayingSheetTab,
     lyrics: List<LyricLine>,
     queue: List<SubsonicTrack>,
     eqPreset: EqualizerPreset,
     onCollapse: () -> Unit,
     onSelectTab: (NowPlayingSheetTab) -> Unit,
-    onCycleArtworkShape: () -> Unit,
     onTogglePlay: () -> Unit,
     onSkipPrevious: () -> Unit,
     onSkipNext: () -> Unit,
@@ -460,8 +463,6 @@ fun NowPlayingStudioOverlay(
         availability = if (lyrics.isNotEmpty()) LyricsAvailability.SYNCED else LyricsAvailability.UNAVAILABLE,
         syncedLines = lyrics
     ),
-    reverbProcessingMode: ReverbProcessingMode = ReverbProcessingMode.BYPASSED_DRY,
-    isPlayingOfflineFile: Boolean = false,
     download: PlayerDownload? = null,
     onRemoveQueueTrack: (String) -> Unit = {},
     onMoveQueueTrack: (Int, Int) -> Unit = { _, _ -> },
@@ -479,14 +480,12 @@ fun NowPlayingStudioOverlay(
         AudioDetailsSheet(audioQuality, remember { spatialAudio() }, dolbyDecoders, onDismiss = { showAudioDetails = false })
     }
     BackHandler {
-        if (isUpNextBottomSheetOpen) {
-            onSelectTab(NowPlayingSheetTab.COVER)
-        } else {
-            onCollapse()
-        }
+        if (activeTab != NowPlayingSheetTab.COVER) onSelectTab(NowPlayingSheetTab.COVER) else onCollapse()
     }
 
-    val artworkPulse = remember { Animatable(1f) }
+    val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
+    // The position ticks several times a second: nothing below reads it but the seek bar.
+    val position = rememberUpdatedState(positionMs)
     val scope = rememberCoroutineScope()
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
 
@@ -537,8 +536,21 @@ fun NowPlayingStudioOverlay(
         ) {
             val availWidth = maxWidth
             val availHeight = maxHeight
-            val isWideOrLandscape = availWidth >= 680.dp || availWidth > availHeight * 1.08f
-            val isUltraTallPortrait = !isWideOrLandscape && (availHeight / availWidth.coerceAtLeast(1.dp)) >= 1.92f
+            val wide = availWidth > availHeight * 1.08f
+            // The cover is a full-width square at the top, or the leading pane of a window that is
+            // wider than it is tall.
+            val heroWidth = if (wide) minOf(availHeight, availWidth * 0.58f) else availWidth
+            val heroHeight = if (wide) availHeight else availWidth
+            val sidePadding = if (availWidth < 380.dp) 16.dp else 22.dp
+            val insets = WindowInsets.safeDrawing.asPaddingValues()
+            // Where the controls begin, in root pixels: the cover has faded out by this line.
+            var controlsTop by remember { mutableFloatStateOf(Float.NaN) }
+            // Read in layer and draw blocks only: it moves every frame of the change.
+            val lyricsShown = animateFloatAsState(
+                targetValue = if (lyricsOpen) 1f else 0f,
+                animationSpec = tween(420, easing = FastOutSlowInEasing),
+                label = "lyricsShown"
+            )
 
             Box(
                 Modifier
@@ -556,206 +568,126 @@ fun NowPlayingStudioOverlay(
                 )
             }
 
-            Column(
+            PlayerHero(
+                sheet = sheet,
+                track = track,
+                queue = queue,
+                wide = wide,
+                lyricsOpen = lyricsOpen,
+                lyricsShown = { lyricsShown.value },
+                controlsTop = { controlsTop },
+                topBarHeight = insets.calculateTopPadding() + 60.dp,
+                sizePx = with(LocalDensity.current) { max(heroWidth, heroHeight).roundToPx() },
+                onSkipNext = onSkipNext,
+                onSkipPrevious = onSwipePrevious,
+                onSwipeDownDelta = onSwipeDownDelta,
+                onSwipeDownFinish = onSwipeDownFinish,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .widthIn(max = if (isWideOrLandscape) 1160.dp else 620.dp)
-                    .padding(
-                        horizontal = if (isWideOrLandscape) 32.dp else 22.dp,
-                        vertical = if (isUltraTallPortrait) 18.dp else 10.dp
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+                    .align(if (wide) Alignment.TopStart else Alignment.TopCenter)
+                    .size(heroWidth, heroHeight)
+            )
+
+            val topBar = @Composable {
                 Box(openingContent) {
-                    NowPlayingTopHeaderBar(
+                    PlayerTopBar(
                         server = server,
-                        track = track,
-                        activeTab = activeTab,
-                        eqPreset = eqPreset,
                         playingFromPlaylist = playingFromPlaylist,
+                        soundShaped = eqPreset != EqualizerPreset.FLAT_STUDIO,
+                        speedShaped = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing,
+                        showSpeedResetHint = showSpeedResetHint,
                         onCollapse = onCollapse,
-                        onSelectTab = onSelectTab,
                         onOpenPlaylist = onOpenPlaylist,
-                        onOpenSonicLab = onOpenSonicLab
+                        onOpenSonicLab = onOpenSonicLab,
+                        onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
+                        onResetSpeedPitch = onResetSpeedPitch,
+                        onSpeedResetHintShown = onSpeedResetHintShown
                     )
                 }
-
-                Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 18.dp else 10.dp))
-
-                if (isWideOrLandscape) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            }
+            // The lyrics come up where the cover is; nothing below them moves.
+            val lyricsSlot = @Composable { slot: Modifier ->
+                Box(slot) {
+                    AnimatedVisibility(
+                        visible = lyricsOpen,
+                        enter = fadeIn(tween(320, delayMillis = 80)) +
+                            slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it / 10 },
+                        exit = fadeOut(tween(200))
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            NowPlayingCenterStage(
-                                sheet = sheet,
-                                quality = audioQuality,
-                                onShowQuality = { showAudioDetails = true },
-                                activeTab = activeTab,
-                                track = track,
-                                artworkShapeMode = artworkShapeMode,
-                                isPlaying = isPlaying,
-                                maxArtworkSize = minOf(availWidth * 0.42f, availHeight * 0.68f),
-                                artworkPulse = artworkPulse.value,
-                                lyrics = lyrics,
-                                lyricsResult = lyricsResult,
-                                positionMs = positionMs,
-                                queue = queue,
-                                shuffleMode = shuffleMode,
-                                onTriggerPulseAndCycleShape = {
-                                    scope.launch {
-                                        artworkPulse.snapTo(1.06f)
-                                        artworkPulse.animateTo(
-                                            1f,
-                                            spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)
-                                        )
-                                    }
-                                    onCycleArtworkShape()
-                                },
-                                onSwipeDownDelta = onSwipeDownDelta,
-                                onSwipeDownFinish = onSwipeDownFinish,
-                                onSkipNext = onSkipNext,
-                                onSkipPrevious = onSwipePrevious,
-                                onSeek = onSeek,
-                                onPlayQueueTrack = onPlayQueueTrack
-                            )
-                        }
+                        SyncedLyricsPane(
+                            lyrics = lyrics,
+                            lyricsResult = lyricsResult,
+                            audiblePositionMs = audiblePositionMs,
+                            isPlaying = isPlaying,
+                            onSeekToLyric = onSeek,
+                            modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha }
+                        )
+                    }
+                }
+            }
+            val controls = @Composable { area: Modifier ->
+                Box(
+                    modifier = area.onGloballyPositioned { controlsTop = it.positionInRoot().y },
+                    propagateMinConstraints = true
+                ) {
+                    PlayerControls(
+                        track = track,
+                        isPlaying = isPlaying,
+                        isBuffering = isBuffering,
+                        positionMs = { position.value },
+                        durationMs = durationMs,
+                        audioQuality = audioQuality,
+                        sleepTimerActive = sleepTimerState.isActive,
+                        shuffleEnabled = shuffleEnabled,
+                        shuffleMode = shuffleMode,
+                        repeatOneEnabled = repeatOneEnabled,
+                        animatedWaveEnabled = animatedWaveEnabled,
+                        showRemainingTime = showRemainingTime,
+                        showStarButton = showPlayerStarButton,
+                        activeTab = activeTab,
+                        download = download,
+                        onSelectTab = onSelectTab,
+                        onTogglePlay = onTogglePlay,
+                        onSkipPrevious = onSkipPrevious,
+                        onSkipNext = onSkipNext,
+                        onSeek = onSeek,
+                        onToggleShuffle = onToggleShuffle,
+                        onToggleRepeatOne = onToggleRepeatOne,
+                        onToggleStar = onToggleStar,
+                        onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                        onOpenArtist = onOpenArtist,
+                        onOpenAudioDetails = { showAudioDetails = true },
+                        modifier = openingContent
+                    )
+                }
+            }
 
-                        Column(
-                            modifier = Modifier
-                                .weight(1.05f)
-                                .fillMaxHeight()
-                                .then(openingContent),
-                            verticalArrangement = Arrangement.SpaceEvenly,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            NowPlayingControlsColumn(
-                                track = track,
-                                isPlaying = isPlaying,
-                                isBuffering = isBuffering,
-                                positionMs = positionMs,
-                                durationMs = durationMs,
-                                speedPitchState = speedPitchState,
-                                reverbState = reverbState,
-                                reverbProcessingMode = reverbProcessingMode,
-                                isPlayingOfflineFile = isPlayingOfflineFile,
-                                download = download,
-                                sleepTimerState = sleepTimerState,
-                                shuffleEnabled = shuffleEnabled,
-                                shuffleMode = shuffleMode,
-                                repeatOneEnabled = repeatOneEnabled,
-                                animatedWaveEnabled = animatedWaveEnabled,
-                                showRemainingTime = showRemainingTime,
-                                showPlayerStarButton = showPlayerStarButton,
-                                activeTab = activeTab,
-                                isUltraTallPortrait = false,
-                                onSelectTab = onSelectTab,
-                                onTogglePlay = onTogglePlay,
-                                onSkipPrevious = onSkipPrevious,
-                                onSkipNext = onSkipNext,
-                                onSeek = onSeek,
-                                onToggleShuffle = onToggleShuffle,
-                                onToggleRepeatOne = onToggleRepeatOne,
-                                onToggleStar = onToggleStar,
-                                onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
-                                onResetSpeedPitch = onResetSpeedPitch,
-                                showSpeedResetHint = showSpeedResetHint,
-                                onSpeedResetHintShown = onSpeedResetHintShown,
-                                onOpenSleepTimerSheet = onOpenSleepTimerSheet,
-                                onOpenArtist = onOpenArtist
-                            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = sidePadding, vertical = 10.dp)
+            ) {
+                if (wide) {
+                    Row(Modifier.fillMaxSize()) {
+                        Column(Modifier.width(heroWidth - sidePadding - insets.calculateStartPadding(LocalLayoutDirection.current))) {
+                            topBar()
+                            lyricsSlot(Modifier.weight(1f).fillMaxWidth())
+                        }
+                        Spacer(Modifier.width(sidePadding))
+                        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            controls(Modifier.widthIn(max = 520.dp).heightIn(max = 460.dp).fillMaxHeight())
                         }
                     }
                 } else {
-                    val portraitArtSize = minOf(availWidth * 0.84f, availHeight * if (isUltraTallPortrait) 0.43f else 0.39f)
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        NowPlayingCenterStage(
-                            sheet = sheet,
-                            quality = audioQuality,
-                            onShowQuality = { showAudioDetails = true },
-                            activeTab = activeTab,
-                            track = track,
-                            artworkShapeMode = artworkShapeMode,
-                            isPlaying = isPlaying,
-                            maxArtworkSize = portraitArtSize,
-                            artworkPulse = artworkPulse.value,
-                            lyrics = lyrics,
-                            lyricsResult = lyricsResult,
-                            positionMs = positionMs,
-                            queue = queue,
-                            shuffleMode = shuffleMode,
-                            onTriggerPulseAndCycleShape = {
-                                scope.launch {
-                                    artworkPulse.snapTo(1.06f)
-                                    artworkPulse.animateTo(
-                                        1f,
-                                        spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)
-                                    )
-                                }
-                                onCycleArtworkShape()
-                            },
-                            onSwipeDownDelta = onSwipeDownDelta,
-                            onSwipeDownFinish = onSwipeDownFinish,
-                            onSkipNext = onSkipNext,
-                            onSkipPrevious = onSwipePrevious,
-                            onSeek = onSeek,
-                            onPlayQueueTrack = onPlayQueueTrack
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Box(openingContent) {
-                        NowPlayingControlsColumn(
-                            track = track,
-                            isPlaying = isPlaying,
-                            isBuffering = isBuffering,
-                            positionMs = positionMs,
-                            durationMs = durationMs,
-                            speedPitchState = speedPitchState,
-                            reverbState = reverbState,
-                            reverbProcessingMode = reverbProcessingMode,
-                            isPlayingOfflineFile = isPlayingOfflineFile,
-                            download = download,
-                            sleepTimerState = sleepTimerState,
-                            shuffleEnabled = shuffleEnabled,
-                            shuffleMode = shuffleMode,
-                            repeatOneEnabled = repeatOneEnabled,
-                            animatedWaveEnabled = animatedWaveEnabled,
-                            showRemainingTime = showRemainingTime,
-                            showPlayerStarButton = showPlayerStarButton,
-                            activeTab = activeTab,
-                            isUltraTallPortrait = isUltraTallPortrait,
-                            onSelectTab = onSelectTab,
-                            onTogglePlay = onTogglePlay,
-                            onSkipPrevious = onSkipPrevious,
-                            onSkipNext = onSkipNext,
-                            onSeek = onSeek,
-                            onToggleShuffle = onToggleShuffle,
-                            onToggleRepeatOne = onToggleRepeatOne,
-                            onToggleStar = onToggleStar,
-                            onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
-                            onResetSpeedPitch = onResetSpeedPitch,
-                            showSpeedResetHint = showSpeedResetHint,
-                            onSpeedResetHintShown = onSpeedResetHintShown,
-                            onOpenSleepTimerSheet = onOpenSleepTimerSheet,
-                            onOpenArtist = onOpenArtist
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        topBar()
+                        lyricsSlot(Modifier.weight(1f).widthIn(max = 620.dp).fillMaxWidth())
+                        // On a tall screen the controls start where the cover ends and spread out
+                        // below it; on a short one they keep their own height and overlap its fade.
+                        controls(
+                            Modifier.widthIn(max = 620.dp).heightIn(
+                                min = (availHeight - heroHeight - insets.calculateBottomPadding() + 10.dp).coerceIn(0.dp, 440.dp)
+                            )
                         )
                     }
                 }
@@ -809,188 +741,36 @@ fun NowPlayingStudioOverlay(
     }
 }
 
+/**
+ * The cover as the player's backdrop: full width at the top (the leading pane when [wide]),
+ * melting into the background where the controls begin. With the lyrics open it stays, blurred
+ * and dimmed, behind them.
+ *
+ * Dragging it sideways skips tracks; dragging it down closes the player.
+ */
 @Composable
-private fun NowPlayingTopHeaderBar(
-    server: SubsonicServerConfig,
-    track: SubsonicTrack,
-    activeTab: NowPlayingSheetTab,
-    eqPreset: EqualizerPreset,
-    playingFromPlaylist: SubsonicPlaylist?,
-    onCollapse: () -> Unit,
-    onSelectTab: (NowPlayingSheetTab) -> Unit,
-    onOpenPlaylist: (String) -> Unit,
-    onOpenSonicLab: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp)
-    ) {
-        ExpressiveBounceIconButton(
-            onClick = onCollapse,
-            size = 48.dp,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .testTag("collapse_player_button")
-        ) {
-            Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = "Minimize Player"
-            )
-        }
-
-        if (activeTab == NowPlayingSheetTab.LYRICS) {
-            // Subtle, non-intrusive compact mini-pill at the very top when viewing full-area Lyrics
-            Surface(
-                onClick = { onSelectTab(NowPlayingSheetTab.COVER) },
-                shape = cornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 58.dp)
-                    .testTag("lyrics_compact_header_pill")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ExpressiveArtwork(
-                        seedHex = track.paletteSeedHex,
-                        accentHex = track.accentHex,
-                        artStyleIndex = track.artStyleIndex,
-                        coverArtUrl = track.coverArtUrl,
-                        shapeMode = ArtworkShapeMode.SQUIRCLE,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        Text(
-                            text = track.title,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = track.artist,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        } else if (playingFromPlaylist != null) {
-            // Playing from a playlist: name it, and tapping it opens its page.
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 60.dp)
-                    .clip(cornerShape(10.dp))
-                    .clickable { onOpenPlaylist(playingFromPlaylist.id) }
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .testTag("now_playing_playlist_link"),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = "PLAYING FROM PLAYLIST",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-                Text(
-                    text = playingFromPlaylist.name,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 60.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = server.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Now Playing",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-        }
-
-        ExpressiveBounceIconButton(
-            onClick = onOpenSonicLab,
-            active = eqPreset != EqualizerPreset.FLAT_STUDIO,
-            size = 48.dp,
-            containerColor = if (eqPreset != EqualizerPreset.FLAT_STUDIO) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            },
-            contentColor = if (eqPreset != EqualizerPreset.FLAT_STUDIO) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .testTag("open_sonic_lab_pill")
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Equalizer,
-                    contentDescription = "Sonic Lab: equalizer",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NowPlayingCenterStage(
+private fun PlayerHero(
     sheet: PlayerSheetState,
-    quality: AudioQuality?,
-    onShowQuality: () -> Unit,
-    activeTab: NowPlayingSheetTab,
     track: SubsonicTrack,
-    artworkShapeMode: ArtworkShapeMode,
-    isPlaying: Boolean,
-    maxArtworkSize: Dp,
-    artworkPulse: Float,
-    lyrics: List<LyricLine>,
-    lyricsResult: TrackLyricsResult,
-    positionMs: Long,
     queue: List<SubsonicTrack>,
-    shuffleMode: ShuffleMode,
-    onTriggerPulseAndCycleShape: () -> Unit,
-    onSwipeDownDelta: (Float) -> Unit,
-    onSwipeDownFinish: (Float) -> Unit,
+    wide: Boolean,
+    lyricsOpen: Boolean,
+    lyricsShown: () -> Float,
+    controlsTop: () -> Float,
+    topBarHeight: Dp,
+    sizePx: Int,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
-    onSeek: (Long) -> Unit,
-    onPlayQueueTrack: (SubsonicTrack) -> Unit
+    onSwipeDownDelta: (Float) -> Unit,
+    onSwipeDownFinish: (Float) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val latestNext by rememberUpdatedState(onSkipNext)
     val latestPrevious by rememberUpdatedState(onSkipPrevious)
     val latestSwipeDown by rememberUpdatedState(onSwipeDownDelta)
     val latestSwipeDownFinish by rememberUpdatedState(onSwipeDownFinish)
+    val latestQueue by rememberUpdatedState(queue)
+    val latestTrack by rememberUpdatedState(track)
     val swipeHaptics = LocalHapticFeedbackManager.current
     val swipeScope = rememberCoroutineScope()
     // Horizontal offset of the cover while it is dragged or flung to the next/previous track. The
@@ -1001,17 +781,18 @@ private fun NowPlayingCenterStage(
     suspend fun animateArtTo(target: Float, spec: AnimationSpec<Float>, velocity: Float = 0f) =
         animate(artDragX, target, velocity, spec) { value, _ -> artDragX = value }
     val flingVelocity = with(LocalDensity.current) { 700.dp.toPx() }
-    // Brings a cover that left by [side] back in from the other side.
-    suspend fun slideBackIn(side: Float) {
+    // Brings a cover that left by [side] back in from the other side. [onShown] runs once it is
+    // on screen again.
+    suspend fun slideBackIn(side: Float, onShown: () -> Unit = {}) {
         artDragX = -side * sheet.fullArt.width * 0.6f
+        withFrameNanos { }
+        onShown()
         animateArtTo(0f, spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow))
     }
 
     val context = LocalContext.current
-    val artSize = maxArtworkSize.coerceIn(160.dp, 420.dp)
-    val artPx = with(LocalDensity.current) { artSize.roundToPx() }
     fun coverRequest(url: String) = artworkCacheKey(url).let { key ->
-        ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(artPx).build()
+        ImageRequest.Builder(context).data(url).memoryCacheKey(key).diskCacheKey(key).size(sizePx).build()
     }
     // Decode the neighbouring covers ahead, so a swipe lands on a cover that is already in memory
     // instead of decoding it while the new one slides in.
@@ -1025,8 +806,8 @@ private fun NowPlayingCenterStage(
 
     // The cover on screen trails [track] until the new picture has loaded (at most 0.4 s), so the
     // crossfade never fades in an empty tile. After a swipe the old cover has already left with
-    // the finger, by [swipedFrom] (-1 or 1), so it isn't shown leaving again; when the cover
-    // doesn't change (same album) it slides back in from the other side.
+    // the finger, by [swipedFrom] (-1 or 1), so it isn't shown leaving again: the new one slides
+    // in from the other side.
     var shownTrack by remember { mutableStateOf(track) }
     var swipedFrom by remember { mutableFloatStateOf(0f) }
     val exitHidden = remember { booleanArrayOf(false) }
@@ -1037,175 +818,203 @@ private fun NowPlayingCenterStage(
         if (coverChanged && track.coverArtUrl.isNotBlank()) {
             withTimeoutOrNull(400) { context.imageLoader.execute(coverRequest(track.coverArtUrl)) }
         }
-        exitHidden[0] = side != 0f
+        if (coverChanged) exitHidden[0] = side != 0f
         shownTrack = track
         if (side == 0f) return@LaunchedEffect
         swipedFrom = 0f
-        if (coverChanged) artDragX = 0f
-        else artSettle[0] = swipeScope.launch { slideBackIn(side) }
+        artSettle[0] = swipeScope.launch { slideBackIn(side) }
     }
 
-    val centerMode = if (activeTab == NowPlayingSheetTab.LYRICS) {
-        NowPlayingSheetTab.LYRICS
-    } else {
-        NowPlayingSheetTab.COVER
+    // The mini player's thumbnail hands over to this cover only while it shows as the cover.
+    DisposableEffect(sheet, lyricsOpen) {
+        sheet.coverInPlayer = !lyricsOpen
+        onDispose { sheet.coverInPlayer = false }
     }
 
-    AnimatedContent(
-        targetState = centerMode,
-        transitionSpec = {
-            (fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
-                scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)))
-                .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMedium)) + scaleOut(targetScale = 0.94f))
-        },
-        modifier = Modifier.fillMaxSize(),
-        label = "centerStageTransition"
-    ) { tab ->
-        when (tab) {
-            NowPlayingSheetTab.LYRICS -> {
-                Box(Modifier.graphicsLayer { alpha = sheet.contentAlpha }) {
-                    SyncedLyricsPane(
-                        lyrics = lyrics,
-                        lyricsResult = lyricsResult,
-                        positionMs = positionMs,
-                        onSeekToLyric = onSeek
-                    )
-                }
-            }
+    val surface = MaterialTheme.colorScheme.surface
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val topScrim = with(LocalDensity.current) { (topBarHeight + 28.dp).toPx() }
+    val overlap = with(LocalDensity.current) { 20.dp.toPx() }
+    // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
+    val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val behindLyrics by remember(lyricsShown) { derivedStateOf { lyricsShown() > 0f } }
 
-            else -> {
-                DisposableEffect(sheet) {
-                    sheet.coverInPlayer = true
-                    onDispose { sheet.coverInPlayer = false }
-                }
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // The outer box takes the gestures and stays put; the inner one moves, so
-                    // finger positions are never measured in a moving frame.
-                    // The cover gives way when the stage is short (tall phones, large display
-                    // sizes), so the quality line under it keeps its full height.
-                    Box(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .sizeIn(maxWidth = artSize, maxHeight = artSize)
-                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
-                            .onGloballyPositioned { sheet.fullArt = it.rootRect() }
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = { onTriggerPulseAndCycleShape() }
-                                )
+    // The outer box takes the gestures and stays put; the inner one moves, so finger positions are
+    // never measured in a moving frame.
+    Box(
+        modifier = modifier
+            .onGloballyPositioned { sheet.fullArt = it.rootRect() }
+            .pointerInput(Unit) {
+                // One drag detector so the gesture locks to one axis: sideways skips
+                // tracks, downwards closes the player.
+                var horizontal: Boolean? = null
+                val tracker = VelocityTracker()
+                detectDragGestures(
+                    onDragStart = {
+                        horizontal = null
+                        tracker.resetTracking()
+                        artSettle[0]?.cancel() // catch a cover that is still settling
+                    },
+                    onDragEnd = {
+                        val velocity = tracker.calculateVelocity()
+                        if (horizontal == true) {
+                            val width = size.width.toFloat()
+                            val offset = artDragX
+                            // A quick flick skips even when short; a slow drag has
+                            // to carry the cover past a fifth of its width.
+                            val direction = when {
+                                offset < -width * 0.22f || (offset < 0f && velocity.x < -flingVelocity) -> -1
+                                offset > width * 0.22f || (offset > 0f && velocity.x > flingVelocity) -> 1
+                                else -> 0
                             }
-                            .pointerInput(Unit) {
-                                // One drag detector so the gesture locks to one axis: sideways skips
-                                // tracks, downwards closes the player.
-                                var horizontal: Boolean? = null
-                                val tracker = VelocityTracker()
-                                detectDragGestures(
-                                    onDragStart = {
-                                        horizontal = null
-                                        tracker.resetTracking()
-                                        artSettle[0]?.cancel() // catch a cover that is still settling
-                                    },
-                                    onDragEnd = {
-                                        val velocity = tracker.calculateVelocity()
-                                        if (horizontal == true) {
-                                            val width = size.width.toFloat()
-                                            val offset = artDragX
-                                            // A quick flick skips even when short; a slow drag has
-                                            // to carry the cover past a fifth of its width.
-                                            val direction = when {
-                                                offset < -width * 0.22f || (offset < 0f && velocity.x < -flingVelocity) -> -1
-                                                offset > width * 0.22f || (offset > 0f && velocity.x > flingVelocity) -> 1
-                                                else -> 0
-                                            }
-                                            artSettle[0] = swipeScope.launch {
-                                                if (direction == 0) {
-                                                    animateArtTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy), velocity.x)
-                                                    return@launch
-                                                }
-                                                swipeHaptics?.performSubtleTick()
-                                                animateArtTo(direction * width * 1.1f, tween(160))
-                                                swipedFrom = direction.toFloat()
-                                                if (direction < 0) latestNext() else latestPrevious()
-                                                // Nothing to skip to: the cover comes back.
-                                                delay(700)
-                                                if (swipedFrom != 0f) {
-                                                    swipedFrom = 0f
-                                                    slideBackIn(direction.toFloat())
-                                                }
-                                            }
-                                        } else {
-                                            latestSwipeDownFinish(velocity.y)
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        if (horizontal == true) {
-                                            artSettle[0] = swipeScope.launch { animateArtTo(0f, spring()) }
-                                        } else {
-                                            latestSwipeDownFinish(0f)
-                                        }
-                                    }
-                                ) { change, amount ->
-                                    // The first delta points the way the finger left the slop
-                                    // circle. Lean sideways (up to ~56° off horizontal): a thumb's
-                                    // arc starts a little downward, and that dragged the whole
-                                    // player down instead of moving the cover.
-                                    if (horizontal == null) horizontal = abs(amount.y) <= abs(amount.x) * 1.5f
-                                    change.consume()
-                                    tracker.addPointerInputChange(change)
-                                    if (horizontal == true) artDragX += amount.x else latestSwipeDown(amount.y)
+                            artSettle[0] = swipeScope.launch {
+                                if (direction == 0) {
+                                    animateArtTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy), velocity.x)
+                                    return@launch
+                                }
+                                swipeHaptics?.performSubtleTick()
+                                animateArtTo(direction * width * 1.1f, tween(160))
+                                val side = direction.toFloat()
+                                val skip = { if (direction < 0) latestNext() else latestPrevious() }
+                                // The queue plays in order, so the cover that follows is known and
+                                // already decoded: it is sliding in before the engine is asked to
+                                // switch, which holds the main thread for a moment.
+                                val at = latestQueue.indexOfFirst { it.id == latestTrack.id }
+                                val coming = if (at < 0) null else latestQueue.getOrNull(at - direction)
+                                if (coming != null) {
+                                    exitHidden[0] = true
+                                    shownTrack = coming
+                                    slideBackIn(side, onShown = skip)
+                                    return@launch
+                                }
+                                swipedFrom = side
+                                skip()
+                                // Nothing to skip to: the cover comes back.
+                                delay(700)
+                                if (swipedFrom != 0f) {
+                                    swipedFrom = 0f
+                                    slideBackIn(side)
                                 }
                             }
-                            .testTag("cycle_art_shape_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(sheet.artTransform())
-                                .graphicsLayer {
-                                    scaleX = artworkPulse
-                                    scaleY = artworkPulse
-                                    // Straight sideways, no tilt: rotating around the centre made the
-                                    // leading edge dip, as if the cover rode a wheel.
-                                    translationX = artDragX
-                                    alpha = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
-                                }
-                        ) {
-                            // A new cover fades and grows into place while the old one recedes.
-                            AnimatedContent(
-                                targetState = shownTrack,
-                                contentKey = { it.coverKey() },
-                                transitionSpec = {
-                                    val exit = if (exitHidden[0]) ExitTransition.None else
-                                        fadeOut(tween(260)) + scaleOut(tween(320), targetScale = 0.96f)
-                                    fadeIn(tween(320, delayMillis = 60)) + scaleIn(tween(460, easing = FastOutSlowInEasing), initialScale = 0.9f) togetherWith exit
-                                },
-                                label = "coverChange"
-                            ) { shown ->
-                                // A swiped-away cover is gone from its first leaving frame (an exit
-                                // animation would still draw it once, back in the middle).
-                                val hidden = exitHidden[0] && transition.targetState == EnterExitState.PostExit
-                                ExpressiveArtwork(
-                                    seedHex = shown.paletteSeedHex,
-                                    accentHex = shown.accentHex,
-                                    artStyleIndex = shown.artStyleIndex,
-                                    coverArtUrl = shown.coverArtUrl,
-                                    shapeMode = artworkShapeMode,
-                                    isSpinning = isPlaying,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer { alpha = if (hidden) 0f else 1f }
-                                )
-                            }
+                        } else {
+                            latestSwipeDownFinish(velocity.y)
+                        }
+                    },
+                    onDragCancel = {
+                        if (horizontal == true) {
+                            artSettle[0] = swipeScope.launch { animateArtTo(0f, spring()) }
+                        } else {
+                            latestSwipeDownFinish(0f)
                         }
                     }
-                    if (quality != null) {
-                        Spacer(Modifier.height(6.dp))
-                        AudioQualityChip(quality, onClick = onShowQuality, modifier = Modifier.graphicsLayer { alpha = sheet.contentAlpha })
+                ) { change, amount ->
+                    // The first delta points the way the finger left the slop
+                    // circle. Lean sideways (up to ~56° off horizontal): a thumb's
+                    // arc starts a little downward, and that dragged the whole
+                    // player down instead of moving the cover.
+                    if (horizontal == null) horizontal = abs(amount.y) <= abs(amount.x) * 1.5f
+                    change.consume()
+                    tracker.addPointerInputChange(change)
+                    if (horizontal == true) artDragX += amount.x else latestSwipeDown(amount.y)
+                }
+            }
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(sheet.artTransform())
+                .graphicsLayer {
+                    // Straight sideways, no tilt: rotating around the centre made the leading
+                    // edge dip, as if the cover rode a wheel.
+                    translationX = artDragX
+                    val dragged = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
+                    // Behind the lyrics it is no cover for the mini player to take over, so it
+                    // fades with the rest of the player.
+                    alpha = dragged * lerp(1f, sheet.contentAlpha, lyricsShown())
+                    compositingStrategy = CompositingStrategy.Offscreen
+                    if (sheet.fraction < 1f) {
+                        clip = true
+                        shape = RoundedCornerShape(percent = ((1f - sheet.fraction) * 22f).toInt())
+                    }
+                }
+                .drawWithContent {
+                    drawContent()
+                    val shown = sheet.contentAlpha
+                    val lyric = lyricsShown()
+                    if (lyric > 0f) drawRect(surface, alpha = (if (blurs) 0.74f else 0.86f) * lyric)
+                    // Keeps the top bar readable on a bright cover.
+                    drawRect(
+                        Brush.verticalGradient(0f to surface.copy(alpha = 0.6f * shown), 1f to Color.Transparent, endY = topScrim),
+                        size = Size(size.width, topScrim)
+                    )
+                    // The cover melts into the background towards the controls. The fade comes in
+                    // with the rest of the player, so the cover leaves the mini player whole.
+                    fun kept(alpha: Float) = Color.Black.copy(alpha = lerp(1f, alpha, shown))
+                    val stops = arrayOf(0f to kept(1f), 0.4f to kept(0.6f), 0.75f to kept(0.2f), 1f to kept(0f))
+                    val fade = if (wide) {
+                        val from = size.width * 0.6f
+                        if (rtl) Brush.horizontalGradient(*stops, startX = size.width - from, endX = 0f)
+                        else Brush.horizontalGradient(*stops, startX = from, endX = size.width)
+                    } else {
+                        val edge = controlsTop().let {
+                            if (it.isNaN()) size.height else (it - sheet.fullArt.top + overlap).coerceIn(0f, size.height)
+                        }
+                        Brush.verticalGradient(*stops, startY = edge - size.height * 0.3f, endY = edge)
+                    }
+                    drawRect(fade, blendMode = BlendMode.DstIn)
+                }
+        ) {
+            // With the lyrics up the picture eases back a little, behind them.
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    val zoom = 1f + 0.06f * lyricsShown()
+                    scaleX = zoom
+                    scaleY = zoom
+                }
+            ) {
+                AnimatedContent(
+                    targetState = shownTrack,
+                    contentKey = { it.coverKey() },
+                    transitionSpec = {
+                        // The new cover comes in over the old one, which stays until it is covered:
+                        // the background never shows through between two covers.
+                        // After a swipe the slide is the transition.
+                        if (exitHidden[0]) EnterTransition.None togetherWith ExitTransition.None
+                        else fadeIn(tween(360)) + scaleIn(tween(520, easing = FastOutSlowInEasing), initialScale = 1.06f) togetherWith
+                            ExitTransition.KeepUntilTransitionsFinished
+                    },
+                    label = "coverChange"
+                ) { shown ->
+                    // A swiped-away cover is gone from its first leaving frame (an exit
+                    // animation would still draw it once, back in the middle).
+                    val hidden = exitHidden[0] && transition.targetState == EnterExitState.PostExit
+                    Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (hidden) 0f else 1f }) {
+                        ExpressiveArtwork(
+                            seedHex = shown.paletteSeedHex,
+                            accentHex = shown.accentHex,
+                            artStyleIndex = shown.artStyleIndex,
+                            coverArtUrl = shown.coverArtUrl,
+                            fullBleed = true,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        // Blurring a small copy and scaling it up is far cheaper than blurring
+                        // the full-size cover.
+                        if (blurs && behindLyrics) ExpressiveArtwork(
+                            seedHex = shown.paletteSeedHex,
+                            accentHex = shown.accentHex,
+                            artStyleIndex = shown.artStyleIndex,
+                            coverArtUrl = shown.coverArtUrl,
+                            fullBleed = true,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .requiredSize(160.dp)
+                                .graphicsLayer {
+                                    scaleX = sheet.fullArt.width / size.width
+                                    scaleY = sheet.fullArt.height / size.height
+                                    alpha = lyricsShown()
+                                }
+                                .blur(20.dp)
+                        )
                     }
                 }
             }
@@ -1216,28 +1025,154 @@ private fun NowPlayingCenterStage(
 /** Identifies the picture a track shows, so songs from one album keep the same cover on screen. */
 private fun SubsonicTrack.coverKey() = if (coverArtUrl.isBlank()) "track:$id" else artworkCacheKey(coverArtUrl)
 
+/** Over the top of the cover: close, where the music comes from, and the two sound tools. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NowPlayingControlsColumn(
+private fun PlayerTopBar(
+    server: SubsonicServerConfig,
+    playingFromPlaylist: SubsonicPlaylist?,
+    soundShaped: Boolean,
+    speedShaped: Boolean,
+    showSpeedResetHint: Boolean,
+    onCollapse: () -> Unit,
+    onOpenPlaylist: (String) -> Unit,
+    onOpenSonicLab: () -> Unit,
+    onOpenSpeedPitchSheet: () -> Unit,
+    onResetSpeedPitch: () -> Unit,
+    onSpeedResetHintShown: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ExpressiveBounceIconButton(
+            onClick = onCollapse,
+            size = 48.dp,
+            modifier = Modifier.testTag("collapse_player_button")
+        ) {
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Minimize Player")
+        }
+
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            // It sits on the cover, so it brings its own backing.
+            val backing = Modifier
+                .clip(cornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
+            if (playingFromPlaylist != null) {
+                // Playing from a playlist: name it, and tapping it opens its page.
+                Column(
+                    modifier = backing
+                        .clickable { onOpenPlaylist(playingFromPlaylist.id) }
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("now_playing_playlist_link")
+                ) {
+                    Text(
+                        text = "PLAYING FROM PLAYLIST",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = playingFromPlaylist.name,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Column(backing.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Text(
+                        text = server.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Now Playing",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        // One-time "Hold to reset" bubble, for new installs and upgrades alike. It counts as
+        // seen only once it has been on screen, so closing the player early shows it again.
+        val resetHint = rememberTooltipState(isPersistent = true)
+        LaunchedEffect(Unit) {
+            if (!showSpeedResetHint) return@LaunchedEffect
+            delay(700)
+            launch { resetHint.show() }
+            delay(4000)
+            resetHint.dismiss()
+            onSpeedResetHintShown()
+        }
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+            tooltip = { PlainTooltip { Text("Hold to reset speed & pitch") } },
+            state = resetHint,
+            // Long-press belongs to the reset, not to showing the tooltip.
+            enableUserInput = false
+        ) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                ExpressiveBounceIconButton(
+                    onClick = onOpenSpeedPitchSheet,
+                    onLongClick = onResetSpeedPitch,
+                    active = speedShaped,
+                    size = 48.dp,
+                    containerColor = if (speedShaped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = if (speedShaped) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("open_speed_pitch_pill")
+                ) {
+                    Icon(Icons.Filled.Speed, contentDescription = "Speed, Pitch & Live Reverb Settings", modifier = Modifier.size(22.dp))
+                }
+                if (speedShaped) {
+                    Box(Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                }
+            }
+        }
+
+        ExpressiveBounceIconButton(
+            onClick = onOpenSonicLab,
+            active = soundShaped,
+            size = 48.dp,
+            containerColor = if (soundShaped) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = if (soundShaped) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag("open_sonic_lab_pill")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Equalizer,
+                contentDescription = "Sonic Lab: equalizer",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+/** Everything under the cover: what is playing, where it is, and the controls. */
+@Composable
+private fun PlayerControls(
     track: SubsonicTrack,
     isPlaying: Boolean,
     isBuffering: Boolean,
-    positionMs: Long,
+    positionMs: () -> Long,
     durationMs: Long,
-    speedPitchState: SpeedPitchState,
-    reverbState: io.github.roggzuay.ondalune.data.model.ReverbState,
-    reverbProcessingMode: ReverbProcessingMode,
-    isPlayingOfflineFile: Boolean,
-    download: PlayerDownload?,
-    sleepTimerState: SleepTimerState,
+    audioQuality: AudioQuality?,
+    sleepTimerActive: Boolean,
     shuffleEnabled: Boolean,
     shuffleMode: ShuffleMode,
     repeatOneEnabled: Boolean,
     animatedWaveEnabled: Boolean,
     showRemainingTime: Boolean,
-    showPlayerStarButton: Boolean,
+    showStarButton: Boolean,
     activeTab: NowPlayingSheetTab,
-    isUltraTallPortrait: Boolean,
+    download: PlayerDownload?,
     onSelectTab: (NowPlayingSheetTab) -> Unit,
     onTogglePlay: () -> Unit,
     onSkipPrevious: () -> Unit,
@@ -1246,480 +1181,223 @@ private fun NowPlayingControlsColumn(
     onToggleShuffle: () -> Unit,
     onToggleRepeatOne: () -> Unit,
     onToggleStar: () -> Unit,
-    onOpenSpeedPitchSheet: () -> Unit,
-    onResetSpeedPitch: () -> Unit,
-    showSpeedResetHint: Boolean,
-    onSpeedResetHintShown: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
-    onOpenArtist: () -> Unit = {}
+    onOpenArtist: () -> Unit,
+    onOpenAudioDetails: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val verticalGap = if (isUltraTallPortrait) 10.dp else 7.dp
-    val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
-    val isLyricsMode = activeTab == NowPlayingSheetTab.LYRICS
-
+    val scroll = rememberScrollState()
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        // It scrolls only when it can't fit (a small window, a large font): a scrolling column
+        // would take the pull down that closes the player.
+        modifier = modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0),
+        // Spare height goes between the rows; the spacers are the least they stand apart.
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Hide the big song title and artist when Lyrics mode is active
-        // so the full-area blurred lyrics canvas is never disturbed.
-        AnimatedVisibility(visible = !isLyricsMode) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = track.title,
-                            style = MaterialTheme.typography.headlineSmallEmphasized,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = track.artist,
-                                style = MaterialTheme.typography.titleMediumEmphasized,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .clip(cornerShape(8.dp))
-                                    .clickable(onClick = onOpenArtist)
-                                    .testTag("now_playing_artist_link")
-                            )
-                            Text(
-                                text = " — ",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            val trackActions = LocalTrackActions.current
-                            Text(
-                                text = track.album,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .clip(cornerShape(8.dp))
-                                    .clickable { trackActions?.openAlbum(track) }
-                                    .testTag("now_playing_album_link")
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            modifier = Modifier.padding(top = 2.dp)
-                        ) {
-                            val downloaded = isPlayingOfflineFile || download?.state?.isCompleted == true
-                            if (downloaded) {
-                                Icon(
-                                    imageVector = Icons.Filled.DownloadDone,
-                                    contentDescription = "Downloaded",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .size(15.dp)
-                                        .testTag("now_playing_downloaded_mark")
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                            }
-                            Text(
-                                text = buildString {
-                                    append("${track.playCount} plays")
-                                    if (reverbState.isActivelyProcessing) {
-                                        append(" • ${reverbProcessingMode.label}")
-                                    }
-                                    if (downloaded) {
-                                        append(" • Downloaded")
-                                    }
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (reverbState.isActivelyProcessing || downloaded) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    if (showPlayerStarButton) {
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        IconToggleButton(
-                            checked = track.starred,
-                            onCheckedChange = { onToggleStar() },
-                            shapes = IconButtonDefaults.toggleableShapes(),
-                            modifier = Modifier
-                                .size(56.dp)
-                                .testTag("now_playing_star_button")
-                        ) {
-                            Icon(
-                                imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                contentDescription = "Star on OpenSubsonic Server"
-                            )
-                        }
-                    }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.headlineSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.artist,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .widthIn(max = 200.dp)
+                            .clip(cornerShape(8.dp))
+                            .clickable(onClick = onOpenArtist)
+                            .testTag("now_playing_artist_link")
+                    )
+                    Text(
+                        text = " — ",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val trackActions = LocalTrackActions.current
+                    Text(
+                        text = track.album,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clip(cornerShape(8.dp))
+                            .clickable { trackActions?.openAlbum(track) }
+                            .testTag("now_playing_album_link")
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(verticalGap))
+            }
+            if (showStarButton) {
+                Spacer(Modifier.width(12.dp))
+                IconToggleButton(
+                    checked = track.starred,
+                    onCheckedChange = { onToggleStar() },
+                    shapes = IconButtonDefaults.toggleableShapes(),
+                    modifier = Modifier.size(56.dp).testTag("now_playing_star_button")
+                ) {
+                    Icon(
+                        imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Star on OpenSubsonic Server"
+                    )
+                }
             }
         }
 
-        ExpressiveSquigglySlider(
+        Spacer(Modifier.height(10.dp))
+        PlayerProgress(
             positionMs = positionMs,
             durationMs = durationMs,
             isPlaying = isPlaying,
             animatedWaveEnabled = animatedWaveEnabled,
             showRemainingTime = showRemainingTime,
+            audioQuality = audioQuality,
             onSeek = onSeek,
-            activeColor = MaterialTheme.colorScheme.primary,
-            accentColor = MaterialTheme.colorScheme.tertiary
+            onOpenAudioDetails = onOpenAudioDetails
         )
 
-        Spacer(modifier = Modifier.height(verticalGap))
-
-        AnimatedVisibility(visible = !isLyricsMode) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val isDspModified = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing
-                // One-time "Hold to reset" bubble, for new installs and upgrades alike. It counts as
-                // seen only once it has been on screen, so closing the player early shows it again.
-                val resetHint = rememberTooltipState(isPersistent = true)
-                LaunchedEffect(Unit) {
-                    if (!showSpeedResetHint) return@LaunchedEffect
-                    delay(700)
-                    launch { resetHint.show() }
-                    delay(4000)
-                    resetHint.dismiss()
-                    onSpeedResetHintShown()
-                }
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    TooltipBox(
-                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                        tooltip = { PlainTooltip { Text("Hold to reset speed & pitch") } },
-                        state = resetHint,
-                        // Long-press belongs to the reset, not to showing the tooltip.
-                        enableUserInput = false
-                    ) {
-                        Box(contentAlignment = Alignment.TopEnd) {
-                            ExpressiveBounceIconButton(
-                                onClick = onOpenSpeedPitchSheet,
-                                onLongClick = onResetSpeedPitch,
-                                active = isDspModified,
-                                size = 48.dp,
-                                containerColor = if (isDspModified) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                contentColor = if (isDspModified) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.testTag("open_speed_pitch_pill")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Speed,
-                                    contentDescription = "Speed, Pitch & Live Reverb Settings",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            if (isDspModified) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(4.dp)
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary)
-                                )
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(verticalGap))
-            }
-        }
-
-        // Viscous Glue / Connected Button Group Transport Row
+        Spacer(Modifier.height(10.dp))
         ExpressiveTransportGroup(
             isPlaying = isPlaying,
             isBuffering = isBuffering,
-            shuffleEnabled = shuffleEnabled,
-            repeatOneEnabled = repeatOneEnabled,
-            onToggleShuffle = onToggleShuffle,
             onSkipPrevious = onSkipPrevious,
             onTogglePlay = onTogglePlay,
-            onSkipNext = onSkipNext,
-            onToggleRepeatOne = onToggleRepeatOne,
-            shuffleMode = shuffleMode
+            onSkipNext = onSkipNext
         )
 
-        Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 16.dp else 10.dp))
-
-        // Bottom bar, plain icons that take the accent while their panel is open:
-        // Bottom Left: Up Next Queue | Bottom Center: Synced Lyrics (Icon Only) | Bottom Right: Sleep Timer (Icon Only)
+        Spacer(Modifier.height(14.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Bottom Left: Up Next Button
-            val isQueueOpen = activeTab == NowPlayingSheetTab.QUEUE
-            IconToggleButton(
-                checked = isQueueOpen,
-                onCheckedChange = { onSelectTab(if (isQueueOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.QUEUE) },
-                shapes = IconButtonDefaults.toggleableShapes(),
-                modifier = Modifier
-                    .size(width = 64.dp, height = 52.dp)
-                    .testTag("now_playing_tab_queue")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = "Up Next Queue",
-                    modifier = Modifier.size(22.dp)
+            val haptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
+            val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
+            val queueOpen = activeTab == NowPlayingSheetTab.QUEUE
+            PlayerToggle(
+                checked = lyricsOpen,
+                onToggle = { onSelectTab(if (lyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
+                icon = Icons.Filled.Lyrics,
+                description = "Synced Lyrics",
+                tag = "now_playing_tab_lyrics",
+                modifier = Modifier.weight(1f)
+            )
+            PlayerToggle(
+                checked = queueOpen,
+                onToggle = { onSelectTab(if (queueOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.QUEUE) },
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                description = "Up Next Queue",
+                tag = "now_playing_tab_queue",
+                modifier = Modifier.weight(1f)
+            )
+            // Shuffle and repeat are one joined pair.
+            Row(Modifier.weight(2f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                val leading = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, topEnd = 6.dp, bottomEnd = 6.dp)
+                val trailing = RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp, topEnd = 24.dp, bottomEnd = 24.dp)
+                val pressed = RoundedCornerShape(10.dp)
+                PlayerToggle(
+                    checked = shuffleEnabled,
+                    onToggle = {
+                        haptics.performToggleOption(!shuffleEnabled)
+                        onToggleShuffle()
+                    },
+                    icon = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
+                    description = "Cycle Shuffle Mode (${shuffleMode.label})",
+                    tag = "shuffle_button",
+                    modifier = Modifier.weight(1f),
+                    shapes = IconButtonDefaults.toggleableShapes(leading, pressed, leading)
+                )
+                PlayerToggle(
+                    checked = repeatOneEnabled,
+                    onToggle = {
+                        haptics.performToggleOption(!repeatOneEnabled)
+                        onToggleRepeatOne()
+                    },
+                    icon = Icons.Filled.RepeatOne,
+                    description = "Toggle Repeat One",
+                    tag = "repeat_button",
+                    modifier = Modifier.weight(1f),
+                    shapes = IconButtonDefaults.toggleableShapes(trailing, pressed, trailing)
                 )
             }
-
-            // Bottom Center: Synced Lyrics Icon-Only Button (No word required)
-            val isLyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
-            IconToggleButton(
-                checked = isLyricsOpen,
-                onCheckedChange = { onSelectTab(if (isLyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
-                shapes = IconButtonDefaults.toggleableShapes(),
-                modifier = Modifier
-                    .size(width = 64.dp, height = 52.dp)
-                    .testTag("now_playing_tab_lyrics")
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Lyrics,
-                    contentDescription = "Synced Lyrics",
-                    modifier = Modifier.size(22.dp)
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopEnd) {
+                PlayerToggle(
+                    checked = sleepTimerActive,
+                    onToggle = onOpenSleepTimerSheet,
+                    icon = Icons.Filled.Bedtime,
+                    description = "Sleep Timer",
+                    tag = "open_sleep_timer_pill",
+                    modifier = Modifier.fillMaxWidth()
                 )
-            }
-
-            download?.let { PlayerDownloadButton(it) }
-
-            // Bottom Right: Sleep Timer Icon-Only Button
-            Box(contentAlignment = Alignment.TopEnd) {
-                IconToggleButton(
-                    checked = sleepTimerState.isActive,
-                    onCheckedChange = { onOpenSleepTimerSheet() },
-                    shapes = IconButtonDefaults.toggleableShapes(),
-                    modifier = Modifier
-                        .size(width = 64.dp, height = 52.dp)
-                        .testTag("open_sleep_timer_pill")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Bedtime,
-                        contentDescription = "Sleep Timer",
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                if (sleepTimerState.isActive) {
-                    Box(
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
+                if (sleepTimerActive) {
+                    Box(Modifier.padding(4.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                 }
             }
+            download?.let { PlayerDownloadButton(it, Modifier.weight(1f)) }
         }
     }
 }
 
-/**
- * Full-Area Blurred Artwork Left-Aligned Synced Lyrics Canvas with 120Hz Word-by-Word Tracking.
- * - Occupies the entire artwork stage area (`fillMaxSize()`), deeply blurring the track's cover art
- *   behind a high-contrast atmospheric scrim.
- * - Left-aligns every lyric line (`Alignment.Start`, `TextAlign.Start`).
- * - Tracks each word individually across the active lyric line with smooth color illumination,
- *   vertical lift, scale pulse, and glowing underline progression.
- */
-@OptIn(ExperimentalLayoutApi::class)
+/** The seek bar with the audio quality between the two times. Only this follows the position. */
 @Composable
-private fun SyncedLyricsPane(
-    lyrics: List<LyricLine>,
-    lyricsResult: TrackLyricsResult,
-    positionMs: Long,
-    onSeekToLyric: (Long) -> Unit
+private fun PlayerProgress(
+    positionMs: () -> Long,
+    durationMs: Long,
+    isPlaying: Boolean,
+    animatedWaveEnabled: Boolean,
+    showRemainingTime: Boolean,
+    audioQuality: AudioQuality?,
+    onSeek: (Long) -> Unit,
+    onOpenAudioDetails: () -> Unit
 ) {
-    // Line-level sync only: LRC timestamps mark when each line starts, nothing finer, so the whole
-    // current line lights up. A small lead covers the engine's progress-tick latency.
-    val activeIdx = lyrics.indexOfLast { it.timeMs <= positionMs + LyricLeadMs }.coerceAtLeast(0)
-    val listState = rememberLazyListState()
-    // Scrolling the lyrics by hand stops them following the song until 3 s after letting go.
-    val dragged by listState.interactionSource.collectIsDraggedAsState()
-    var follow by remember { mutableStateOf(true) }
-    LaunchedEffect(dragged) {
-        if (dragged) follow = false
-        else if (!follow) {
-            delay(3000)
-            follow = true
+    ExpressiveSquigglySlider(
+        positionMs = positionMs(),
+        durationMs = durationMs,
+        isPlaying = isPlaying,
+        animatedWaveEnabled = animatedWaveEnabled,
+        showRemainingTime = showRemainingTime,
+        onSeek = onSeek,
+        activeColor = MaterialTheme.colorScheme.primary,
+        accentColor = MaterialTheme.colorScheme.tertiary,
+        centerLabel = audioQuality?.let { quality ->
+            {
+                // The chip keeps its small size here; touches near it still reach it.
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                    AudioQualityChip(quality, onClick = onOpenAudioDetails)
+                }
+            }
         }
-    }
-    // One glide per line, with the same timing as the highlight, to a third of the way down.
-    LaunchedEffect(activeIdx, lyrics, follow) {
-        if (!follow || activeIdx !in lyrics.indices) return@LaunchedEffect
-        val anchor = (listState.layoutInfo.viewportSize.height * 0.32f).toInt()
-        val line = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeIdx }
-        if (line == null) listState.scrollToItem(activeIdx, -anchor)
-        else listState.animateScrollBy((line.offset - anchor).toFloat(), LyricGlide)
-    }
-
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val glow = MaterialTheme.colorScheme.primary
-    val standardStyle = LocalInterfaceStyle.current == InterfaceStyle.STANDARD
-    val lineStyle = TextStyle(
-        fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
-        fontWeight = if (standardStyle) FontWeight.Bold else FontWeight.ExtraBold,
-        fontSize = 27.sp,
-        lineHeight = 35.sp,
-        letterSpacing = (-0.3).sp
     )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("full_area_blurred_lyrics_pane")
-    ) {
-        // Lines fade out at the top and bottom edges instead of hard-clipping
-        val edgeFade = Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-            .drawWithContent {
-                drawContent()
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.10f to Color.Black,
-                        0.86f to Color.Black,
-                        1f to Color.Transparent
-                    ),
-                    blendMode = BlendMode.DstIn
-                )
-            }
-
-        when {
-            lyrics.isEmpty() && lyricsResult.plainTextLines.isNotEmpty() -> LazyColumn(
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = edgeFade.testTag("plain_unsynced_lyrics_list")
-            ) {
-                item {
-                    Text(
-                        text = "UNSYNCED LYRICS • ${lyricsResult.sourceLabel}",
-                        style = monoLabelSmall(),
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                }
-                itemsIndexed(lyricsResult.plainTextLines) { idx, plainLine ->
-                    Text(
-                        text = plainLine,
-                        style = lineStyle.copy(fontSize = 23.sp, lineHeight = 31.sp, fontWeight = FontWeight.Bold),
-                        color = onSurface.copy(alpha = 0.9f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("plain_lyric_line_$idx")
-                    )
-                }
-            }
-
-            lyrics.isEmpty() -> Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .testTag("unavailable_lyrics_state"),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Lyrics,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(38.dp)
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = "No lyrics for this track",
-                    style = MaterialTheme.typography.headlineSmallEmphasized,
-                    color = onSurface
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Your server didn't return synced or plain lyrics, and none are embedded in the file.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            else -> LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = edgeFade
-            ) {
-                itemsIndexed(lyrics) { index, line ->
-                    val isCurrent = index == activeIdx
-                    val emphasis by animateFloatAsState(
-                        targetValue = when {
-                            isCurrent -> 1f
-                            index < activeIdx -> 0.40f
-                            else -> 0.58f
-                        },
-                        animationSpec = LyricGlide,
-                        label = "lyricEmphasis"
-                    )
-                    val scale by animateFloatAsState(
-                        targetValue = if (isCurrent) 1f else 0.94f,
-                        animationSpec = LyricGlide,
-                        label = "lyricScale"
-                    )
-                    Text(
-                        text = line.text.ifBlank { "♪" },
-                        style = lineStyle.copy(
-                            shadow = if (isCurrent) Shadow(glow.copy(alpha = 0.75f), Offset(0f, 2f), 22f) else null
-                        ),
-                        color = onSurface.copy(alpha = emphasis),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                                transformOrigin = TransformOrigin(0f, 0.5f)
-                            }
-                            .clip(cornerShape(16.dp))
-                            .clickable { onSeekToLyric(line.timeMs) }
-                            .padding(vertical = 8.dp, horizontal = 8.dp)
-                            .testTag("lyric_line_$index")
-                    )
-                }
-            }
-        }
-    }
 }
 
-private const val LyricLeadMs = 200L
-private val LyricGlide = tween<Float>(520, easing = FastOutSlowInEasing)
+/** One of the tonal toggles in the player's bottom row. */
+@Composable
+private fun PlayerToggle(
+    checked: Boolean,
+    onToggle: () -> Unit,
+    icon: ImageVector,
+    description: String,
+    tag: String,
+    modifier: Modifier = Modifier,
+    shapes: IconToggleButtonShapes = IconButtonDefaults.toggleableShapes()
+) {
+    FilledTonalIconToggleButton(
+        checked = checked,
+        onCheckedChange = { onToggle() },
+        shapes = shapes,
+        modifier = modifier.height(48.dp).testTag(tag)
+    ) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+    }
+}
 
 /**
  * Material 3 Expressive Partial Bottom Sheet for the "Play Next / Up Next" Queue.
@@ -2036,21 +1714,23 @@ class PlayerDownload(
 
 /** The shared [DownloadButton] (cloud, spinner, progress ring, done) in the player's toggle shape. */
 @Composable
-private fun PlayerDownloadButton(download: PlayerDownload) {
+private fun PlayerDownloadButton(download: PlayerDownload, modifier: Modifier = Modifier) {
     val status = remember(download.state) { downloadStatusOf(listOf(download.state)) }
     DownloadButton(
         status = status,
         onDownload = download.onDownload,
         onCancel = download.onCancel,
         onResume = download.onResume,
-        onRemove = download.onRemove
+        onRemove = download.onRemove,
+        modifier = modifier
     ) { onClick, content ->
-        IconToggleButton(
+        FilledTonalIconToggleButton(
             checked = status.phase == DownloadPhase.SAVED,
             onCheckedChange = { onClick() },
             shapes = IconButtonDefaults.toggleableShapes(),
             modifier = Modifier
-                .size(width = 64.dp, height = 52.dp)
+                .fillMaxWidth()
+                .height(48.dp)
                 .testTag("now_playing_download")
         ) { content() }
     }

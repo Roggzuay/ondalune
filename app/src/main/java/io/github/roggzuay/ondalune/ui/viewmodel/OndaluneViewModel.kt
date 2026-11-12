@@ -26,7 +26,6 @@ import io.github.roggzuay.ondalune.ui.theme.resolveDynamicSurfacePalette
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
-import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
@@ -41,7 +40,6 @@ import io.github.roggzuay.ondalune.data.model.PitchCorrectionMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
 import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
-import io.github.roggzuay.ondalune.data.model.ReverbProcessingMode
 import io.github.roggzuay.ondalune.data.model.ReverbState
 import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
@@ -218,9 +216,10 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val isPlaying: StateFlow<Boolean> = audioEngine.isPlaying
     val isBuffering: StateFlow<Boolean> = audioEngine.isBuffering
     val positionMs: StateFlow<Long> = audioEngine.positionMs
+    /** The position being heard, which trails [positionMs] by the audio still queued. For lyrics. */
+    fun audiblePositionMs(): Long = audioEngine.audiblePositionMs()
     val durationMs: StateFlow<Long> = audioEngine.durationMs
     val playbackSpeed: StateFlow<Float> = audioEngine.playbackSpeed
-    val reverbProcessingMode: StateFlow<ReverbProcessingMode> = audioEngine.reverbProcessingMode
     val isPlayingOfflineFile: StateFlow<Boolean> = audioEngine.isPlayingOfflineFile
 
     private val _speedPitchState = MutableStateFlow(loadPersistedSpeedPitchState())
@@ -577,13 +576,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     private val _nowPlayingTab = MutableStateFlow(NowPlayingSheetTab.COVER)
     val nowPlayingTab: StateFlow<NowPlayingSheetTab> = _nowPlayingTab.asStateFlow()
-
-    private val _artworkShapeMode = MutableStateFlow(
-        runCatching {
-            ArtworkShapeMode.valueOf(prefs.getString("artwork_shape_mode", ArtworkShapeMode.SQUIRCLE.name)!!)
-        }.getOrDefault(ArtworkShapeMode.SQUIRCLE)
-    )
-    val artworkShapeMode: StateFlow<ArtworkShapeMode> = _artworkShapeMode.asStateFlow()
 
     private val _equalizerPreset = MutableStateFlow(
         runCatching {
@@ -1516,16 +1508,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         _nowPlayingTab.value = tab
     }
 
-    fun cycleArtworkShapeMode() {
-        val modes = ArtworkShapeMode.entries
-        val nextIdx = (modes.indexOf(_artworkShapeMode.value) + 1) % modes.size
-        _artworkShapeMode.value = modes[nextIdx]
-    }
-
-    fun setArtworkShapeMode(mode: ArtworkShapeMode) {
-        _artworkShapeMode.value = mode
-    }
-
     // =========================================================================
     // Speed (0.80x..2.00x) & Dynamic Pitch Correction Engine
     // =========================================================================
@@ -1856,7 +1838,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         resetSpeedAndPitch()
         resetReverbToDry()
         selectEqualizerPreset(EqualizerPreset.FLAT_STUDIO)
-        _artworkShapeMode.value = ArtworkShapeMode.SQUIRCLE
         audioEngine.pauseOnHeadphoneDisconnect = defaults.pauseOnHeadphoneDisconnect
         _statusBanner.value = "Restored default appearance, library & DSP settings (Servers & library preserved)"
     }

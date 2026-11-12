@@ -144,7 +144,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
-import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
 import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
@@ -394,7 +393,6 @@ fun SettingsCustomizationScreen(
     speedPitchState: SpeedPitchState,
     reverbState: ReverbState = ReverbState(),
     sleepTimerState: SleepTimerState,
-    artworkShapeMode: ArtworkShapeMode,
     activeEqPreset: EqualizerPreset,
     servers: List<SubsonicServerConfig>,
     activeServer: SubsonicServerConfig,
@@ -417,7 +415,6 @@ fun SettingsCustomizationScreen(
     onResetHomeSections: () -> Unit = {},
     onSetHarmonizeArtwork: (Boolean) -> Unit,
     onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {},
-    onSetArtworkShape: (ArtworkShapeMode) -> Unit,
     onSetAnimatedSquiggly: (Boolean) -> Unit,
     onSetHapticFeedback: (Boolean) -> Unit = {},
     onSetHighRefreshRate120Hz: (Boolean) -> Unit = {},
@@ -1590,40 +1587,6 @@ fun SettingsCustomizationScreen(
                                             )
                                         }
                                     }
-                                }
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = "Now Playing Artwork Shape",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ArtworkShapeMode.entries.forEach { shape ->
-                            val selected = shape == artworkShapeMode
-                            SpringPressableSurface(
-                                onClick = { onSetArtworkShape(shape) },
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                cornerRadius = 16.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Text(
-                                        text = shape.label.split(" ").last(),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = LocalContentColor.current
-                                    )
                                 }
                             }
                         }

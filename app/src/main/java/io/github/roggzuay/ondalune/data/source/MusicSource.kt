@@ -2,6 +2,7 @@ package io.github.roggzuay.ondalune.data.source
 
 import android.content.Context
 import io.github.roggzuay.ondalune.BuildConfig
+import io.github.roggzuay.ondalune.data.lyrics.parseLrc
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.RemotePlaylist
 import io.github.roggzuay.ondalune.data.model.SourceType
@@ -131,7 +132,7 @@ object MusicSources {
     }
 
     fun forServer(context: Context, client: OpenSubsonicClient, server: SubsonicServerConfig): MusicSource = when (server.source) {
-        SourceType.LOCAL -> LocalMusicSource(context.applicationContext, client::parseLrcString)
+        SourceType.LOCAL -> LocalMusicSource(context.applicationContext, ::parseLrc)
         SourceType.JELLYFIN -> JellyfinSource(jellyfin(context))
         SourceType.SUBSONIC -> OpenSubsonicSource(client)
     }
