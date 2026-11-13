@@ -1,15 +1,12 @@
 package io.github.roggzuay.ondalune.audio
 
-import java.nio.FloatBuffer
-import java.nio.ShortBuffer
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 /**
- * Folds multichannel 16-bit frames down to stereo the way ITU-R BS.775 describes: the centre and
+ * Folds multichannel float frames down to stereo the way ITU-R BS.775 describes: the centre and
  * the surrounds join both or one side 3 dB down, the LFE is left out, and every gain is scaled so
  * that a full-scale signal on all channels can't clip. Mono and stereo pass through unchanged, so
- * the ordinary paths stay bit-for-bit what they were. Pure arithmetic, no Android.
+ * the ordinary paths stay bit-for-bit what the decoder gave. Pure arithmetic, no Android.
  *
  * [channelMask] is the decoder's `KEY_CHANNEL_MASK` in `AudioFormat.CHANNEL_OUT_*` bits (the i-th
  * channel of a frame is the i-th set bit); 0 or a mask that doesn't match [channels] means the
@@ -40,70 +37,30 @@ internal class Downmix(val channels: Int, channelMask: Int = 0) {
     val isPassThrough: Boolean get() = channels <= 2
 
     /** Reads [frames] interleaved frames from [src] and writes stereo frames to [dst] from frame [dstOffset]. */
-    fun toStereo(src: ShortBuffer, frames: Int, dst: ShortArray, dstOffset: Int) {
-        if (channels == 1) {
-            for (f in 0 until frames) {
-                val s = src.get(f)
+    fun toStereo(src: FloatArray, frames: Int, dst: FloatArray, dstOffset: Int) {
+        when (channels) {
+            1 -> for (f in 0 until frames) {
+                val s = src[f]
                 dst[(dstOffset + f) * 2] = s
                 dst[(dstOffset + f) * 2 + 1] = s
             }
-            return
-        }
-        if (channels == 2) {
-            for (f in 0 until frames) {
-                dst[(dstOffset + f) * 2] = src.get(f * 2)
-                dst[(dstOffset + f) * 2 + 1] = src.get(f * 2 + 1)
-            }
-            return
-        }
-        for (f in 0 until frames) {
-            var l = 0f
-            var r = 0f
-            val base = f * channels
-            for (c in 0 until channels) {
-                val s = src.get(base + c).toFloat()
-                l += s * gainL[c]
-                r += s * gainR[c]
-            }
-            dst[(dstOffset + f) * 2] = l.roundToInt().coerceIn(-32768, 32767).toShort()
-            dst[(dstOffset + f) * 2 + 1] = r.roundToInt().coerceIn(-32768, 32767).toShort()
-        }
-    }
-
-    /** As the 16-bit [toStereo], for decoders that put out float samples (full scale = ±1). */
-    fun toStereo(src: FloatBuffer, frames: Int, dst: ShortArray, dstOffset: Int) {
-        for (f in 0 until frames) {
-            var l: Float
-            var r: Float
-            when (channels) {
-                1 -> {
-                    l = src.get(f)
-                    r = l
+            2 -> System.arraycopy(src, 0, dst, dstOffset * 2, frames * 2)
+            else -> for (f in 0 until frames) {
+                var l = 0f
+                var r = 0f
+                val base = f * channels
+                for (c in 0 until channels) {
+                    val s = src[base + c]
+                    l += s * gainL[c]
+                    r += s * gainR[c]
                 }
-                2 -> {
-                    l = src.get(f * 2)
-                    r = src.get(f * 2 + 1)
-                }
-                else -> {
-                    l = 0f
-                    r = 0f
-                    val base = f * channels
-                    for (c in 0 until channels) {
-                        val s = src.get(base + c)
-                        l += s * gainL[c]
-                        r += s * gainR[c]
-                    }
-                }
+                dst[(dstOffset + f) * 2] = l
+                dst[(dstOffset + f) * 2 + 1] = r
             }
-            dst[(dstOffset + f) * 2] = toPcm16(l)
-            dst[(dstOffset + f) * 2 + 1] = toPcm16(r)
         }
     }
 
     companion object {
-        private fun toPcm16(sample: Float): Short =
-            if (sample.isNaN()) 0 else (sample.coerceIn(-1f, 1f) * 32767f).roundToInt().toShort()
-
         // AudioFormat.CHANNEL_OUT_* values, kept here so the arithmetic needs no Android classes.
         const val FRONT_LEFT = 0x4
         const val FRONT_RIGHT = 0x8

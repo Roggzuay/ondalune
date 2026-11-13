@@ -425,15 +425,15 @@ class ExampleRobolectricTest {
 
         // Generate a short impulse + sine burst stereo PCM16 frame chunk
         val frames = 2048
-        val sourcePcm = ShortArray(frames * 2) { idx ->
+        val sourcePcm = FloatArray(frames * 2) { idx ->
             val frame = idx / 2
-            if (frame < 512) (kotlin.math.sin(frame * 0.15) * 16000).toInt().toShort() else 0
+            if (frame < 512) (kotlin.math.sin(frame * 0.15) * 0.5).toFloat() else 0f
         }
         val immutableCopy = sourcePcm.clone()
         val workingBuffer = sourcePcm.clone()
 
-        engine.processRealtimePcm16StereoChunk(
-            pcm16Stereo = workingBuffer,
+        engine.processRealtimeStereoChunk(
+            samples = workingBuffer,
             frameCount = frames,
             sampleRate = 22050,
             dsp = dsp,
@@ -443,7 +443,7 @@ class ExampleRobolectricTest {
         // Verify source buffer was not mutated and reverb tail energy exists in frames 800..1900
         assertTrue(sourcePcm.contentEquals(immutableCopy))
         val tailEnergy = (800 until 1900).sumOf { frame ->
-            kotlin.math.abs(workingBuffer[frame * 2].toInt()) + kotlin.math.abs(workingBuffer[frame * 2 + 1].toInt())
+            kotlin.math.abs(workingBuffer[frame * 2].toDouble()) + kotlin.math.abs(workingBuffer[frame * 2 + 1].toDouble())
         }
         assertTrue("Expected non-zero stereo reverb tail energy in real-time PCM output, got $tailEnergy", tailEnergy > 0)
         engine.release()

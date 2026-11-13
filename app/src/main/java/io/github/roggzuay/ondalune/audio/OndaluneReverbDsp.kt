@@ -5,6 +5,7 @@ import io.github.roggzuay.ondalune.data.model.ReverbState
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -36,8 +37,12 @@ data class EnvironmentalReverbHardwareParams(
  * - Soft-knee output protection ensuring finite, non-clipping output (`[-1.0f, 1.0f]`) under all input conditions
  */
 class OndaluneReverbDspProcessor(
-    val sampleRate: Int = 44100
+    sampleRate: Int = 44100
 ) {
+    /** The rate the delay lines and filters are built for; see [updateState]. */
+    var sampleRate = sampleRate.coerceIn(8000, 384000)
+        private set
+
     companion object {
         private val BASE_COMB_TUNINGS_44K1 = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617)
         private val BASE_ALLPASS_TUNINGS_44K1 = intArrayOf(556, 441, 341, 225)
@@ -106,30 +111,41 @@ class OndaluneReverbDspProcessor(
 
     private val numCombs = BASE_COMB_TUNINGS_44K1.size
     private val numAllpasses = BASE_ALLPASS_TUNINGS_44K1.size
-    private val rateScale = (sampleRate.coerceIn(8000, 192000).toFloat() / 44100f)
-    private val stereoSpread = max(1, (STEREO_SPREAD_44K1 * rateScale).toInt())
 
-    // Pre-allocated left/right comb delay lines and filter states (zero allocation in audio loop)
-    private val combBuffersL = Array(numCombs) { idx ->
-        FloatArray(max(64, (BASE_COMB_TUNINGS_44K1[idx] * rateScale).toInt()))
-    }
-    private val combBuffersR = Array(numCombs) { idx ->
-        FloatArray(max(64, (BASE_COMB_TUNINGS_44K1[idx] * rateScale).toInt() + stereoSpread))
-    }
+    // Left/right comb and all-pass delay lines, sized for [sampleRate] so the room keeps its size in
+    // seconds; rebuilt only when the rate changes (zero allocation in the audio loop).
+    private var combBuffersL = emptyArray<FloatArray>()
+    private var combBuffersR = emptyArray<FloatArray>()
     private val combIndexL = IntArray(numCombs)
     private val combIndexR = IntArray(numCombs)
     private val combFilterStoreL = FloatArray(numCombs)
     private val combFilterStoreR = FloatArray(numCombs)
-
-    // Pre-allocated left/right all-pass delay lines
-    private val allpassBuffersL = Array(numAllpasses) { idx ->
-        FloatArray(max(32, (BASE_ALLPASS_TUNINGS_44K1[idx] * rateScale).toInt()))
-    }
-    private val allpassBuffersR = Array(numAllpasses) { idx ->
-        FloatArray(max(32, (BASE_ALLPASS_TUNINGS_44K1[idx] * rateScale).toInt() + stereoSpread))
-    }
+    private var allpassBuffersL = emptyArray<FloatArray>()
+    private var allpassBuffersR = emptyArray<FloatArray>()
     private val allpassIndexL = IntArray(numAllpasses)
     private val allpassIndexR = IntArray(numAllpasses)
+
+    // The per-sample damping filter and parameter smoothing were tuned at 44.1 kHz; these keep
+    // their corner frequency and time constant the same at other rates.
+    private var dampExponent = 1f
+    private var smoothing = SMOOTHING_COEFF
+
+    private fun buildForRate() {
+        val rateScale = sampleRate / 44100f
+        val spread = max(1, (STEREO_SPREAD_44K1 * rateScale).toInt())
+        combBuffersL = Array(numCombs) { FloatArray(max(64, (BASE_COMB_TUNINGS_44K1[it] * rateScale).toInt())) }
+        combBuffersR = Array(numCombs) { FloatArray(max(64, (BASE_COMB_TUNINGS_44K1[it] * rateScale).toInt() + spread)) }
+        allpassBuffersL = Array(numAllpasses) { FloatArray(max(32, (BASE_ALLPASS_TUNINGS_44K1[it] * rateScale).toInt())) }
+        allpassBuffersR = Array(numAllpasses) { FloatArray(max(32, (BASE_ALLPASS_TUNINGS_44K1[it] * rateScale).toInt() + spread)) }
+        combIndexL.fill(0)
+        combIndexR.fill(0)
+        combFilterStoreL.fill(0f)
+        combFilterStoreR.fill(0f)
+        allpassIndexL.fill(0)
+        allpassIndexR.fill(0)
+        dampExponent = 44100f / sampleRate
+        smoothing = onePoleCoeffAt(SMOOTHING_COEFF, sampleRate)
+    }
 
     // Target and smoothed DSP parameters
     @Volatile
@@ -153,6 +169,7 @@ class OndaluneReverbDspProcessor(
     private var smoothedDamp1: Float = 0.2f
 
     init {
+        buildForRate()
         updateParameters(ReverbState(), snapImmediately = true)
     }
 
@@ -173,7 +190,7 @@ class OndaluneReverbDspProcessor(
             targetDryGain = 1.0f
             val combinedRoom = ((safe.roomSize * 0.5f) + (safe.decay * 0.5f)).coerceIn(0f, 1f)
             targetFeedback = (OFFSET_ROOM + (combinedRoom * SCALE_ROOM)).coerceIn(0.65f, 0.965f)
-            targetDamp1 = (safe.damping * SCALE_DAMP).coerceIn(0.02f, 0.48f)
+            targetDamp1 = (safe.damping * SCALE_DAMP).coerceIn(0.02f, 0.48f).pow(dampExponent)
         } else {
             val wet = safe.wetDryMix.coerceIn(0f, 1f)
             // Equal-power / constant-clarity wet/dry curve
@@ -181,7 +198,7 @@ class OndaluneReverbDspProcessor(
             targetWetGain = wet * 2.6f
             val combinedRoom = ((safe.roomSize * 0.48f) + (safe.decay * 0.52f)).coerceIn(0f, 1f)
             targetFeedback = (OFFSET_ROOM + (combinedRoom * SCALE_ROOM)).coerceIn(0.68f, 0.972f)
-            targetDamp1 = (safe.damping * SCALE_DAMP).coerceIn(0.02f, 0.48f)
+            targetDamp1 = (safe.damping * SCALE_DAMP).coerceIn(0.02f, 0.48f).pow(dampExponent)
         }
 
         if (snapImmediately) {
@@ -192,8 +209,19 @@ class OndaluneReverbDspProcessor(
         }
     }
 
+    /** [newState] at [sampleRate]; a new rate rebuilds the delay lines (silent tail) for it. */
     fun updateState(newState: ReverbState, sampleRate: Int = this.sampleRate) {
+        setSampleRate(sampleRate)
         updateParameters(newState, snapImmediately = false)
+    }
+
+    @Synchronized
+    fun setSampleRate(rate: Int) {
+        val clean = rate.coerceIn(8000, 384000)
+        if (clean == sampleRate) return
+        sampleRate = clean
+        buildForRate()
+        updateParameters(currentState, snapImmediately = true)
     }
 
     /**
@@ -271,10 +299,10 @@ class OndaluneReverbDspProcessor(
             val inR = if (rawR.isFinite()) rawR.coerceIn(-1f, 1f) else 0f
 
             // Per-sample parameter smoothing
-            smoothedWetGain += (tWet - smoothedWetGain) * SMOOTHING_COEFF
-            smoothedDryGain += (tDry - smoothedDryGain) * SMOOTHING_COEFF
-            smoothedFeedback += (tFb - smoothedFeedback) * SMOOTHING_COEFF
-            smoothedDamp1 += (tDamp - smoothedDamp1) * SMOOTHING_COEFF
+            smoothedWetGain += (tWet - smoothedWetGain) * smoothing
+            smoothedDryGain += (tDry - smoothedDryGain) * smoothing
+            smoothedFeedback += (tFb - smoothedFeedback) * smoothing
+            smoothedDamp1 += (tDamp - smoothedDamp1) * smoothing
             val damp2 = 1.0f - smoothedDamp1
 
             val monoExciter = (inL + inR) * FIXED_INPUT_GAIN
@@ -336,29 +364,6 @@ class OndaluneReverbDspProcessor(
     }
 
     /**
-     * Processes 16-bit signed stereo PCM samples (`ShortArray`) in-place.
-     */
-    @Synchronized
-    fun processStereoInterleavedPcm16(
-        pcmSamples: ShortArray,
-        frameCount: Int = pcmSamples.size / 2
-    ) {
-        val safeFrames = min(frameCount, pcmSamples.size / 2)
-        if (safeFrames <= 0) return
-        if (!currentState.isActivelyProcessing && smoothedWetGain < 1e-5f) return
-
-        val floatWorkspace = FloatArray(safeFrames * 2)
-        for (i in 0 until safeFrames * 2) {
-            floatWorkspace[i] = (pcmSamples[i].toFloat() / 32768.0f).coerceIn(-1f, 1f)
-        }
-        processStereoInterleavedFloat(floatWorkspace, safeFrames)
-        for (i in 0 until safeFrames * 2) {
-            val scaled = (floatWorkspace[i] * 32767.0f).toInt().coerceIn(-32767, 32767)
-            pcmSamples[i] = scaled.toShort()
-        }
-    }
-
-    /**
      * Soft-knee studio limiter ensuring output never exceeds `[-1.0f, 1.0f]` and never returns NaN/Inf.
      */
     private fun softClipLimit(x: Float): Float {
@@ -371,3 +376,10 @@ class OndaluneReverbDspProcessor(
         return if (x >= 0f) compressed.coerceAtMost(1.0f) else (-compressed).coerceAtLeast(-1.0f)
     }
 }
+
+/**
+ * A one-pole filter coefficient tuned at 44.1 kHz, worked out again for [sampleRate] so the filter
+ * keeps its corner frequency (or time constant) in Hz rather than in samples.
+ */
+internal fun onePoleCoeffAt(coeffAt44k1: Float, sampleRate: Int): Float =
+    if (sampleRate == 44100) coeffAt44k1 else 1f - (1f - coeffAt44k1).pow(44100f / sampleRate.coerceAtLeast(1))

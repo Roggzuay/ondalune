@@ -24,11 +24,13 @@ data class OpenedStream(
     val channels: Int,
     val bitrate: Int,
     val bitsPerSample: Int,
-    /** Ondalune's own 16-bit stereo pipeline (true) or Android's MediaPlayer (false). */
+    /** Ondalune's own 32-bit float stereo pipeline (true) or Android's MediaPlayer (false). */
     val ownPipeline: Boolean,
     val outputSampleRate: Int,
     /** The untouched Dolby stream goes to the phone's own Dolby engine; nothing of Ondalune's applies. */
-    val dolbyEngine: Boolean = false
+    val dolbyEngine: Boolean = false,
+    /** Bits per sample the decoder gives the engine (32 for float); 0 when not known. */
+    val decodedBits: Int = 0
 )
 
 private val losslessSuffixes = setOf("FLAC", "ALAC", "WAV", "AIFF", "AIF", "APE", "WV", "DSF", "DFF")
@@ -184,8 +186,9 @@ fun audioQualityOf(
         } ?: return null
     }
 
-    val outputBits = if (opened?.ownPipeline == true) 16 else 0
-    val reduced = sourceLossless && track.bitDepth > outputBits && outputBits > 0
+    // The engine carries float all the way, so only a decoder that gives fewer bits can reduce a song.
+    val decodedBits = if (opened?.ownPipeline == true && !converted) opened.decodedBits else 0
+    val reduced = sourceLossless && decodedBits > 0 && track.bitDepth > decodedBits
     val tag = when {
         converted -> "Converted"
         sourceLossless && processing.isEmpty() && !reduced -> "Lossless"
@@ -226,9 +229,16 @@ fun audioQualityOf(
                 }
                 opened.ownPipeline -> {
                     add("Path" to "Ondalune's audio engine")
-                    add("Format" to listOfNotNull("16-bit PCM", opened.outputSampleRate.takeIf { it > 0 }?.let(::khz), "stereo").joinToString(" · "))
-                    if (reduced) add("Note" to "This ${track.bitDepth}-bit song plays as 16-bit")
+                    add("Format" to listOfNotNull("32-bit float", opened.outputSampleRate.takeIf { it > 0 }?.let(::khz), "stereo").joinToString(" · "))
+                    if (reduced) add("Note" to "This phone's decoder gives $decodedBits-bit for this ${track.bitDepth}-bit song")
+                    if (converted && track.bitDepth > 0) add("Note" to "A converted copy plays, so the file's ${track.bitDepth}-bit depth doesn't reach the phone")
                     if (opened.channels > 2) add("Note" to "${channelName(opened.channels)} audio is mixed down to stereo (centre and surrounds folded in, LFE left out)")
+                    // Past the app: Android mixes at the output's own rate, and Bluetooth re-encodes.
+                    if (outputDevice?.startsWith("Bluetooth") == true) {
+                        add("Note" to "Bluetooth re-encodes the audio for the headphones, which lowers its resolution")
+                    } else if (opened.outputSampleRate > 48000) {
+                        add("Note" to "Android may resample it to the output's own rate (often 48 kHz)")
+                    }
                 }
                 else -> add("Path" to "Android's media player")
             }

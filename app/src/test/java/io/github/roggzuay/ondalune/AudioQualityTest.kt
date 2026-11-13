@@ -14,8 +14,8 @@ class AudioQualityTest {
         id = "s", serverId = 1, title = "T", artist = "A", artistId = "a", album = "B", albumId = "b",
         durationSec = 200, bitRate = kbps, suffix = suffix, bitDepth = depth, samplingRate = rate
     )
-    private fun opened(mime: String, rate: Int = 44100, channels: Int = 2, kbps: Int = 0) =
-        OpenedStream(mime, rate, channels, kbps * 1000, 0, ownPipeline = true, outputSampleRate = rate)
+    private fun opened(mime: String, rate: Int = 44100, channels: Int = 2, kbps: Int = 0, decodedBits: Int = 32) =
+        OpenedStream(mime, rate, channels, kbps * 1000, 0, ownPipeline = true, outputSampleRate = rate, decodedBits = decodedBits)
 
     @Test
     fun `a FLAC file opened as raw PCM is still the FLAC file, not a conversion`() {
@@ -34,14 +34,27 @@ class AudioQualityTest {
     }
 
     @Test
-    fun `a 24-bit source played as 16-bit, or processed, is a lossless source, not lossless output`() {
-        val hiRes = audioQualityOf(song("FLAC", 24, 96000), opened("audio/flac", 96000), null, emptyList(), null)!!
+    fun `a 24-bit 96 kHz song plays whole through the float engine`() {
+        val hiRes = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(), "Phone speaker")!!
         assertEquals("FLAC · 24-bit / 96 kHz", hiRes.label)
-        assertEquals("Lossless source", hiRes.tag)
-        assertTrue(hiRes.output.any { it.second == "This 24-bit song plays as 16-bit" })
+        assertEquals("Lossless", hiRes.tag)
+        assertTrue(hiRes.output.contains("Format" to "32-bit float · 96 kHz · stereo"))
+        assertTrue(hiRes.output.none { it.second.contains("16-bit") })
+        // Outside the app: Android's mixer may still resample a hi-res rate.
+        assertTrue(hiRes.output.any { it.second.startsWith("Android may resample") })
+        val bluetooth = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(), "Bluetooth · Buds")!!
+        assertTrue(bluetooth.output.any { it.second.startsWith("Bluetooth re-encodes") })
+    }
+
+    @Test
+    fun `a decoder that gives 16-bit, or processing, makes it a lossless source, not lossless output`() {
+        val reduced = audioQualityOf(song("FLAC", 24, 96000), opened("audio/flac", 96000, decodedBits = 16), null, emptyList(), null)!!
+        assertEquals("Lossless source", reduced.tag)
+        assertTrue(reduced.output.any { it.second == "This phone's decoder gives 16-bit for this 24-bit song" })
 
         val processed = audioQualityOf(song("FLAC", 16, 44100), opened("audio/flac"), null, listOf("Reverb: Mastering Studio"), null)!!
         assertEquals("Lossless source", processed.tag)
+        assertTrue(processed.output.none { it.second.startsWith("Android may resample") })
     }
 
     @Test
@@ -49,6 +62,7 @@ class AudioQualityTest {
         val q = audioQualityOf(song("FLAC", 24, 96000), opened("audio/opus", 48000, kbps = 192), "OPUS, up to 192 kbps", emptyList(), null)!!
         assertEquals("Opus · 192 kbps", q.label)
         assertEquals("Converted", q.tag)
+        assertTrue(q.output.any { it.second == "A converted copy plays, so the file's 24-bit depth doesn't reach the phone" })
         // Even without the server setting, the decoder gives a conversion away.
         assertEquals("Converted", audioQualityOf(song("MP3", kbps = 320), opened("audio/opus"), null, emptyList(), null)!!.tag)
     }
