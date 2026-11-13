@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
@@ -47,6 +48,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
@@ -137,8 +140,6 @@ import io.github.roggzuay.ondalune.data.model.ShuffleMode
 import io.github.roggzuay.ondalune.data.model.SleepTimerState
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
-import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
-import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
@@ -426,7 +427,6 @@ fun NowPlayingStudioOverlay(
     spatialAudio: () -> Boolean? = { null },
     dolbyDecoders: List<String> = emptyList(),
     track: SubsonicTrack,
-    server: SubsonicServerConfig,
     isPlaying: Boolean,
     isBuffering: Boolean,
     positionMs: Long,
@@ -461,8 +461,6 @@ fun NowPlayingStudioOverlay(
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit = {},
     /** The playlist the queue came from, while the current track is in it; named in the header. */
-    playingFromPlaylist: SubsonicPlaylist? = null,
-    onOpenPlaylist: (String) -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onPlayQueueTrack: (SubsonicTrack) -> Unit,
     lyricsResult: TrackLyricsResult = TrackLyricsResult(
@@ -569,21 +567,20 @@ fun NowPlayingStudioOverlay(
             // own layer scales during an opening.
             var controlsHeight by remember { mutableIntStateOf(0) }
             var titleRowBottom by remember { mutableIntStateOf(0) }
-            // The cover starts under the top bar, below the status bar (which would cover part of
-            // the picture), fills the width and reaches down behind the title and artist, fading
-            // out just above the progress bar: the picture is the room the controls sit in rather
-            // than a square set above them. Its height follows the layout: from the status bar to
-            // the title row's end and a little past it. On a short window the controls take more
-            // of the height and it stays a wide band; in a window wider than it is tall it is the
-            // leading pane, from the status bar down.
+            // The cover runs from the top edge, under the status bar and the top bar, fills the
+            // width and reaches down behind the title and artist, fading out just above the
+            // progress bar: the picture is the room the controls sit in rather than a square set
+            // above them. Its height follows the layout, down to the title row's end and a little
+            // past it. On a short window the controls take more of the height and it stays a wide
+            // band; in a window wider than it is tall it is the leading pane.
             val topInset = insets.calculateTopPadding()
             val heroWidth = if (wide) minOf(availHeight, availWidth * 0.58f) else availWidth
             val heroHeight = when {
-                wide -> availHeight - topInset
-                controlsHeight == 0 -> availWidth
+                wide -> availHeight
+                controlsHeight == 0 -> availWidth + topInset
                 else -> with(LocalDensity.current) {
-                    (availHeight - insets.calculateBottomPadding() - topInset - (controlsHeight - titleRowBottom).toDp())
-                        .coerceIn(availWidth * 0.7f, availHeight - topInset)
+                    (availHeight - insets.calculateBottomPadding() - (controlsHeight - titleRowBottom).toDp())
+                        .coerceIn(availWidth * 0.7f, availHeight)
                 }
             }
             // Read in layer and draw blocks only: it moves every frame of the change.
@@ -616,7 +613,7 @@ fun NowPlayingStudioOverlay(
                 wide = wide,
                 lyricsOpen = lyricsOpen,
                 lyricsShown = { lyricsShown.value },
-                topBarHeight = 60.dp,
+                topBarHeight = topInset + 60.dp,
                 heroWidth = heroWidth,
                 heroHeight = heroHeight,
                 onSkipNext = onSkipNext,
@@ -625,20 +622,22 @@ fun NowPlayingStudioOverlay(
                 onSwipeDownFinish = onSwipeDownFinish,
                 modifier = Modifier
                     .align(if (wide) Alignment.TopStart else Alignment.TopCenter)
-                    .padding(top = topInset)
                     .size(heroWidth, heroHeight)
             )
 
+            val topIconColor by animateColorAsState(
+                targetValue = if (lyricsOpen) MaterialTheme.colorScheme.onSurface else Color.White,
+                animationSpec = tween(420),
+                label = "topIconColor"
+            )
             val topBar = @Composable {
                 Box(openingContent) {
                     PlayerTopBar(
-                        server = server,
-                        playingFromPlaylist = playingFromPlaylist,
+                        iconColor = topIconColor,
                         soundShaped = eqPreset != EqualizerPreset.FLAT_STUDIO,
                         speedShaped = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing,
                         showSpeedResetHint = showSpeedResetHint,
                         onCollapse = onCollapse,
-                        onOpenPlaylist = onOpenPlaylist,
                         onOpenSonicLab = onOpenSonicLab,
                         onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
                         onResetSpeedPitch = onResetSpeedPitch,
@@ -670,7 +669,9 @@ fun NowPlayingStudioOverlay(
             }
             val controls = @Composable { area: Modifier ->
                 Box(
-                    modifier = area.onSizeChanged { controlsHeight = it.height },
+                    // Measured with everything showing only: the cover keeps its size while the
+                    // lyrics fold the controls away and back.
+                    modifier = area.onSizeChanged { if (!lyricsOpen && lyricsShown.value == 0f) controlsHeight = it.height },
                     propagateMinConstraints = true
                 ) {
                     PlayerControls(
@@ -700,7 +701,7 @@ fun NowPlayingStudioOverlay(
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
-                        onTitleRowBottom = { titleRowBottom = it },
+                        onTitleRowBottom = { if (!lyricsOpen && lyricsShown.value == 0f) titleRowBottom = it },
                         modifier = openingContent
                     )
                 }
@@ -727,16 +728,9 @@ fun NowPlayingStudioOverlay(
                     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
                         topBar()
                         lyricsSlot(Modifier.weight(1f).widthIn(max = 620.dp).fillMaxWidth())
-                        // On a tall screen the controls start a square cover's height down and
-                        // spread out from there, the title last of all above the progress bar; on
-                        // a short one they keep their own height. The cover's height follows them,
-                        // never the other way round, so they hold still while it grows behind the
-                        // title.
-                        controls(
-                            Modifier.widthIn(max = 620.dp).heightIn(
-                                min = (availHeight - availWidth - insets.calculateBottomPadding() + 10.dp).coerceIn(0.dp, 440.dp)
-                            )
-                        )
+                        // The controls keep their own height at the bottom; the cover's height
+                        // follows them, never the other way round.
+                        controls(Modifier.widthIn(max = 620.dp))
                     }
                 }
             }
@@ -889,7 +883,7 @@ private fun PlayerHero(
 
     val surface = MaterialTheme.colorScheme.surface
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val topFade = with(LocalDensity.current) { (topBarHeight + 12.dp).toPx() }
+    val topFade = with(LocalDensity.current) { topBarHeight.toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
     val blurs = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val behindLyrics by remember(lyricsShown) { derivedStateOf { lyricsShown() > 0f } }
@@ -1022,14 +1016,12 @@ private fun PlayerHero(
                         topLeft = Offset(0f, bottom - span),
                         size = Size(size.width, span)
                     )
-                    // The top bar's bare icons sit on the start of the cover, which comes up from the
-                    // backdrop (below): the cover leans towards the surface colour there so they keep
-                    // their contrast on a bright picture in the dark theme and a dark one in the
-                    // light theme. It is part of the cover, so it fades in with it and leaves no edge.
+                    // A light shade under the status bar and the top bar keeps their white icons
+                    // readable on a bright picture; it thins out to nothing, so it leaves no edge.
                     drawRect(
                         Brush.verticalGradient(
-                            0f to surface.copy(alpha = 0.5f * shown),
-                            0.55f to surface.copy(alpha = 0.45f * shown),
+                            0f to Color.Black.copy(alpha = 0.34f * shown * (1f - lyric)),
+                            0.6f to Color.Black.copy(alpha = 0.14f * shown * (1f - lyric)),
                             1f to Color.Transparent,
                             startY = top,
                             endY = top + topFade
@@ -1045,12 +1037,6 @@ private fun PlayerHero(
                         Brush.verticalGradient(*stops, startY = bottom - span, endY = bottom)
                     }
                     drawRect(fade, blendMode = BlendMode.DstIn)
-                    // The top edge starts out as the backdrop itself and the cover comes up from it,
-                    // so the status bar strip above and the picture below are one colour with no
-                    // edge between them. The bare icons of the top bar sit on the first, mostly
-                    // backdrop part of the fade, and the picture is whole just below the bar.
-                    val rise = Array(TopFadeCurve.size) { i -> i / (TopFadeCurve.size - 1f) to kept(TopFadeCurve[i]) }
-                    drawRect(Brush.verticalGradient(*rise, startY = top, endY = top + topFade), blendMode = BlendMode.DstIn)
                 }
         ) {
             // With the lyrics up the picture eases back a little, behind them.
@@ -1112,16 +1098,6 @@ private fun PlayerHero(
     }
 }
 
-/**
- * How much of the cover shows at each twelfth of the way down its top fade: it eases in from nothing
- * and levels off at whole, so neither end of the fade has a visible line.
- */
-private val TopFadeCurve = FloatArray(13) { i ->
-    val t = i / 12f
-    val x = t * t
-    x * x * (3f - 2f * x)
-}
-
 /** Identifies the picture a track shows, so songs from one album keep the same cover on screen. */
 private fun SubsonicTrack.coverKey() = if (coverArtUrl.isBlank()) "track:$id" else artworkCacheKey(coverArtUrl)
 
@@ -1129,20 +1105,17 @@ private fun SubsonicTrack.coverKey() = if (coverArtUrl.isBlank()) "track:$id" el
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlayerTopBar(
-    server: SubsonicServerConfig,
-    playingFromPlaylist: SubsonicPlaylist?,
     soundShaped: Boolean,
     speedShaped: Boolean,
+    /** White over the picture; the theme's text colour over the lyrics' dimmed backdrop. */
+    iconColor: Color,
     showSpeedResetHint: Boolean,
     onCollapse: () -> Unit,
-    onOpenPlaylist: (String) -> Unit,
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
     onResetSpeedPitch: () -> Unit,
     onSpeedResetHintShown: () -> Unit
 ) {
-    // A soft halo in the scrim colour keeps the small text readable on busy covers.
-    val scrimShadow = Shadow(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), blurRadius = 12f)
     Row(
         modifier = Modifier.fillMaxWidth().height(50.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1152,57 +1125,13 @@ private fun PlayerTopBar(
             onClick = onCollapse,
             size = 48.dp,
             containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            contentColor = iconColor,
             modifier = Modifier.testTag("collapse_player_button")
         ) {
             Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Minimize Player")
         }
 
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (playingFromPlaylist != null) {
-                // Playing from a playlist: name it, and tapping it opens its page.
-                Column(
-                    modifier = Modifier
-                        .clip(cornerShape(14.dp))
-                        .clickable { onOpenPlaylist(playingFromPlaylist.id) }
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .testTag("now_playing_playlist_link"),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "PLAYING FROM PLAYLIST",
-                        style = MaterialTheme.typography.labelSmall.copy(shadow = scrimShadow),
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = playingFromPlaylist.name,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, shadow = scrimShadow),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            } else {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                    Text(
-                        text = server.name,
-                        style = MaterialTheme.typography.labelSmall.copy(shadow = scrimShadow),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "Now Playing",
-                        style = MaterialTheme.typography.labelMedium.copy(shadow = scrimShadow),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
+        Spacer(Modifier.weight(1f))
 
         // One-time "Hold to reset" bubble, for new installs and upgrades alike. It counts as
         // seen only once it has been on screen, so closing the player early shows it again.
@@ -1228,7 +1157,7 @@ private fun PlayerTopBar(
                 active = speedShaped,
                 size = 48.dp,
                 containerColor = Color.Transparent,
-                contentColor = if (speedShaped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                contentColor = if (speedShaped) MaterialTheme.colorScheme.primaryFixedDim else iconColor,
                 modifier = Modifier.testTag("open_speed_pitch_pill")
             ) {
                 Icon(Icons.Filled.Speed, contentDescription = "Speed, Pitch & Live Reverb Settings", modifier = Modifier.size(22.dp))
@@ -1240,7 +1169,7 @@ private fun PlayerTopBar(
             active = soundShaped,
             size = 48.dp,
             containerColor = Color.Transparent,
-            contentColor = if (soundShaped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            contentColor = if (soundShaped) MaterialTheme.colorScheme.primaryFixedDim else iconColor,
             modifier = Modifier.testTag("open_sonic_lab_pill")
         ) {
             Icon(
@@ -1292,14 +1221,20 @@ private fun PlayerControls(
         // It scrolls only when it can't fit (a small window, a large font): a scrolling column
         // would take the pull down that closes the player.
         modifier = modifier.verticalScroll(scroll, enabled = scroll.maxValue > 0),
-        // Spare height goes between the rows, in equal gaps; the paddings are the least they stand
-        // apart. The first gap is above the title, so it stays right over the progress bar and the
-        // room goes to the picture.
-        verticalArrangement = Arrangement.SpaceBetween
+        // Packed at the bottom: the height above goes to the picture, or to the lyrics.
+        verticalArrangement = Arrangement.Bottom
     ) {
-        Spacer(Modifier)
+        // With the lyrics up only the progress bar and the row of buttons stay; the title and the
+        // transport slip away downwards so the lyrics get the height, and come back when closed.
+        val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
         Column {
             // The cover reaches down behind this row; it needs to know where the row ends.
+            AnimatedVisibility(
+                visible = !lyricsOpen,
+                enter = expandVertically(tween(420, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(320, delayMillis = 100)),
+                exit = shrinkVertically(tween(420, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
+            ) {
+            Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1363,6 +1298,8 @@ private fun PlayerControls(
                 }
             }
             Spacer(Modifier.height(14.dp))
+            }
+            }
             PlayerProgress(
                 positionMs = positionMs,
                 durationMs = durationMs,
@@ -1375,22 +1312,29 @@ private fun PlayerControls(
             )
         }
 
-        ExpressiveTransportGroup(
-            isPlaying = isPlaying,
-            isBuffering = isBuffering,
-            onSkipPrevious = onSkipPrevious,
-            onTogglePlay = onTogglePlay,
-            onSkipNext = onSkipNext,
-            modifier = Modifier.padding(top = 10.dp)
-        )
+        AnimatedVisibility(
+            visible = !lyricsOpen,
+            enter = expandVertically(tween(420, easing = FastOutSlowInEasing)) +
+                slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(320, delayMillis = 100)),
+            exit = shrinkVertically(tween(420, easing = FastOutSlowInEasing)) +
+                slideOutVertically(tween(420, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(200))
+        ) {
+            ExpressiveTransportGroup(
+                isPlaying = isPlaying,
+                isBuffering = isBuffering,
+                onSkipPrevious = onSkipPrevious,
+                onTogglePlay = onTogglePlay,
+                onSkipNext = onSkipNext,
+                modifier = Modifier.padding(top = 18.dp)
+            )
+        }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val haptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
-            val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
             val queueOpen = activeTab == NowPlayingSheetTab.QUEUE
             PlayerToggle(
                 checked = lyricsOpen,

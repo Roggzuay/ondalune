@@ -289,7 +289,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val openHomeShelf by viewModel.openHomeShelf.collectAsStateWithLifecycle()
     val selectedPlaylistId by viewModel.selectedPlaylistDetailId.collectAsStateWithLifecycle()
     val shownPage = ShellNavState(currentDestination, selectedAlbumId, selectedArtistId, selectedGenreName, selectedFolderPath, openHomeShelf, selectedPlaylistId)
-    val playingFromPlaylist by viewModel.playingFromPlaylist.collectAsStateWithLifecycle()
     // Held here, outside the tab transitions, so Home keeps its scroll position while a page from
     // it (or another tab) is open.
     val homeListState = rememberLazyListState()
@@ -1093,7 +1092,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 spatialAudio = viewModel::spatialAudioActive,
                                 dolbyDecoders = viewModel.dolbyDecoders,
                                 track = activeTrack,
-                                server = activeServer,
                                 isPlaying = isPlaying,
                                 isBuffering = isBuffering,
                                 positionMs = positionMs,
@@ -1150,8 +1148,6 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onSpeedResetHintShown = viewModel::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
-                                playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
-                                onOpenPlaylist = viewModel::openPlaylistAnywhere,
                                 onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                 onPlayQueueTrack = { viewModel.playback.playFromQueue(it) },
                                 onRemoveQueueTrack = viewModel.playback::removeTrackFromQueue,
