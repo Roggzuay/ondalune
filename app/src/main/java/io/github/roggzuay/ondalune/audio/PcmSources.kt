@@ -3,6 +3,7 @@ package io.github.roggzuay.ondalune.audio
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
+import android.util.Log
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaExtractor
@@ -15,6 +16,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.pow
@@ -206,6 +208,14 @@ internal class CodecPcmSource private constructor(
     private var downmix = Downmix(channelCount, channelMask)
     /** What the decoder puts out: float when it honours the request, else its own integer PCM. */
     private var encoding = AudioFormat.ENCODING_PCM_16BIT
+    /** Float was asked of the decoder, so four bytes a sample means float rather than 32-bit integers. */
+    private var askedFloat = false
+    // The previous output buffer's time and size: from two buffers the real sample width follows.
+    private var lastPts = -1L
+    private var lastBytes = 0
+    private var lastWidth = -1
+    /** The sample width has been checked against the timestamps (or can't be). */
+    private var widthChecked = false
     private val info = MediaCodec.BufferInfo()
     private var inputEos = false
     private var outputEos = false
@@ -254,6 +264,8 @@ internal class CodecPcmSource private constructor(
         size = 0
         anchorUs = ms * 1000L
         consumedSinceAnchor = 0L
+        lastPts = -1L
+        lastWidth = -1
     }
 
     override fun release() {
@@ -287,6 +299,7 @@ internal class CodecPcmSource private constructor(
             outIndex >= 0 -> {
                 val outBuf = codec.getOutputBuffer(outIndex)
                 if (outBuf != null && info.size > 0) {
+                    checkSampleWidth()
                     outBuf.position(info.offset)
                     outBuf.limit(info.offset + info.size)
                     val frameCount = info.size / (PcmConvert.bytesPerSample(encoding) * channels)
@@ -312,7 +325,43 @@ internal class CodecPcmSource private constructor(
         }
     }
 
+    /**
+     * Some decoders report one sample format and deliver another (a float request answered with
+     * 16-bit while the format still says float), which plays twice as fast and as noise. The time
+     * between two buffers says how many frames the first held, and so how wide its samples were;
+     * when that disagrees, the width the data shows wins and what was misread is dropped.
+     */
+    private fun checkSampleWidth() {
+        val pts = info.presentationTimeUs
+        if (lastPts >= 0) {
+            // Two pairs in a row must agree: a first buffer trimmed of the decoder's delay is short.
+            val real = if (pts > lastPts) {
+                val frames = (pts - lastPts) * sampleRate / 1_000_000.0
+                val width = lastBytes / (frames * channels)
+                intArrayOf(2, 3, 4).firstOrNull { abs(width - it) / it < 0.12 } ?: 0
+            } else 0
+            if (real != 0 && real == lastWidth && real != PcmConvert.bytesPerSample(encoding)) {
+                Log.w("OndalunePcm", "${opened.decoder} said ${PcmConvert.bytesPerSample(encoding)}-byte samples, gives $real")
+                encoding = when (real) {
+                    2 -> AudioFormat.ENCODING_PCM_16BIT
+                    3 -> AudioFormat.ENCODING_PCM_24BIT_PACKED
+                    else -> if (askedFloat) AudioFormat.ENCODING_PCM_FLOAT else AudioFormat.ENCODING_PCM_32BIT
+                }
+                head = 0
+                size = 0
+                anchorUs = pts
+                consumedSinceAnchor = 0L
+            }
+            if (lastWidth != -1) widthChecked = true
+            lastWidth = real
+        }
+        lastPts = pts
+        lastBytes = info.size
+    }
+
     private fun readOutputFormat(f: MediaFormat) {
+        lastPts = -1L
+        lastWidth = -1
         if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
         if (f.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         mask = f.intOr(MediaFormat.KEY_CHANNEL_MASK)
@@ -348,11 +397,13 @@ internal class CodecPcmSource private constructor(
                 // Float output keeps a 24-bit song's resolution; a decoder that can't give it says what it
                 // gives instead. Raw PCM goes through its decoder untouched, so it keeps the encoding the
                 // extractor read it in (float for a 24-bit FLAC or WAV on recent Android).
-                if (decodesAs != "audio/raw") format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_FLOAT)
+                // Only a source deeper than 16 bits asks: a 16-bit or lossy one gains nothing from it.
+                val wantsFloat = decodesAs != "audio/raw" && stream.bitsPerSample > 16
+                if (wantsFloat) format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_FLOAT)
                 try {
                     codec.configure(format, null, null, 0)
                 } catch (e: Exception) {
-                    if (decodesAs == "audio/raw") throw e
+                    if (!wantsFloat) throw e
                     // A decoder that refuses float gets its usual 16-bit.
                     format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
                     codec.reset()
@@ -368,9 +419,11 @@ internal class CodecPcmSource private constructor(
                     if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L,
                     stream.copy(decoder = codec.name)
                 )
+                source.askedFloat = wantsFloat && format.intOr(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
                 runCatching { source.readOutputFormat(codec.outputFormat) }
+                // A few buffers in, so the sample width is checked before anything plays.
                 var attempts = 0
-                while (source.size == 0 && !source.outputEos && attempts++ < 400) source.pump()
+                while ((source.size == 0 || !source.widthChecked) && !source.outputEos && attempts++ < 400) source.pump()
                 source
             } catch (e: NoDecoderException) {
                 throw e
