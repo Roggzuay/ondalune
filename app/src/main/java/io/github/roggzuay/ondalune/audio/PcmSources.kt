@@ -10,6 +10,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.Build
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
+import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import java.io.File
 import java.io.RandomAccessFile
@@ -483,7 +484,9 @@ internal class QueuedSource(
     val source: PcmSource,
     /** Used when the container has no duration (some transcoded streams). */
     private val metadataDurationMs: Long,
-    var gain: Float = 1f
+    var gain: Float = 1f,
+    /** The server's original file over the network, with [server] to fetch a converted copy instead. */
+    val rawStreamFrom: SubsonicServerConfig? = null
 ) {
     val durationFrames: Long
         get() = source.durationFrames.takeIf { it > 0L } ?: (metadataDurationMs * source.sampleRate / 1000L)
