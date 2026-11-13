@@ -994,10 +994,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         initialRepeatOne = prefs.getBoolean("repeat_one_enabled", false)
     )
 
-    val playingFromPlaylist: StateFlow<SubsonicPlaylist?> = combine(playback.queuePlaylistId, playlists) { id, all ->
-        all.find { it.id == id }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
     init {
         if (settings.customization.value.songAnalysis) startSongAnalysis()
         // Confirmation banners ("Reverb set to…", "Added to queue") clear themselves; only the live
