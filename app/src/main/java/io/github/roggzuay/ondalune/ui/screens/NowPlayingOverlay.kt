@@ -192,6 +192,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.min
 import android.os.Build
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.layout.requiredSize
@@ -882,6 +886,14 @@ private fun PlayerHero(
     }
 
     val surface = MaterialTheme.colorScheme.surface
+    // Under the whole cover the hero is filled with the cover's own colours: its bottom edge
+    // carries on into its most prominent colour, so the picture never needs cropping.
+    val palette = LocalArtworkPalette.current
+    val edgeColor by animateColorAsState(
+        palette.regions.takeIf { it.size >= 4 }?.let { lerp(it[2], it[3], 0.5f) } ?: palette.seed,
+        tween(600), label = "coverEdge"
+    )
+    val fillColor by animateColorAsState(palette.swatches.firstOrNull() ?: palette.seed, tween(600), label = "coverFill")
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val topFade = with(LocalDensity.current) { topBarHeight.toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
@@ -1045,6 +1057,18 @@ private fun PlayerHero(
                     val zoom = 1f + 0.06f * lyricsShown()
                     scaleX = zoom
                     scaleY = zoom
+                }.drawBehind {
+                    val top = (size.height - frame.height) / 2f
+                    val coverBottom = top + min(frame.width, frame.height)
+                    drawRect(fillColor)
+                    drawRect(
+                        Brush.verticalGradient(
+                            0f to edgeColor,
+                            1f to fillColor,
+                            startY = coverBottom - frame.width * 0.2f,
+                            endY = coverBottom + (top + frame.height - coverBottom) * 0.7f
+                        )
+                    )
                 }
             ) {
                 AnimatedContent(
@@ -1063,7 +1087,39 @@ private fun PlayerHero(
                     // A swiped-away cover is gone from its first leaving frame (an exit
                     // animation would still draw it once, back in the middle).
                     val hidden = exitHidden[0] && transition.targetState == EnterExitState.PostExit
-                    Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (hidden) 0f else 1f }) {
+                    // The whole cover, as wide as the hero, at its top; while the player opens it
+                    // starts as the whole square (the mini player's thumbnail) and settles there.
+                    // Its lower edge melts into the colour beneath.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = if (hidden) 0f else 1f
+                                val f = sheet.fraction.coerceIn(0f, 1f)
+                                val side = min(frame.width, frame.height)
+                                val scale = lerp(1f, side / size.width, f)
+                                scaleX = scale
+                                scaleY = scale
+                                transformOrigin = TransformOrigin(0.5f, 0f)
+                                translationY = (size.height - frame.height) / 2f * f
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .drawWithContent {
+                                drawContent()
+                                val melt = sheet.fraction.coerceIn(0f, 1f)
+                                drawRect(
+                                    Brush.verticalGradient(
+                                        0f to Color.Black,
+                                        0.45f to Color.Black.copy(alpha = lerp(1f, 0.6f, melt)),
+                                        1f to Color.Black.copy(alpha = 1f - melt),
+                                        startY = size.height * 0.72f,
+                                        endY = size.height
+                                    ),
+                                    topLeft = Offset(0f, size.height * 0.72f),
+                                    blendMode = BlendMode.DstIn
+                                )
+                            }
+                    ) {
                         ExpressiveArtwork(
                             seedHex = shown.paletteSeedHex,
                             accentHex = shown.accentHex,
