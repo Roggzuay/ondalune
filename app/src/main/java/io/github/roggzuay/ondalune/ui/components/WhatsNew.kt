@@ -97,6 +97,14 @@ private val releaseNotes = mapOf(
         "The real audio quality under the cover, and a song's real tempo in the speed controls",
         "Update notices, and an easy way to find your downloads",
         "Fixes & improvements, including details that were made up when the server didn't send them"
+    ),
+    "1.7" to listOf(
+        "A new player where the cover fills the screen. Prefer the old one? Settings → Appearance → Player",
+        "Your next songs are saved ahead, so they start right away, even on a slow server",
+        "Covers stay on your phone and load instantly",
+        "Hi-res, 24-bit and Dolby songs play at their real quality",
+        "Lyrics from LRCLIB when your server has none, and Android Auto",
+        "Fixes & improvements: a play now counts after 30 seconds of listening"
     )
 )
 
