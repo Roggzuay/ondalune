@@ -108,6 +108,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.filterNotNull
@@ -1048,6 +1049,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 runCatching { audioEngine.cacheAhead(upcoming, keep = settings.customization.value.readAheadTrackBuffer * 2 + 2) }
                 downloadManager.refreshStorageSummary(_activeServerId.value)
             }
+        }
+        // The storage figures follow the saving as it goes, every few seconds at most.
+        viewModelScope.launch {
+            combine(songsAhead, coversSaved) { songs, covers -> songs.ready + covers.saved }
+                .distinctUntilChanged()
+                .conflate()
+                .collect {
+                    downloadManager.refreshStorageSummary(_activeServerId.value)
+                    delay(3_000L)
+                }
         }
         // Confirmation banners ("Reverb set to…", "Added to queue") clear themselves; only the live
         // sync counter stays up while the sync runs.

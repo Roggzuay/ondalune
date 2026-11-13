@@ -6,6 +6,8 @@ import kotlin.math.hypot
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -104,7 +106,9 @@ class PlayerSheetState {
                 initialValue = fraction,
                 targetValue = goal,
                 initialVelocity = -velocityY / travel,
-                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
+                // The circle out of Your Mix takes its time; a drag lets go on a spring.
+                animationSpec = if (open && fromHero) tween(620, easing = FastOutSlowInEasing)
+                else spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow)
             ) { value, _ -> fraction = value }
             // Fully open, it closes into the mini player like any other way of opening it.
             if (open) fromHero = false

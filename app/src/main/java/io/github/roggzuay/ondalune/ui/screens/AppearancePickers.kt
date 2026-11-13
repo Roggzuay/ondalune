@@ -209,18 +209,21 @@ fun PlayerLookPicker(selected: PlayerLook, onSelect: (PlayerLook) -> Unit) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .aspectRatio(0.62f)
+                        .aspectRatio(0.7f)
                         .clip(RoundedCornerShape(12.dp))
                         .background(scheme.surface)
                 ) {
                     val art = Brush.linearGradient(listOf(scheme.primary, scheme.tertiary))
-                    if (look == PlayerLook.IMMERSIVE) {
+                    // The Immersive cover melts into its own colour, which darkens under the title.
+                    val immersive = look == PlayerLook.IMMERSIVE
+                    if (immersive) {
                         Box(
-                            Modifier.fillMaxWidth().fillMaxHeight(0.58f).background(art)
-                        )
-                        Box(
-                            Modifier.fillMaxWidth().fillMaxHeight(0.58f).background(
-                                Brush.verticalGradient(0.6f to Color.Transparent, 1f to scheme.surface)
+                            Modifier.fillMaxSize().background(
+                                Brush.verticalGradient(
+                                    0f to scheme.primary,
+                                    0.5f to scheme.tertiary,
+                                    0.85f to Color(0xFF160B12)
+                                )
                             )
                         )
                     } else {
@@ -233,12 +236,13 @@ fun PlayerLookPicker(selected: PlayerLook, onSelect: (PlayerLook) -> Unit) {
                                 .background(art)
                         )
                     }
+                    val ink = if (immersive) Color.White else scheme.onSurface
                     Column(
                         Modifier.align(Alignment.BottomStart).padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(Modifier.width(48.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(scheme.onSurface.copy(alpha = 0.7f)))
-                        Box(Modifier.width(32.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(scheme.onSurface.copy(alpha = 0.35f)))
+                        Box(Modifier.width(48.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(ink.copy(alpha = 0.7f)))
+                        Box(Modifier.width(32.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(ink.copy(alpha = 0.35f)))
                         Spacer(Modifier.height(4.dp))
                         Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.primary.copy(alpha = 0.6f)))
                     }
