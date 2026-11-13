@@ -2,6 +2,7 @@ package io.github.roggzuay.ondalune.ui.screens
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -16,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
@@ -59,7 +61,7 @@ class PlayerSheetState {
     /** The thumbnail hides once the player's own cover stands in its place. */
     val thumbnailHidden get() = fraction > 0f && coverInPlayer && fullArt != Rect.Zero && !fromHero
 
-    /** Opened from the Your Mix hero: the player fades up out of its zoom rather than the mini player. */
+    /** Opened from the Your Mix hero: the player opens out of its zoom rather than the mini player. */
     var fromHero by mutableStateOf(false)
 
     private var screen = Rect.Zero
@@ -115,9 +117,15 @@ class PlayerSheetState {
         .graphicsLayer {
             val f = fraction
             if (fromHero) {
-                alpha = f
-                scaleX = lerp(0.9f, 1f, f)
-                scaleY = scaleX
+                // Out of the Your Mix colour the player opens as a circle from the middle of the
+                // screen, settling from a touch larger as it grows.
+                if (f < 1f) {
+                    val r = f * hypot(size.width, size.height) / 2f
+                    clip = true
+                    shape = RoundedFrame(Rect(size.center, r), r)
+                    scaleX = lerp(1.06f, 1f, f)
+                    scaleY = scaleX
+                }
             } else if (f < 1f) {
                 val from = if (miniCard == Rect.Zero) Rect(0f, size.height * 0.86f, size.width, size.height)
                 else miniCard.translate(-screen.topLeft)
