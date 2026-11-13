@@ -480,6 +480,8 @@ fun NowPlayingStudioOverlay(
     shuffleMode: ShuffleMode = if (shuffleEnabled) ShuffleMode.SMART else ShuffleMode.OFF,
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
     backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
+    /** Fill the room under the cover with its own colour, giving way to the surface by the title. */
+    coverFill: Boolean = false,
     unifiedMaterialYouColor: Boolean = false,
     lyricsSource: LyricsSource = LyricsSource(),
     lyricsSearch: LyricsSearch = LyricsSearch(),
@@ -608,6 +610,25 @@ fun NowPlayingStudioOverlay(
                     playbackSpeed = speedPitchState.speed,
                     themeColorsOnly = unifiedMaterialYouColor
                 )
+                if (coverFill && !wide) {
+                    val palette = LocalArtworkPalette.current
+                    val fill by animateColorAsState(palette.swatches.firstOrNull() ?: palette.seed, tween(600), label = "backdropFill")
+                    val surface = MaterialTheme.colorScheme.surface
+                    Box(
+                        Modifier.fillMaxSize().drawBehind {
+                            val bottom = heroHeight.toPx()
+                            val span = bottom * 0.3f
+                            drawRect(
+                                Brush.verticalGradient(
+                                    0f to fill,
+                                    1f to surface,
+                                    startY = bottom - span,
+                                    endY = bottom - span * 0.15f
+                                )
+                            )
+                        }
+                    )
+                }
             }
 
             PlayerHero(

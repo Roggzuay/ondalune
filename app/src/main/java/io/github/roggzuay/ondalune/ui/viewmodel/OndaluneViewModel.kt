@@ -183,6 +183,7 @@ enum class NowPlayingSheetTab(val label: String) {
 
 /** How long a confirmation banner stays up before it clears itself. */
 private const val BannerTimeoutMs = 3200L
+private const val PlayCountAfterMs = 30_000L
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OndaluneViewModel(application: Application) : AndroidViewModel(application) {
@@ -902,6 +903,23 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private var playCountJob: Job? = null
+
+    /**
+     * A play counts once the song has really been heard for 30 seconds (most of a shorter one):
+     * time paused or buffering doesn't add up, and skipping on before then counts nothing.
+     */
+    private suspend fun countPlayOnceHeard(track: SubsonicTrack, server: SubsonicServerConfig) {
+        val needMs = if (track.durationSec in 1..33) track.durationSec * 900L else PlayCountAfterMs
+        var heardMs = 0L
+        while (heardMs < needMs) {
+            delay(500L)
+            if (playback.currentTrack.value?.id != track.id) return
+            if (isPlaying.value && !isBuffering.value) heardMs += 500L
+        }
+        repository.recordPlay(server, track)
+    }
+
     private fun recordPlayed(trackId: String) {
         // Kept longer than "Jump back in" shows, so shuffles can move recent songs back.
         val updated = (listOf(trackId) + _recentTrackIds.value.filterNot { it == trackId }).take(200)
@@ -982,9 +1000,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             override fun serverFor(track: SubsonicTrack) = streamServerFor(track)
             override fun onTrackStarted(track: SubsonicTrack, server: SubsonicServerConfig) {
                 loadLyricsForTrack(track)
-                if (settings.autoScrobble) {
-                    viewModelScope.launch { repository.recordPlay(server, track) }
-                }
+                playCountJob?.cancel()
+                if (settings.autoScrobble) playCountJob = viewModelScope.launch { countPlayOnceHeard(track, server) }
             }
             override fun showBanner(message: String) { _statusBanner.value = message }
             override fun saveLastPlayed(trackId: String) = prefs.edit().putString("last_played_track_id", trackId).apply()

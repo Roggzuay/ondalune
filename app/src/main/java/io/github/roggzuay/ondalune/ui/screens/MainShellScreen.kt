@@ -2,6 +2,8 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import androidx.compose.ui.graphics.luminance
+import io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme
 import io.github.roggzuay.ondalune.data.model.PlayerLook
 import io.github.roggzuay.ondalune.data.model.ArtworkCut
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
@@ -1091,7 +1093,20 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 if (playerShown) Box(Modifier.fillMaxSize().then(playerSheet.containerModifier())) {
                     val activeTrack = currentTrack
                     // Its colours follow each new cover with a fade; the rest of the app switches at once.
-                    if (activeTrack != null) FadingColors {
+                    // The Immersive player in the light theme follows its cover: on a dark one it
+                    // turns dark, so the title sits on the cover's own colour, not on white.
+                    val lightApp = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+                    val immersiveLight = lightApp && customizationSettings.playerLook == PlayerLook.IMMERSIVE
+                    val coverIsDark = (artworkPalette.swatches.firstOrNull() ?: artworkPalette.seed).luminance() < 0.4f
+                    val playerScheme = if (immersiveLight && coverIsDark) remember(artworkPalette.seedHex, customizationSettings) {
+                        buildOndaluneColorScheme(
+                            context, artworkPalette.seedHex, isDark = true, isAmoled = false,
+                            customizationSettings.useMaterialYouDynamicColor, customizationSettings.unifiedMaterialYouColor,
+                            customizationSettings.harmonizePlayerWithArtwork, customizationSettings.curatedPalette,
+                            customizationSettings.interfaceStyle
+                        )
+                    } else MaterialTheme.colorScheme
+                    if (activeTrack != null) MaterialTheme(colorScheme = playerScheme) { FadingColors {
                         PlaybackPosition(viewModel) { positionMs, durationMs ->
                             if (customizationSettings.playerLook == PlayerLook.DEFAULT) DefaultNowPlayingOverlay(
                                 sheet = playerSheet,
@@ -1186,6 +1201,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 showPlayerStarButton = customizationSettings.showPlayerStarButton,
                                 unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                 backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,
+                                coverFill = immersiveLight,
                                 activeTab = nowPlayingTab,
                                 lyrics = currentLyrics,
                                 lyricsResult = currentLyricsResult,
@@ -1231,7 +1247,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onMoveQueueTrack = viewModel.playback::moveQueueTrack
                             )
                         }
-                    }
+                    } }
                 }
 
                 // Speed, Dynamic Pitch & Live Studio Reverb Modal Sheet
