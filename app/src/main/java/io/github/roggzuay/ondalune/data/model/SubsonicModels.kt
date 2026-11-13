@@ -445,14 +445,10 @@ enum class CuratedColorPalette(
     MONOCHROME_SLATE("Monochrome Titanium", "#94A3B8", "#E2E8F0")
 }
 
-/** Overall look: Ondalune's expressive signature, or a quiet stock Material 3 look. */
+/** Overall look: Ondalune's expressive signature, or its playful flower-cut Bloom. */
 enum class InterfaceStyle(val label: String, val description: String) {
     SIGNATURE("Signature", "Wide atomic type, morphing squircles, vivid artwork colour"),
-    STANDARD("Standard", "System font, neutral surfaces, classic Material 3 shapes"),
-    BLOOM("Bloom", "Rounded playful type, flower-cut artwork, tinted pill buttons"),
-    POSTER("Poster", "Huge wide headlines, circles and pills, pure black canvas"),
-    LOUNGE("Lounge", "Soft lavender cards, editorial labels, calm and roomy"),
-    CLASSIC("Classic", "Dense flat lists, square art, quick actions up top")
+    BLOOM("Bloom", "Rounded playful type, flower-cut artwork, tinted pill buttons")
 }
 
 /** A typeface the user can assign to headings or to body text. AUTO follows the theme. */
@@ -471,22 +467,16 @@ enum class AppFont(val label: String) {
     MONO("Mono")
 }
 
-/** How artwork is cut everywhere in the app. AUTO follows the theme; MIXED varies per album. */
+/** Which full player opens: the edge-to-edge one, or the framed 1.6.1 one. */
+enum class PlayerLook(val label: String, val description: String) {
+    IMMERSIVE("Immersive", "The cover fills the top of the player and melts into its colours"),
+    DEFAULT("Default", "The framed player with the cover on a card")
+}
+
+/** How artwork is cut everywhere in the app: the theme's own shape, or flower-cut. */
 enum class ArtworkCut(val label: String) {
-    AUTO("Theme"),
-    SQUIRCLE("Squircle"),
-    ROUNDED("Rounded"),
-    SQUARE("Square"),
-    CIRCLE("Circle"),
-    PILL("Pill"),
-    FLOWER("Flower"),
-    COOKIE("Cookie"),
-    CLOVER("Clover"),
-    SUNNY("Sunny"),
-    PUFFY("Puffy"),
-    GEM("Gem"),
-    ARCH("Arch"),
-    MIXED("Mixed")
+    AUTO("Signature"),
+    FLOWER("Flower")
 }
 
 /** Rows the Home screen can show, in the user's order. */
@@ -748,6 +738,7 @@ data class PlayerCustomizationSettings(
     val headerFont: AppFont = AppFont.AUTO,
     val bodyFont: AppFont = AppFont.AUTO,
     val artworkCut: ArtworkCut = ArtworkCut.AUTO,
+    val playerLook: PlayerLook = PlayerLook.IMMERSIVE,
     /** Custom Home order (visible sections only); empty = follow the theme's default layout. */
     val homeSections: List<HomeSection> = emptyList(),
     val playerBackgroundStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.ARTWORK_GLOW,

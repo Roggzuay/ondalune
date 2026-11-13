@@ -417,6 +417,7 @@ fun SettingsCustomizationScreen(
     onSetHeaderFont: (AppFont) -> Unit = {},
     onSetBodyFont: (AppFont) -> Unit = {},
     onSetArtworkCut: (io.github.roggzuay.ondalune.data.model.ArtworkCut) -> Unit = {},
+    onSetPlayerLook: (io.github.roggzuay.ondalune.data.model.PlayerLook) -> Unit = {},
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
     onResetHomeSections: () -> Unit = {},
     onSetHarmonizeArtwork: (Boolean) -> Unit,
@@ -1051,6 +1052,14 @@ fun SettingsCustomizationScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     ArtworkShapePicker(selected = settings.artworkCut, onSelect = onSetArtworkCut)
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Text(
+                        text = "Player",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    PlayerLookPicker(selected = settings.playerLook, onSelect = onSetPlayerLook)
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     Text(

@@ -233,6 +233,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val durationMs: StateFlow<Long> = audioEngine.durationMs
     val playbackSpeed: StateFlow<Float> = audioEngine.playbackSpeed
     val isPlayingOfflineFile: StateFlow<Boolean> = audioEngine.isPlayingOfflineFile
+    val reverbProcessingMode: StateFlow<io.github.roggzuay.ondalune.data.model.ReverbProcessingMode> = audioEngine.reverbProcessingMode
 
     private val _speedPitchState = MutableStateFlow(loadPersistedSpeedPitchState())
     val speedPitchState: StateFlow<SpeedPitchState> = _speedPitchState.asStateFlow()
@@ -994,6 +995,10 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             .getOrDefault(ShuffleMode.OFF),
         initialRepeatOne = prefs.getBoolean("repeat_one_enabled", false)
     )
+
+    val playingFromPlaylist: StateFlow<SubsonicPlaylist?> = combine(playback.queuePlaylistId, playlists) { id, all ->
+        all.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         if (settings.customization.value.songAnalysis) startSongAnalysis()

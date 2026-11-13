@@ -86,8 +86,6 @@ import io.github.roggzuay.ondalune.data.lyrics.sungFraction
 import io.github.roggzuay.ondalune.data.model.LyricLine
 import io.github.roggzuay.ondalune.data.model.LyricWord
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
-import io.github.roggzuay.ondalune.ui.theme.LocalInterfaceStyle
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.cornerShape
 import io.github.roggzuay.ondalune.ui.theme.monoLabelSmall
@@ -115,7 +113,7 @@ internal fun SyncedLyricsPane(
 ) {
     val lineStyle = TextStyle(
         fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
-        fontWeight = if (LocalInterfaceStyle.current == InterfaceStyle.STANDARD) FontWeight.Bold else FontWeight.ExtraBold,
+        fontWeight = FontWeight.ExtraBold,
         fontSize = 27.sp,
         lineHeight = 35.sp,
         letterSpacing = (-0.3).sp

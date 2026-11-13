@@ -85,6 +85,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
 
     fun setArtworkCut(cut: io.github.roggzuay.ondalune.data.model.ArtworkCut) = update { it.copy(artworkCut = cut) }
 
+    fun setPlayerLook(look: io.github.roggzuay.ondalune.data.model.PlayerLook) = update { it.copy(playerLook = look) }
+
     /** Saves a custom Home order (visible sections only). */
     fun setHomeSections(sections: List<HomeSection>) = update { it.copy(homeSections = sections) }
 
@@ -209,6 +211,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             headerFont = AppFont.entries.find { it.name == prefs.getString("cfg_header_font", null) } ?: defaults.headerFont,
             bodyFont = AppFont.entries.find { it.name == prefs.getString("cfg_body_font", null) } ?: defaults.bodyFont,
             artworkCut = io.github.roggzuay.ondalune.data.model.ArtworkCut.entries.find { it.name == prefs.getString("cfg_artwork_cut", null) } ?: defaults.artworkCut,
+            playerLook = io.github.roggzuay.ondalune.data.model.PlayerLook.entries.find { it.name == prefs.getString("cfg_player_look", null) } ?: defaults.playerLook,
             homeSections = prefs.getString("cfg_home_sections", "").orEmpty().split(',')
                 .mapNotNull { name -> HomeSection.entries.find { it.name == name } },
             iconFollowsTheme = prefs.getBoolean("cfg_icon_follows_theme", defaults.iconFollowsTheme),
@@ -269,6 +272,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putString("cfg_header_font", s.headerFont.name)
             .putString("cfg_body_font", s.bodyFont.name)
             .putString("cfg_artwork_cut", s.artworkCut.name)
+            .putString("cfg_player_look", s.playerLook.name)
             .putString("cfg_home_sections", s.homeSections.joinToString(",") { it.name })
             .putBoolean("cfg_icon_follows_theme", s.iconFollowsTheme)
             .putBoolean("cfg_harmonize_artwork", s.harmonizePlayerWithArtwork)

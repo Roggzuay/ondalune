@@ -96,17 +96,6 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
             HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER
         )
     )
-    InterfaceStyle.STANDARD -> StyleSpec(
-        style, AppFont.SYSTEM, AppFont.SYSTEM, PaletteStyle.TonalSpot, 0.5f, true,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, nowPlayingRow = NowPlayingRow.TONAL,
-        cardTiles = false, artBorder = false,
-        monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
-        defaultHome = listOf(
-            HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
-            HomeSection.MOST_PLAYED, HomeSection.FAVOURITE_TRACKS, HomeSection.RECENTLY_PLAYED,
-            HomeSection.TOP_ARTISTS, HomeSection.REDISCOVER
-        )
-    )
     InterfaceStyle.BLOOM -> StyleSpec(
         style, AppFont.FREDOKA, AppFont.FIGTREE, PaletteStyle.Expressive, 1.35f, false,
         ArtShape.MIXED, ArtShape.MIXED, cardRows = false, nowPlayingRow = NowPlayingRow.TERTIARY,
@@ -116,39 +105,6 @@ fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
             HomeSection.RECENTLY_ADDED, HomeSection.MIXES, HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN,
             HomeSection.FAVOURITE_TRACKS, HomeSection.TOP_ARTISTS, HomeSection.MOST_PLAYED,
             HomeSection.REDISCOVER
-        )
-    )
-    InterfaceStyle.POSTER -> StyleSpec(
-        style, AppFont.FLEX_WIDE, AppFont.FLEX, PaletteStyle.TonalSpot, 1.6f, false,
-        ArtShape.PILL, ArtShape.CIRCLE, cardRows = false, nowPlayingRow = NowPlayingRow.SOLID,
-        cardTiles = false, artBorder = false,
-        monoBadges = false, eyebrows = false, pureBlack = true, shelfPlayButtons = true,
-        defaultHome = listOf(
-            HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.MOST_PLAYED, HomeSection.RECENTLY_ADDED,
-            HomeSection.TOP_ARTISTS, HomeSection.FAVOURITE_TRACKS, HomeSection.JUMP_BACK_IN,
-            HomeSection.RECENTLY_PLAYED
-        )
-    )
-    InterfaceStyle.LOUNGE -> StyleSpec(
-        style, AppFont.BRICOLAGE, AppFont.FIGTREE, PaletteStyle.Rainbow, 1.15f, false,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = true, nowPlayingRow = NowPlayingRow.SOFT,
-        cardTiles = false, artBorder = false,
-        monoBadges = false, eyebrows = true, pureBlack = false, shelfPlayButtons = false,
-        defaultHome = listOf(
-            HomeSection.FEATURED, HomeSection.MIXES, HomeSection.RECENTLY_PLAYED, HomeSection.JUMP_BACK_IN,
-            HomeSection.FAVOURITE_TRACKS, HomeSection.RECENTLY_ADDED, HomeSection.MOST_PLAYED,
-            HomeSection.REDISCOVER
-        )
-    )
-    InterfaceStyle.CLASSIC -> StyleSpec(
-        style, AppFont.SYSTEM, AppFont.SYSTEM, PaletteStyle.Neutral, 0.4f, true,
-        ArtShape.ROUNDED, ArtShape.ROUNDED, cardRows = false, nowPlayingRow = NowPlayingRow.TONAL,
-        cardTiles = false, artBorder = false,
-        monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
-        defaultHome = listOf(
-            HomeSection.QUICK_ACTIONS, HomeSection.MIXES, HomeSection.TOP_ARTISTS, HomeSection.RECENTLY_ADDED,
-            HomeSection.MOST_PLAYED, HomeSection.JUMP_BACK_IN, HomeSection.FAVOURITE_TRACKS,
-            HomeSection.RECENTLY_PLAYED
         )
     )
 }

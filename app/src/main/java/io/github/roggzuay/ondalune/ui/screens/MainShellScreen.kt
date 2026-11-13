@@ -2,6 +2,9 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.PlayerLook
+import io.github.roggzuay.ondalune.data.model.ArtworkCut
+import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import io.github.roggzuay.ondalune.data.model.streamQuality
 import dev.chrisbanes.haze.hazeSource
@@ -340,6 +343,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     LaunchedEffect(viewModel.activeServer().id) { viewModel.refreshHomeShelves() }
 
     val activeServer = viewModel.activeServer()
+    val reverbProcessingMode by viewModel.reverbProcessingMode.collectAsStateWithLifecycle()
+    val isPlayingOfflineFile by viewModel.isPlayingOfflineFile.collectAsStateWithLifecycle()
+    val playingFromPlaylist by viewModel.playingFromPlaylist.collectAsStateWithLifecycle()
     var homePullProgress by remember { mutableFloatStateOf(0f) }
     val libraryFilters by viewModel.libraryFilters.collectAsStateWithLifecycle()
     val allServerTracks by viewModel.allServerTracks.collectAsStateWithLifecycle()
@@ -957,6 +963,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetHeaderFont = viewModel.settings::setHeaderFont,
                                             onSetBodyFont = viewModel.settings::setBodyFont,
                                             onSetArtworkCut = viewModel.settings::setArtworkCut,
+                                            onSetPlayerLook = viewModel.settings::setPlayerLook,
                                             onSetHomeSections = viewModel.settings::setHomeSections,
                                             onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onSetPlayerBackgroundStyle = viewModel::setPlayerBackgroundStyle,
@@ -1086,7 +1093,77 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     // Its colours follow each new cover with a fade; the rest of the app switches at once.
                     if (activeTrack != null) FadingColors {
                         PlaybackPosition(viewModel) { positionMs, durationMs ->
-                            NowPlayingStudioOverlay(
+                            if (customizationSettings.playerLook == PlayerLook.DEFAULT) DefaultNowPlayingOverlay(
+                                sheet = playerSheet,
+                                audioQuality = audioQuality.takeIf { customizationSettings.showTechnicalFormatBadge },
+                                spatialAudio = viewModel::spatialAudioActive,
+                                dolbyDecoders = viewModel.dolbyDecoders,
+                                track = activeTrack,
+                                server = activeServer,
+                                isPlaying = isPlaying,
+                                isBuffering = isBuffering,
+                                positionMs = positionMs,
+                                durationMs = durationMs,
+                                speedPitchState = speedPitchState,
+                                reverbState = reverbState,
+                                sleepTimerState = sleepTimerState,
+                                shuffleEnabled = shuffleEnabled,
+                                shuffleMode = shuffleMode,
+                                smartShuffleProfile = customizationSettings.smartShuffleProfile,
+                                repeatOneEnabled = repeatOneEnabled,
+                                animatedWaveEnabled = customizationSettings.animatedSquigglyWave,
+                                showRemainingTime = customizationSettings.showRemainingTime,
+                                showPlayerStarButton = customizationSettings.showPlayerStarButton,
+                                unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
+                                backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,
+                                artworkShapeMode = if (customizationSettings.artworkCut == ArtworkCut.FLOWER) ArtworkShapeMode.COOKIE else ArtworkShapeMode.SQUIRCLE,
+                                onCycleArtworkShape = {
+                                    viewModel.settings.setArtworkCut(
+                                        if (customizationSettings.artworkCut == ArtworkCut.FLOWER) ArtworkCut.AUTO else ArtworkCut.FLOWER
+                                    )
+                                },
+                                reverbProcessingMode = reverbProcessingMode,
+                                isPlayingOfflineFile = isPlayingOfflineFile,
+                                activeTab = nowPlayingTab,
+                                lyrics = currentLyrics,
+                                lyricsResult = currentLyricsResult,
+                                download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
+                                    PlayerDownload(
+                                        state = downloadsMap[activeTrack.id],
+                                        onDownload = { viewModel.downloadTrackForOffline(activeTrack) },
+                                        onCancel = { viewModel.cancelOfflineDownload(activeTrack.id) },
+                                        onResume = { viewModel.resumeOfflineDownloads(listOf(activeTrack.id)) },
+                                        onRemove = { viewModel.removeOfflineDownload(activeTrack.id) }
+                                    )
+                                },
+                                queue = playbackQueue,
+                                eqPreset = eqPreset,
+                                onCollapse = { viewModel.setPlayerExpanded(false) },
+                                onSelectTab = viewModel::selectNowPlayingTab,
+                                onTogglePlay = viewModel.playback::togglePlayPause,
+                                onSkipPrevious = viewModel.playback::skipPrevious,
+                                onSwipePrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
+                                onSkipNext = viewModel.playback::skipNext,
+                                onSeek = viewModel::seekTo,
+                                onToggleShuffle = viewModel.playback::toggleShuffle,
+                                onToggleRepeatOne = viewModel.playback::toggleRepeatOne,
+                                onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
+                                onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
+                                onResetSpeedPitch = {
+                                    viewModel.resetSpeedAndPitch()
+                                    viewModel.resetReverbToDry()
+                                },
+                                showSpeedResetHint = showSpeedResetHint,
+                                onSpeedResetHintShown = viewModel::markSpeedResetHintShown,
+                                onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
+                                onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
+                                playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
+                                onOpenPlaylist = viewModel::openPlaylistAnywhere,
+                                onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
+                                onPlayQueueTrack = { viewModel.playback.playFromQueue(it) },
+                                onRemoveQueueTrack = viewModel.playback::removeTrackFromQueue,
+                                onMoveQueueTrack = viewModel.playback::moveQueueTrack
+                            ) else NowPlayingStudioOverlay(
                                 sheet = playerSheet,
                                 audioQuality = audioQuality.takeIf { customizationSettings.showTechnicalFormatBadge },
                                 spatialAudio = viewModel::spatialAudioActive,

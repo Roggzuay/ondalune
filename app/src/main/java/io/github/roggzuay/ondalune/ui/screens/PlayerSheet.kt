@@ -1,5 +1,7 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import kotlin.math.ceil
+import kotlin.math.floor
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -129,14 +131,32 @@ class PlayerSheetState {
      * the player opens. The cover's layer is a square centred on [fullArt] (the hero's longer
      * side, overhanging it where the picture is cropped away), so it scales evenly: at 0 the
      * whole square is the thumbnail, and on the way its clip opens from that square to the
-     * hero's [frame].
+     * hero's [frame]. Without a [frame] (the Default player) the cover is the square itself.
      */
-    fun artTransform(frame: Size): Modifier = Modifier.graphicsLayer {
+    fun artTransform(frame: Size?): Modifier = Modifier.graphicsLayer {
         val f = fraction
         val full = fullArt
+        if (frame == null) {
+            // The Default player's square cover: it is its own frame.
+            if (f >= 1f || fromHero || full.isEmpty) return@graphicsLayer
+            if (miniArt == Rect.Zero) {
+                alpha = contentAlpha
+                return@graphicsLayer
+            }
+            val s = lerp(miniArt.width / full.width, 1f, f)
+            scaleX = s
+            scaleY = s
+            translationX = (miniArt.center.x - full.center.x) * (1f - f)
+            translationY = (miniArt.center.y - full.center.y) * (1f - f)
+            return@graphicsLayer
+        }
         // The square overhangs the hero: at the sides into the controls' pane of a window wider
         // than it is tall, or above and below it on a short one. The frame is the clip at rest.
-        val rest = Rect(Offset((size.width - frame.width) / 2f, (size.height - frame.height) / 2f), frame)
+        // Out to whole pixels: an edge between two would come out half see-through, a faint line
+        // of the background down the side.
+        val rest = Rect(Offset((size.width - frame.width) / 2f, (size.height - frame.height) / 2f), frame).let {
+            Rect(floor(it.left) - 1f, floor(it.top), ceil(it.right) + 1f, ceil(it.bottom))
+        }
         clip = true
         shape = RoundedFrame(rest, 0f)
         if (f >= 1f || fromHero || full.isEmpty) return@graphicsLayer

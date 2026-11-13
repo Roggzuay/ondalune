@@ -49,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.ArtworkCut
+import io.github.roggzuay.ondalune.data.model.PlayerLook
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import io.github.roggzuay.ondalune.ui.theme.colors
 import io.github.roggzuay.ondalune.ui.theme.ArtShape
 import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
@@ -152,7 +155,7 @@ private fun ThemePreviewCard(style: InterfaceStyle, selected: Boolean, onClick: 
     }
 }
 
-/** Every artwork cut, each previewed as a gradient tile in that shape. "Theme" follows the theme. */
+/** Every artwork cut, each previewed as a gradient tile in that shape. "Signature" follows the theme. */
 @Composable
 fun ArtworkShapePicker(selected: ArtworkCut, onSelect: (ArtworkCut) -> Unit) {
     val scheme = MaterialTheme.colorScheme
@@ -169,24 +172,89 @@ fun ArtworkShapePicker(selected: ArtworkCut, onSelect: (ArtworkCut) -> Unit) {
                     .padding(vertical = 10.dp)
                     .testTag("artwork_cut_${cut.name.lowercase()}")
             ) {
-                if (cut == ArtworkCut.AUTO) {
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        Text("Auto", style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
-                    }
-                } else {
-                    Box(
-                        Modifier
-                            .size(40.dp)
-                            .clip(artShape(ArtShape.valueOf(cut.name), key = 1))
-                            .background(Brush.linearGradient(listOf(scheme.primary, scheme.tertiary)))
-                    )
-                }
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(artShape(if (cut == ArtworkCut.AUTO) ArtShape.SQUIRCLE else ArtShape.valueOf(cut.name), key = 1))
+                        .background(Brush.linearGradient(listOf(scheme.primary, scheme.tertiary)))
+                )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     cut.label,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
                     maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/** The two full players side by side, each drawn as a tiny phone. */
+@Composable
+fun PlayerLookPicker(selected: PlayerLook, onSelect: (PlayerLook) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().testTag("player_look_picker")) {
+        PlayerLook.entries.forEach { look ->
+            val isSelected = look == selected
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (isSelected) scheme.primaryContainer else scheme.surfaceContainerHigh)
+                    .clickable { onSelect(look) }
+                    .padding(10.dp)
+                    .testTag("player_look_${look.name.lowercase()}")
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(0.62f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.surface)
+                ) {
+                    val art = Brush.linearGradient(listOf(scheme.primary, scheme.tertiary))
+                    if (look == PlayerLook.IMMERSIVE) {
+                        Box(
+                            Modifier.fillMaxWidth().fillMaxHeight(0.58f).background(art)
+                        )
+                        Box(
+                            Modifier.fillMaxWidth().fillMaxHeight(0.58f).background(
+                                Brush.verticalGradient(0.6f to Color.Transparent, 1f to scheme.surface)
+                            )
+                        )
+                    } else {
+                        Box(
+                            Modifier
+                                .padding(start = 14.dp, end = 14.dp, top = 18.dp)
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(art)
+                        )
+                    }
+                    Column(
+                        Modifier.align(Alignment.BottomStart).padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(Modifier.width(48.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(scheme.onSurface.copy(alpha = 0.7f)))
+                        Box(Modifier.width(32.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(scheme.onSurface.copy(alpha = 0.35f)))
+                        Spacer(Modifier.height(4.dp))
+                        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.primary.copy(alpha = 0.6f)))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    look.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurface
+                )
+                Text(
+                    look.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) scheme.onPrimaryContainer.copy(alpha = 0.8f) else scheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
