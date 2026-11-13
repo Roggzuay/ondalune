@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.SystemClock
+import android.util.Log
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioFocusRequest
@@ -315,9 +317,11 @@ class OndaluneAudioEngine(
 
     fun playTrack(
         track: SubsonicTrack,
-        server: SubsonicServerConfig,
-        eqPreset: EqualizerPreset
+        requestedServer: SubsonicServerConfig,
+        eqPreset: EqualizerPreset,
+        startMs: Long = 0L
     ) {
+        val server = streamServerFor(track, requestedServer)
         val request = playRequest.incrementAndGet()
         scope.launch {
             _isBuffering.value = true
@@ -342,16 +346,32 @@ class OndaluneAudioEngine(
                 // Real-time PCM DSP pipeline first (a Dolby stream goes to the phone's own Dolby engine
                 // when it takes it); MediaPlayer + hardware session effects if the container can't be
                 // decoded to raw PCM.
-                val playable = withContext(Dispatchers.IO) { openForPlayback(sourcePath, track) }
+                val playable = withContext(Dispatchers.IO) {
+                    openForPlayback(sourcePath, track, server).also { opened ->
+                        // A converted stream can't seek, so it's decoded up to [startMs] instead.
+                        val source = (opened as? Playable.Pcm)?.source ?: return@also
+                        val target = startMs * source.sampleRate / 1000L
+                        val scratch = FloatArray(4096 * 2)
+                        while (source.positionFrames < target && request == playRequest.get()) {
+                            if (source.read(scratch, 0, min(4096L, target - source.positionFrames).toInt()) <= 0) break
+                        }
+                    }
+                }
                 // A slow stream can finish opening after another song was picked: never start both.
                 if (request != playRequest.get()) {
                     playable.release()
                     return@launch
                 }
                 when (playable) {
-                    is Playable.Pcm -> startPcmPipeline(
-                        QueuedSource(track, playable.source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
-                    )
+                    is Playable.Pcm -> {
+                        startPcmPipeline(
+                            QueuedSource(
+                                track, playable.source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode),
+                                rawStreamFrom = server.takeIf { !offline && isRawStream(sourcePath, it) }
+                            )
+                        )
+                        if (startMs > 0L) _positionMs.value = startMs
+                    }
                     is Playable.Dolby -> startDolbyPassthrough(playable.audio, playable.output, track, sourcePath, fromMs = 0L)
                     is Playable.NoDecoder -> reportUnplayable(track, cantDecode(playable.mime))
                     Playable.None -> startMediaPlayerFallback(sourcePath, eqPreset)
@@ -379,6 +399,30 @@ class OndaluneAudioEngine(
         return path to (offlineFile != null)
     }
 
+    /**
+     * Bitrate (kbps) of a lossless stream that couldn't keep up on this run. Songs at or above it get
+     * a converted copy from the start; one that falls behind lowers it. Lossless is tried again
+     * [LosslessRetryMs] after the last time one fell behind.
+     */
+    @Volatile
+    private var losslessLimitKbps = Int.MAX_VALUE
+    @Volatile
+    private var losslessFellBehindAtMs = 0L
+
+    private fun isRawStream(path: String, server: SubsonicServerConfig) =
+        path.startsWith("http") && (server.transcodeFormat.isBlank() || server.transcodeFormat == "RAW")
+
+    private fun kbpsOf(track: SubsonicTrack) =
+        // Without a bitrate from the server: about what FLAC packs stereo PCM of that depth and rate into.
+        track.bitRate.takeIf { it > 0 } ?: (track.bitDepth * track.samplingRate * 2 * 6 / 10_000)
+
+    /** [server], or the same server sending Opus when this song's lossless stream can't keep up. */
+    private fun streamServerFor(track: SubsonicTrack, server: SubsonicServerConfig): SubsonicServerConfig {
+        val lossless = server.transcodeFormat.isBlank() || server.transcodeFormat == "RAW"
+        if (SystemClock.elapsedRealtime() - losslessFellBehindAtMs > LosslessRetryMs) losslessLimitKbps = Int.MAX_VALUE
+        return if (lossless && kbpsOf(track) >= losslessLimitKbps) server.copy(transcodeFormat = "OPUS", maxBitRate = 192) else server
+    }
+
     /** How a song can play: decoded into the PCM pipeline, as a Dolby stream for the phone's engine, or not at all here. */
     private sealed class Playable {
         class Pcm(val source: PcmSource) : Playable()
@@ -402,12 +446,18 @@ class OndaluneAudioEngine(
      * that is on and the current output takes it; otherwise it is decoded like anything else, by
      * the phone's own Dolby decoder, and reported when the phone has none. Blocking: IO thread.
      */
-    private fun openForPlayback(path: String, track: SubsonicTrack): Playable {
+    private fun openForPlayback(path: String, track: SubsonicTrack, server: SubsonicServerConfig): Playable {
         if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
             // A WAV this can't read (compressed, 64-bit float) goes to Android's extractor instead.
             runCatching { WavPcmSource(File(path)) }.getOrNull()?.let { return Playable.Pcm(it) }
         }
-        if (track.suffix.equals("flac", ignoreCase = true) || path.endsWith(".flac", ignoreCase = true)) {
+        // A stream the server converts isn't the FLAC file, and the probe would wait out the server's
+        // conversion only to find that. A song the server says is 16-bit needs no probe either.
+        val converted = path.startsWith("http") && server.transcodeFormat.isNotBlank() && server.transcodeFormat != "RAW"
+        val mayBeHiRes = track.bitDepth == 0 || track.bitDepth > 16
+        if (!converted && mayBeHiRes &&
+            (track.suffix.equals("flac", ignoreCase = true) || path.endsWith(".flac", ignoreCase = true))
+        ) {
             // A FLAC deeper than 16-bit is read here, since Android's extractor would cut it to 16-bit.
             FlacFrames.open(context, path)?.let { flac -> CodecPcmSource.from(flac)?.let { return Playable.Pcm(it) } }
         }
@@ -577,6 +627,7 @@ class OndaluneAudioEngine(
                 val chunkFrames = 1024
                 val buffer = FloatArray(chunkFrames * 2)
                 val result = TransitionMixer.Result()
+                var stalledMs = 0L
 
                 while (isActive && isPcmPipelineActive.get()) {
                     val seekReqMs = pendingSeekMs.getAndSet(-1L)
@@ -598,7 +649,22 @@ class OndaluneAudioEngine(
                     mixer.gapless = gaplessEnabled
                     mixer.crossfadeFrames = crossfadeFramesBetween(mixer.current, mixer.next)
 
+                    val renderStart = System.nanoTime()
                     mixer.render(buffer, chunkFrames, result)
+                    mixer.current.rawStreamFrom?.let { from ->
+                        // Waiting on the network longer than the audio it gave is a gap you hear.
+                        val waitedMs = (System.nanoTime() - renderStart) / 1_000_000L - result.frames * 1000L / sampleRate
+                        if (waitedMs > 100L) stalledMs += waitedMs
+                        if (stalledMs > LosslessStallLimitMs) {
+                            val cur = mixer.current
+                            losslessLimitKbps = min(losslessLimitKbps, kbpsOf(cur.track) * 4 / 5)
+                            losslessFellBehindAtMs = SystemClock.elapsedRealtime()
+                            Log.w("OndalunePcm", "Lossless stream fell behind ${stalledMs}ms: continuing \"${cur.track.title}\" as Opus")
+                            val at = cur.positionMs()
+                            withContext(Dispatchers.Main) { playTrack(cur.track, from, currentEqPreset, startMs = at) }
+                            return@launch
+                        }
+                    }
                     if (result.frames > 0) {
                         // Real-time stereo PCM DSP (EQ + Freeverb/Schroeder Reverb + Volume)
                         processRealtimeStereoChunk(
@@ -619,6 +685,7 @@ class OndaluneAudioEngine(
                     }
 
                     if (result.advanced) {
+                        stalledMs = 0L
                         val now = mixer.current
                         _playingStream.value = PlayingStream(now.source.stream, ownPipeline = true, outputSampleRate = sampleRate)
                         _durationMs.value = now.durationMs().takeIf { it > 1000L } ?: (now.track.durationSec * 1000L)
@@ -683,8 +750,10 @@ class OndaluneAudioEngine(
     }
 
     private suspend fun prepareNext(sampleRate: Int, session: Int) {
-        val (track, server) = withContext(Dispatchers.Main) { nextTrackProvider?.invoke() } ?: return
-        val playable = runCatching { openForPlayback(resolveSourcePath(track, server).first, track) }.getOrNull()
+        val (track, requestedServer) = withContext(Dispatchers.Main) { nextTrackProvider?.invoke() } ?: return
+        val server = streamServerFor(track, requestedServer)
+        val resolved = runCatching { resolveSourcePath(track, server) }.getOrNull()
+        val playable = resolved?.let { (path, _) -> runCatching { openForPlayback(path, track, server) }.getOrNull() }
         val source = (playable as? Playable.Pcm)?.source
         if (source == null || source.sampleRate != sampleRate) {
             // A different sample rate needs a new AudioTrack, and a Dolby stream for the phone's engine
@@ -693,7 +762,10 @@ class OndaluneAudioEngine(
             unpreparableNextId = track.id
             return
         }
-        val queued = QueuedSource(track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode))
+        val queued = QueuedSource(
+            track, source, track.durationSec * 1000L, replayGainLinear(track, replayGainMode),
+            rawStreamFrom = server.takeIf { resolved?.second == false && isRawStream(resolved.first, it) }
+        )
         if (pipelineSession.get() != session || !preparedNext.compareAndSet(null, queued)) {
             source.release()
         }
@@ -1328,6 +1400,10 @@ class OndaluneAudioEngine(
 
 /** How long before a song ends (plus the crossfade) the next one is opened and buffered. */
 private const val PrepareLeadMs = 12_000
+
+/** Gaps from a lossless stream waiting on the network, summed over a song, before it goes converted. */
+private const val LosslessStallLimitMs = 2_000L
+private const val LosslessRetryMs = 15 * 60_000L
 
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L
