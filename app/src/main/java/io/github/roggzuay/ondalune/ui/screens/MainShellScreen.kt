@@ -235,6 +235,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isBuffering by viewModel.isBuffering.collectAsStateWithLifecycle()
     val downloadsMap by viewModel.downloadsMap.collectAsStateWithLifecycle()
     val offlineStorageSummary by viewModel.offlineStorageSummary.collectAsStateWithLifecycle()
+    val songsAhead by viewModel.songsAhead.collectAsStateWithLifecycle()
+    val coversSaved by viewModel.coversSaved.collectAsStateWithLifecycle()
 
     val speedPitchState by viewModel.speedPitchState.collectAsStateWithLifecycle()
     val reverbState by viewModel.reverbState.collectAsStateWithLifecycle()
@@ -1011,6 +1013,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCancelSleepTimer = viewModel.playback::cancelSleepTimer,
                                             onSelectEqPreset = viewModel::selectEqualizerPreset,
                                             offlineStorageSummary = offlineStorageSummary,
+                                            songsAhead = songsAhead,
+                                            coversSaved = coversSaved,
                                             onClearOfflineDownloads = viewModel::clearAllOfflineDownloads,
                                             onManageDownloads = { showDownloads = true },
                                             onClearTempAudioCache = viewModel::clearTemporaryAudioCache,
@@ -1405,6 +1409,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         servers = servers,
                         pingDiagnostic = pingDiagnostic,
                         isSyncing = isSyncing,
+                        songsAhead = songsAhead,
+                        coversSaved = coversSaved,
                         onQuickSync = {
                             viewModel.triggerQuickSync()
                         },

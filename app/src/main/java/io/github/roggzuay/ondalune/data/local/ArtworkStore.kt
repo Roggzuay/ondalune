@@ -9,6 +9,8 @@ import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -25,6 +27,11 @@ import kotlinx.coroutines.withContext
 object ArtworkStore {
     private val running = Mutex()
 
+    /** Covers and photos on the phone ([saved] of [total]); [active] while the missing ones load. */
+    data class Progress(val saved: Int = 0, val total: Int = 0, val active: Boolean = false)
+
+    val progress = MutableStateFlow(Progress())
+
     suspend fun saveAll(context: Context, tracks: List<SubsonicTrack>, streaming: () -> Boolean = { false }) {
         // One pass at a time; a later call finds the earlier one's covers already there.
         if (!running.tryLock()) return
@@ -38,12 +45,14 @@ object ArtworkStore {
     private suspend fun fetchMissing(context: Context, tracks: List<SubsonicTrack>, streaming: () -> Boolean) {
         val loader = context.imageLoader
         val disk = loader.diskCache ?: return
-        val missing = tracks.asSequence()
+        val all = tracks.asSequence()
             .flatMap { sequenceOf(it.coverArtUrl, it.artistImageUrl) }
             .filter { it.startsWith("http") }
             .distinctBy(::artworkCacheKey)
-            .filter { url -> disk.openSnapshot(artworkCacheKey(url))?.also { it.close() } == null }
             .toList()
+        val missing = all.filter { url -> disk.openSnapshot(artworkCacheKey(url))?.also { it.close() } == null }
+        val saved = AtomicInteger(all.size - missing.size)
+        progress.value = Progress(saved.get(), all.size, active = missing.isNotEmpty())
         val gate = Semaphore(3)
         coroutineScope {
             missing.forEach { url ->
@@ -60,9 +69,11 @@ object ArtworkStore {
                                 .size(8)
                                 .build()
                         )
+                        progress.value = Progress(saved.incrementAndGet(), all.size, active = true)
                     }
                 }
             }
         }
+        progress.value = progress.value.copy(active = false)
     }
 }

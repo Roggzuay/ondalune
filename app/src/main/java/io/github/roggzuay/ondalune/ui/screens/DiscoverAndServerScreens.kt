@@ -444,6 +444,8 @@ fun SettingsCustomizationScreen(
     onSetStreamQuality: (mobile: Boolean, StreamQuality) -> Unit,
     onSetDownloadSpeedLimit: (DownloadSpeedLimit) -> Unit,
     onSetReadAheadBuffer: (Int) -> Unit,
+    songsAhead: io.github.roggzuay.ondalune.audio.SongsAhead = io.github.roggzuay.ondalune.audio.SongsAhead(),
+    coversSaved: io.github.roggzuay.ondalune.data.local.ArtworkStore.Progress = io.github.roggzuay.ondalune.data.local.ArtworkStore.Progress(),
     onSetWidgetLayoutMode: (WidgetLayoutMode) -> Unit = {},
     onSetWidgetThemeMode: (WidgetThemeMode) -> Unit = {},
     onSetWidgetShowArtwork: (Boolean) -> Unit = {},
@@ -945,7 +947,7 @@ fun SettingsCustomizationScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Read-Ahead Track Cache", style = MaterialTheme.typography.titleSmall)
+                        Text("Save next songs", style = MaterialTheme.typography.titleSmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(3, 5, 10).forEach { count ->
                                 val selected = settings.readAheadTrackBuffer == count
@@ -973,10 +975,13 @@ fun SettingsCustomizationScreen(
                     ) {
                         Text("Offline Downloads & Storage", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "Offline tracks: ${offlineStorageSummary.completedTrackCount} (${offlineStorageSummary.formattedOfflineSize}) • Temp cache: ${offlineStorageSummary.formattedCacheSize}",
+                            text = "Downloaded: ${offlineStorageSummary.completedTrackCount} songs (${offlineStorageSummary.formattedOfflineSize})\n" +
+                                "Next songs: ${offlineStorageSummary.formattedSongsAheadSize} • Covers: ${offlineStorageSummary.formattedArtworkSize} • Other cache: " +
+                                "%.1f MB".format((offlineStorageSummary.temporaryCacheBytes - offlineStorageSummary.songsAheadBytes).coerceAtLeast(0L) / (1024.0 * 1024.0)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        PhoneCacheProgress(songsAhead, coversSaved)
                         androidx.compose.material3.FilledTonalButton(
                             onClick = onManageDownloads,
                             modifier = Modifier
@@ -3736,6 +3741,8 @@ fun UserServerInfoModal(
     servers: List<SubsonicServerConfig>,
     pingDiagnostic: PingDiagnosticResult?,
     isSyncing: Boolean,
+    songsAhead: io.github.roggzuay.ondalune.audio.SongsAhead = io.github.roggzuay.ondalune.audio.SongsAhead(),
+    coversSaved: io.github.roggzuay.ondalune.data.local.ArtworkStore.Progress = io.github.roggzuay.ondalune.data.local.ArtworkStore.Progress(),
     onQuickSync: () -> Unit,
     onActivateServer: (SubsonicServerConfig) -> Unit,
     onOpenOnboarding: () -> Unit,
@@ -3960,6 +3967,7 @@ fun UserServerInfoModal(
                                     }
                                 }
                             }
+                            PhoneCacheProgress(songsAhead, coversSaved)
                         }
                     }
                 }
@@ -4334,4 +4342,33 @@ private fun OnboardingSyncPanel(state: OndaluneViewModel.OnboardingSync, serverN
             )
         }
     }
+}
+
+/** What is saved on the phone so far: the next songs in the queue, and the library's covers. */
+@Composable
+internal fun PhoneCacheProgress(
+    songsAhead: io.github.roggzuay.ondalune.audio.SongsAhead,
+    coversSaved: io.github.roggzuay.ondalune.data.local.ArtworkStore.Progress
+) {
+    @Composable
+    fun line(label: String, done: Int, total: Int, active: Boolean) {
+        if (total <= 0) return
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    if (done >= total) "All $total saved" else "$done of $total",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { done / total.toFloat() },
+                modifier = Modifier.fillMaxWidth(),
+                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+            )
+        }
+    }
+    line("Next songs", songsAhead.ready, songsAhead.total, songsAhead.active)
+    line("Covers & artist photos", coversSaved.saved, coversSaved.total, coversSaved.active)
 }

@@ -928,7 +928,11 @@ data class OfflineStorageSummary(
     val downloadedTrackCount: Int = 0,
     val activeDownloadCount: Int = 0,
     val persistentAudioBytes: Long = 0L,
-    val temporaryCacheBytes: Long = 0L
+    val temporaryCacheBytes: Long = 0L,
+    /** Songs saved ahead of the queue (part of [temporaryCacheBytes]). */
+    val songsAheadBytes: Long = 0L,
+    /** Covers and artist photos kept on the phone. */
+    val artworkBytes: Long = 0L
 ) {
     val completedTrackCount: Int
         get() = downloadedTrackCount
@@ -944,6 +948,12 @@ data class OfflineStorageSummary(
 
     val formattedCacheSize: String
         get() = temporaryCacheFormattedMb
+
+    val formattedSongsAheadSize: String
+        get() = "%.1f MB".format(songsAheadBytes / (1024.0 * 1024.0))
+
+    val formattedArtworkSize: String
+        get() = "%.1f MB".format(artworkBytes / (1024.0 * 1024.0))
 }
 
 /**

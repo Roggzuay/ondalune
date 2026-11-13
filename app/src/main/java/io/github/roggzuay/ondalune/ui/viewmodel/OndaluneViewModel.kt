@@ -234,6 +234,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val durationMs: StateFlow<Long> = audioEngine.durationMs
     val playbackSpeed: StateFlow<Float> = audioEngine.playbackSpeed
     val isPlayingOfflineFile: StateFlow<Boolean> = audioEngine.isPlayingOfflineFile
+    val songsAhead: StateFlow<io.github.roggzuay.ondalune.audio.SongsAhead> = audioEngine.songsAhead
+    val coversSaved: StateFlow<ArtworkStore.Progress> = ArtworkStore.progress
     val reverbProcessingMode: StateFlow<io.github.roggzuay.ondalune.data.model.ReverbProcessingMode> = audioEngine.reverbProcessingMode
 
     private val _speedPitchState = MutableStateFlow(loadPersistedSpeedPitchState())
@@ -1024,7 +1026,27 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             allServerTracks.distinctUntilChangedBy { it.size }.collectLatest { tracks ->
                 if (tracks.isEmpty()) return@collectLatest
                 delay(3_000L)
-                ArtworkStore.saveAll(getApplication(), tracks) { isPlaying.value && !isPlayingOfflineFile.value }
+                ArtworkStore.saveAll(getApplication(), tracks) {
+                    isPlaying.value && !isPlayingOfflineFile.value &&
+                        playback.currentTrack.value?.let { audioEngine.hasSavedCopy(it) } != true
+                }
+                downloadManager.refreshStorageSummary(_activeServerId.value)
+            }
+        }
+        // The next songs in the queue are saved ahead (as many as the read-ahead setting says, one
+        // on mobile data); a new queue or a reshuffle starts over from the new next songs.
+        viewModelScope.launch {
+            combine(playback.playbackQueue, playback.currentTrack, settings.customization) { queue, current, prefs ->
+                val at = queue.indexOfFirst { it.id == current?.id }
+                val count = if (onMobileData()) 1 else prefs.readAheadTrackBuffer
+                if (current == null || at < 0) emptyList() else queue.drop(at + 1).take(count).map { it.id }
+            }.distinctUntilChanged().collectLatest { ids ->
+                if (ids.isEmpty()) return@collectLatest
+                delay(1_500L)
+                val byId = playback.playbackQueue.value.associateBy { it.id }
+                val upcoming = ids.mapNotNull { byId[it] }.map { it to streamServerFor(it) }
+                runCatching { audioEngine.cacheAhead(upcoming, keep = settings.customization.value.readAheadTrackBuffer * 2 + 2) }
+                downloadManager.refreshStorageSummary(_activeServerId.value)
             }
         }
         // Confirmation banners ("Reverb set to…", "Added to queue") clear themselves; only the live

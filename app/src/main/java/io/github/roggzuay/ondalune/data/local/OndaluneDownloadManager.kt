@@ -431,7 +431,9 @@ class OndaluneDownloadManager(
             downloadedTrackCount = completedCount,
             activeDownloadCount = activeCount,
             persistentAudioBytes = persistentBytes,
-            temporaryCacheBytes = tempCacheBytes
+            temporaryCacheBytes = tempCacheBytes,
+            songsAheadBytes = directoryOrFileSize(File(context.cacheDir, "songs")),
+            artworkBytes = directoryOrFileSize(File(context.filesDir, "artwork"))
         )
     }
 

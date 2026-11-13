@@ -312,6 +312,53 @@ class OndaluneAudioEngine(
         }?.firstOrNull()
     }
 
+    /** Songs saved ahead of the queue by [cacheAhead]. Android may clear them like any cache. */
+    private val songCacheDir get() = File(context.cacheDir, "songs")
+
+    private fun cachedSongFile(serverId: Long, trackId: String): File? {
+        val id = trackId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        return songCacheDir.listFiles { f -> f.isFile && f.name.startsWith("${serverId}_$id.") && !f.name.endsWith(".part") }
+            ?.firstOrNull()
+    }
+
+    /** True when [track] plays from a copy saved ahead rather than from the server. */
+    fun hasSavedCopy(track: SubsonicTrack) = cachedSongFile(track.serverId, track.id) != null
+
+    private val _songsAhead = MutableStateFlow(SongsAhead())
+    /** How many of the songs coming up are on the phone already. */
+    val songsAhead: StateFlow<SongsAhead> = _songsAhead.asStateFlow()
+
+    /**
+     * Saves the [upcoming] songs to the phone in queue order, as the same stream they would play
+     * from, so they start at once and never wait on the server. One at a time, held back while the
+     * current song buffers. Older saved songs beyond [keep] are let go, least recently played first.
+     */
+    suspend fun cacheAhead(upcoming: List<Pair<SubsonicTrack, SubsonicServerConfig>>, keep: Int) = withContext(Dispatchers.IO) {
+        songCacheDir.mkdirs()
+        val wanted = upcoming.filter { (track, server) -> !server.isDemoServer && findOfflineTrackFile(server.id, track.id) == null }
+        fun ready() = wanted.count { (track, server) -> cachedSongFile(server.id, track.id) != null }
+        _songsAhead.value = SongsAhead(ready(), wanted.size, active = true)
+        try {
+            for ((track, requested) in wanted) {
+                if (cachedSongFile(requested.id, track.id) != null) continue
+                while (isBuffering.value) delay(1_000L)
+                val server = streamServerFor(track, requested)
+                val url = MusicSources.forServer(context, subsonicClient, server).playablePath(server, track)
+                    ?.takeIf { it.startsWith("http") } ?: continue
+                val raw = server.transcodeFormat.isBlank() || server.transcodeFormat == "RAW"
+                val ext = if (raw) track.suffix.lowercase().ifBlank { "audio" } else server.transcodeFormat.lowercase()
+                val id = track.id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                subsonicClient.downloadAudioStreamToFile(url, track, File(songCacheDir, "${requested.id}_$id.$ext")) { _, _ -> }
+                _songsAhead.value = SongsAhead(ready(), wanted.size, active = true)
+            }
+        } finally {
+            _songsAhead.value = _songsAhead.value.copy(active = false)
+            songCacheDir.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
+            val spare = songCacheDir.listFiles()?.filter { it.isFile }.orEmpty().sortedByDescending { it.lastModified() }
+            spare.drop(keep).forEach { it.delete() }
+        }
+    }
+
     /** Bumped by every [playTrack]; a load that finishes after a newer request is dropped. */
     private val playRequest = AtomicInteger(0)
 
@@ -390,8 +437,10 @@ class OndaluneAudioEngine(
     /** Where [track] plays from (downloaded file, the demo's dry WAV master, or the server stream) and whether it's offline. */
     private suspend fun resolveSourcePath(track: SubsonicTrack, server: SubsonicServerConfig): Pair<String, Boolean> {
         val offlineFile = withContext(Dispatchers.IO) { findOfflineTrackFile(server.id, track.id) }
+        val savedAhead = if (offlineFile == null) withContext(Dispatchers.IO) { cachedSongFile(server.id, track.id) } else null
         val path = when {
             offlineFile != null -> offlineFile.absolutePath
+            savedAhead != null -> savedAhead.also { it.setLastModified(System.currentTimeMillis()) }.absolutePath
             server.isDemoServer -> withContext(Dispatchers.Default) { ensureDryMasterTrackWav(track).absolutePath }
             else -> MusicSources.forServer(context, subsonicClient, server).playablePath(server, track)
                 ?: throw java.io.FileNotFoundException("\"${track.title}\" is no longer on this phone")
@@ -1407,3 +1456,6 @@ private const val LosslessRetryMs = 15 * 60_000L
 
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L
+
+/** Songs coming up that are on the phone already ([ready] of [total]); [active] while more are being saved. */
+data class SongsAhead(val ready: Int = 0, val total: Int = 0, val active: Boolean = false)
