@@ -47,10 +47,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -330,8 +334,10 @@ class OndaluneAudioEngine(
 
     /**
      * Saves the [upcoming] songs to the phone in queue order, as the same stream they would play
-     * from, so they start at once and never wait on the server. One at a time, held back while the
-     * current song buffers. Older saved songs beyond [keep] are let go, least recently played first.
+     * from, so they start at once and never wait on the server. One at a time, and only while the
+     * song playing has had the line to itself for a while: the moment it waits on the network, the
+     * download stops and tries again later. Older saved songs beyond [keep] are let go, least
+     * recently played first.
      */
     suspend fun cacheAhead(upcoming: List<Pair<SubsonicTrack, SubsonicServerConfig>>, keep: Int) = withContext(Dispatchers.IO) {
         songCacheDir.mkdirs()
@@ -340,22 +346,57 @@ class OndaluneAudioEngine(
         _songsAhead.value = SongsAhead(ready(), wanted.size, active = true)
         try {
             for ((track, requested) in wanted) {
-                if (cachedSongFile(requested.id, track.id) != null) continue
-                while (isBuffering.value) delay(1_000L)
-                val server = streamServerFor(track, requested)
-                val url = MusicSources.forServer(context, subsonicClient, server).playablePath(server, track)
-                    ?.takeIf { it.startsWith("http") } ?: continue
-                val raw = server.transcodeFormat.isBlank() || server.transcodeFormat == "RAW"
-                val ext = if (raw) track.suffix.lowercase().ifBlank { "audio" } else server.transcodeFormat.lowercase()
-                val id = track.id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-                subsonicClient.downloadAudioStreamToFile(url, track, File(songCacheDir, "${requested.id}_$id.$ext")) { _, _ -> }
+                // A download stopped to give the line back is tried again once it is quiet.
+                var steppedAside = true
+                while (steppedAside && cachedSongFile(requested.id, track.id) == null) {
+                    awaitQuietLine()
+                    val server = streamServerFor(track, requested)
+                    val url = MusicSources.forServer(context, subsonicClient, server).playablePath(server, track)
+                        ?.takeIf { it.startsWith("http") } ?: break
+                    val raw = server.transcodeFormat.isBlank() || server.transcodeFormat == "RAW"
+                    val ext = if (raw) track.suffix.lowercase().ifBlank { "audio" } else server.transcodeFormat.lowercase()
+                    val id = track.id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                    steppedAside = false
+                    coroutineScope {
+                        savingAhead = true
+                        val download = launch {
+                            subsonicClient.downloadAudioStreamToFile(url, track, File(songCacheDir, "${requested.id}_$id.$ext")) { _, _ -> }
+                        }
+                        val stepAside = launch {
+                            val from = streamWaitedAtMs.value
+                            merge(streamWaitedAtMs.filter { it != from }, isBuffering.filter { it }).first()
+                            steppedAside = true
+                            download.cancel()
+                        }
+                        download.join()
+                        stepAside.cancel()
+                        savingAhead = false
+                    }
+                }
                 _songsAhead.value = SongsAhead(ready(), wanted.size, active = true)
             }
         } finally {
+            savingAhead = false
             _songsAhead.value = _songsAhead.value.copy(active = false)
             songCacheDir.listFiles()?.filter { it.name.endsWith(".part") }?.forEach { it.delete() }
             val spare = songCacheDir.listFiles()?.filter { it.isFile }.orEmpty().sortedByDescending { it.lastModified() }
             spare.drop(keep).forEach { it.delete() }
+        }
+    }
+
+    /** When the song playing last had to wait on the network. */
+    private val streamWaitedAtMs = MutableStateFlow(0L)
+    @Volatile
+    private var savingAhead = false
+
+    /** Until nothing has been loading or waiting on the network for [QuietLineMs]. */
+    private suspend fun awaitQuietLine() {
+        var quietSince = SystemClock.elapsedRealtime()
+        while (true) {
+            val now = SystemClock.elapsedRealtime()
+            if (isBuffering.value || now - streamWaitedAtMs.value < QuietLineMs) quietSince = now
+            if (now - quietSince >= QuietLineMs) return
+            delay(1_000L)
         }
     }
 
@@ -700,10 +741,12 @@ class OndaluneAudioEngine(
 
                     val renderStart = System.nanoTime()
                     mixer.render(buffer, chunkFrames, result)
+                    // Waiting on the network longer than the audio it gave is a gap you hear.
+                    val waitedMs = (System.nanoTime() - renderStart) / 1_000_000L - result.frames * 1000L / sampleRate
+                    if (waitedMs > 100L) streamWaitedAtMs.value = SystemClock.elapsedRealtime()
                     mixer.current.rawStreamFrom?.let { from ->
-                        // Waiting on the network longer than the audio it gave is a gap you hear.
-                        val waitedMs = (System.nanoTime() - renderStart) / 1_000_000L - result.frames * 1000L / sampleRate
-                        if (waitedMs > 100L) stalledMs += waitedMs
+                        // A song being saved ahead took the line and stops now, so that wait isn't the stream's.
+                        if (waitedMs > 100L && !savingAhead) stalledMs += waitedMs
                         if (stalledMs > LosslessStallLimitMs) {
                             val cur = mixer.current
                             losslessLimitKbps = min(losslessLimitKbps, kbpsOf(cur.track) * 4 / 5)
@@ -1453,6 +1496,7 @@ private const val PrepareLeadMs = 12_000
 /** Gaps from a lossless stream waiting on the network, summed over a song, before it goes converted. */
 private const val LosslessStallLimitMs = 2_000L
 private const val LosslessRetryMs = 15 * 60_000L
+private const val QuietLineMs = 10_000L
 
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L

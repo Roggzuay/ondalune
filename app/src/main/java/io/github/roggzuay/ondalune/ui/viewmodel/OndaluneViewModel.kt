@@ -1028,7 +1028,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 if (tracks.isEmpty()) return@collectLatest
                 delay(3_000L)
                 ArtworkStore.saveAll(getApplication(), tracks) {
-                    isPlaying.value && !isPlayingOfflineFile.value &&
+                    audioEngine.isBuffering.value || isPlaying.value && !isPlayingOfflineFile.value &&
                         playback.currentTrack.value?.let { audioEngine.hasSavedCopy(it) } != true
                 }
                 downloadManager.refreshStorageSummary(_activeServerId.value)
