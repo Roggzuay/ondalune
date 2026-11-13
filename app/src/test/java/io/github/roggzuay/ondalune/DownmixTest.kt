@@ -1,18 +1,17 @@
 package io.github.roggzuay.ondalune
 
 import io.github.roggzuay.ondalune.audio.Downmix
-import java.nio.FloatBuffer
-import java.nio.ShortBuffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownmixTest {
+    /** Mixes 16-bit-scaled samples (as floats ×32768) and gives them back on the same scale, rounded. */
     private fun mix(channels: Int, mask: Int = 0, vararg frames: Short): ShortArray {
-        val out = ShortArray(frames.size / channels * 2)
-        Downmix(channels, mask).toStereo(ShortBuffer.wrap(frames), frames.size / channels, out, 0)
-        return out
+        val out = FloatArray(frames.size / channels * 2)
+        Downmix(channels, mask).toStereo(FloatArray(frames.size) { frames[it] / 32768f }, frames.size / channels, out, 0)
+        return ShortArray(out.size) { Math.round(out[it] * 32768f).coerceIn(-32768, 32767).toShort() }
     }
 
     @Test
@@ -74,15 +73,15 @@ class DownmixTest {
     }
 
     @Test
-    fun `float samples mix the same way and come out as 16-bit`() {
-        val frames = floatArrayOf(0f, 0f, 0.5f, 0f, 0f, 0f)
-        val out = ShortArray(2)
-        Downmix(6).toStereo(FloatBuffer.wrap(frames), 1, out, 0)
-        assertEquals(out[0], out[1])
-        assertEquals(mix(6, 0, 0, 0, 16384, 0, 0, 0)[0].toDouble(), out[0].toDouble(), 2.0)
-        val stereo = ShortArray(4)
-        Downmix(2).toStereo(FloatBuffer.wrap(floatArrayOf(1f, -1f, 2f, Float.NaN)), 2, stereo, 0)
-        assertArrayEquals(shortArrayOf(32767, -32767, 32767, 0), stereo)
+    fun `float samples keep resolution finer than 16-bit`() {
+        val tiny = 1f / 8388608f // one 24-bit step
+        val out = FloatArray(4)
+        Downmix(2).toStereo(floatArrayOf(tiny, -tiny, 1.5f, 0f), 2, out, 0)
+        assertArrayEquals(floatArrayOf(tiny, -tiny, 1.5f, 0f), out, 0f)
+        val centre = FloatArray(2)
+        Downmix(6).toStereo(floatArrayOf(0f, 0f, tiny * 4, 0f, 0f, 0f), 1, centre, 0)
+        assertEquals(centre[0], centre[1])
+        assertTrue(centre[0] > 0f && centre[0] < tiny * 4)
     }
 
     @Test

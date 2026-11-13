@@ -143,7 +143,7 @@ class OndaluneAudioEngine(
     val audioSessionError: StateFlow<String?> = _audioSessionError.asStateFlow()
 
     /**
-     * Counter of stereo PCM frames processed in real time by [processRealtimePcm16StereoChunk]
+     * Counter of stereo PCM frames processed in real time by [processRealtimeStereoChunk]
      * during active playback, enabling deterministic verification that the custom DSP pipeline is
      * actively processing the stream rather than baking effects into static files.
      */
@@ -156,7 +156,7 @@ class OndaluneAudioEngine(
      */
     data class PlayingStream(
         val decoded: DecodedStream?,
-        /** True: Ondalune's own pipeline (16-bit stereo PCM to an AudioTrack); false: Android's MediaPlayer. */
+        /** True: Ondalune's own pipeline (32-bit float stereo to an AudioTrack); false: Android's MediaPlayer. */
         val ownPipeline: Boolean,
         val outputSampleRate: Int,
         /** True: the untouched Dolby stream goes to the phone's own Dolby engine; nothing of Ondalune's applies. */
@@ -404,7 +404,12 @@ class OndaluneAudioEngine(
      */
     private fun openForPlayback(path: String, track: SubsonicTrack): Playable {
         if (path.endsWith(".wav", ignoreCase = true) && File(path).exists()) {
-            return runCatching { WavPcmSource(File(path)) }.getOrNull()?.let { Playable.Pcm(it) } ?: Playable.None
+            // A WAV this can't read (compressed, 64-bit float) goes to Android's extractor instead.
+            runCatching { WavPcmSource(File(path)) }.getOrNull()?.let { return Playable.Pcm(it) }
+        }
+        if (track.suffix.equals("flac", ignoreCase = true) || path.endsWith(".flac", ignoreCase = true)) {
+            // A FLAC deeper than 16-bit is read here, since Android's extractor would cut it to 16-bit.
+            FlacFrames.open(context, path)?.let { flac -> CodecPcmSource.from(flac)?.let { return Playable.Pcm(it) } }
         }
         val audio = OpenedAudio.open(context, path) ?: run {
             // Unopenable here. MediaPlayer gets its usual try, except for a Dolby song this phone
@@ -512,8 +517,9 @@ class OndaluneAudioEngine(
 
     /**
      * Real-time PCM pipeline: decoded audio -> [TransitionMixer] (ReplayGain, gapless hand-over,
-     * crossfade) -> [processRealtimePcm16StereoChunk] (EQ + Freeverb/Schroeder reverb + volume) ->
-     * [AudioTrack]. Changing reverb, EQ, speed or pitch modifies the live stream immediately. Near
+     * crossfade) -> [processRealtimeStereoChunk] (EQ + Freeverb/Schroeder reverb + volume) ->
+     * [AudioTrack]. All of it in float at the song's own rate, so a 24-bit or hi-res song reaches the
+     * AudioTrack whole. Changing reverb, EQ, speed or pitch modifies the live stream immediately. Near
      * the end of a song the next one is opened in the background so it can follow without a gap.
      */
     private fun startPcmPipeline(first: QueuedSource) {
@@ -530,11 +536,12 @@ class OndaluneAudioEngine(
             try {
                 first.durationMs().takeIf { it > 1000L }?.let { _durationMs.value = it }
 
+                // In bytes, 8 per float stereo frame: at least 2048 frames, as with 16-bit before.
                 val minBuf = AudioTrack.getMinBufferSize(
                     sampleRate,
                     AudioFormat.CHANNEL_OUT_STEREO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                ).coerceAtLeast(8192)
+                    AudioFormat.ENCODING_PCM_FLOAT
+                ).coerceAtLeast(16384)
 
                 trackOut = runCatching {
                     AudioTrack.Builder()
@@ -546,7 +553,7 @@ class OndaluneAudioEngine(
                         )
                         .setAudioFormat(
                             AudioFormat.Builder()
-                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
                                 .setSampleRate(sampleRate)
                                 .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                                 .build()
@@ -568,7 +575,7 @@ class OndaluneAudioEngine(
                 _isPlaying.value = true
 
                 val chunkFrames = 1024
-                val buffer = ShortArray(chunkFrames * 2)
+                val buffer = FloatArray(chunkFrames * 2)
                 val result = TransitionMixer.Result()
 
                 while (isActive && isPcmPipelineActive.get()) {
@@ -594,12 +601,14 @@ class OndaluneAudioEngine(
                     mixer.render(buffer, chunkFrames, result)
                     if (result.frames > 0) {
                         // Real-time stereo PCM DSP (EQ + Freeverb/Schroeder Reverb + Volume)
-                        processRealtimePcm16StereoChunk(
-                            pcm16Stereo = buffer,
+                        processRealtimeStereoChunk(
+                            samples = buffer,
                             frameCount = result.frames,
-                            eqPreset = currentEqPreset
+                            eqPreset = currentEqPreset,
+                            sampleRate = sampleRate
                         )
-                        val written = trackOut?.write(buffer, 0, result.frames * 2) ?: 0
+                        // Counts are in floats, two to a frame.
+                        val written = trackOut?.write(buffer, 0, result.frames * 2, AudioTrack.WRITE_BLOCKING) ?: 0
                         if (written > 0) audibleClock.wrote(written / 2, mixer.current.positionMs(), sampleRate)
                         // In local JVM unit tests where AudioTrack.write returns immediately without blocking:
                         if (written <= 0) {
@@ -756,71 +765,74 @@ class OndaluneAudioEngine(
         }
     }
 
+    // EQ split-filter coefficients at the rate they were last worked out for.
+    private var eqRate = 0
+    private var eqLowCoeff = 0f
+    private var eqHighCoeff = 0f
+
     /**
-     * Real-time in-place stereo 16-bit PCM DSP processor used for every audio buffer before output.
-     * Applies:
+     * Real-time in-place stereo float DSP used for every audio buffer before output. Applies:
      * 1. Live 5-band stereo tonal shaping ([eqPreset] / [customEqBandsDb])
-     * 2. Live 64-bit internal Schroeder/Freeverb stereo reverberation ([reverbDspProcessor])
-     * 3. Smooth output gain & soft-knee saturation guard
+     * 2. Live Schroeder/Freeverb stereo reverberation ([dsp])
+     * 3. Output gain, then a clamp to full scale (the only limit on the way out)
+     * Filters and reverb follow [sampleRate], so a 96 kHz song sounds as a 44.1 kHz one does.
      */
-    fun processRealtimePcm16StereoChunk(
-        pcm16Stereo: ShortArray,
-        frameCount: Int = pcm16Stereo.size / 2,
+    fun processRealtimeStereoChunk(
+        samples: FloatArray,
+        frameCount: Int = samples.size / 2,
         eqPreset: EqualizerPreset = currentEqPreset,
-        sampleRate: Int = 22050,
+        sampleRate: Int = 44100,
         dsp: OndaluneReverbDspProcessor = reverbDspProcessor,
         reverbState: ReverbState = _reverbState.value
     ) {
-        val safeFrames = minOf(frameCount, pcm16Stereo.size / 2)
+        val safeFrames = minOf(frameCount, samples.size / 2)
         if (safeFrames <= 0) return
 
         dsp.updateState(reverbState, sampleRate)
 
-        val floatInterleaved = FloatArray(safeFrames * 2)
-        val invShort = 1.0f / 32768.0f
         val bands = if (customEqBandsDb.size >= 5 && customEqBandsDb.any { it != 0f }) {
             customEqBandsDb
         } else {
             eqPreset.bandsDb
         }
         val eqActive = bands.any { kotlin.math.abs(it) > 0.05f }
-        val lowGainLinear = 1.0f + (bands[0] / 18.0f)
-        val midGainLinear = 1.0f + (bands[2] / 20.0f)
-        val highGainLinear = 1.0f + (bands[4] / 18.0f)
-
-        for (i in 0 until safeFrames) {
-            var left = pcm16Stereo[i * 2] * invShort
-            var right = pcm16Stereo[i * 2 + 1] * invShort
-
-            if (eqActive) {
+        if (eqActive) {
+            if (sampleRate != eqRate) {
+                // Tuned at 44.1 kHz (corners near 590 Hz and 3.4 kHz); kept there at any rate.
+                eqRate = sampleRate
+                eqLowCoeff = onePoleCoeffAt(0.08f, sampleRate)
+                eqHighCoeff = onePoleCoeffAt(0.38f, sampleRate)
+            }
+            val lowGainLinear = 1.0f + (bands[0] / 18.0f)
+            val midGainLinear = 1.0f + (bands[2] / 20.0f)
+            val highGainLinear = 1.0f + (bands[4] / 18.0f)
+            val a = eqLowCoeff
+            val b = eqHighCoeff
+            for (i in 0 until safeFrames) {
+                val left = samples[i * 2]
+                val right = samples[i * 2 + 1]
                 // First-order low/high split filter for zero-phase-distortion real-time EQ
-                lowStateL += 0.08f * (left - lowStateL)
-                lowStateR += 0.08f * (right - lowStateR)
-                highStateL += 0.38f * (left - highStateL)
-                highStateR += 0.38f * (right - highStateR)
+                lowStateL += a * (left - lowStateL)
+                lowStateR += a * (right - lowStateR)
+                highStateL += b * (left - highStateL)
+                highStateR += b * (right - highStateR)
 
-                val bassL = lowStateL
-                val bassR = lowStateR
                 val trebleL = left - highStateL
                 val trebleR = right - highStateR
                 val midL = highStateL - lowStateL
                 val midR = highStateR - lowStateR
 
-                left = (bassL * lowGainLinear) + (midL * midGainLinear) + (trebleL * highGainLinear)
-                right = (bassR * lowGainLinear) + (midR * midGainLinear) + (trebleR * highGainLinear)
+                samples[i * 2] = (lowStateL * lowGainLinear) + (midL * midGainLinear) + (trebleL * highGainLinear)
+                samples[i * 2 + 1] = (lowStateR * lowGainLinear) + (midR * midGainLinear) + (trebleR * highGainLinear)
             }
-
-            floatInterleaved[i * 2] = left
-            floatInterleaved[i * 2 + 1] = right
         }
 
         // Run through the custom stereo Freeverb/Schroeder DSP engine in real time
-        dsp.processStereoInterleavedFloat(floatInterleaved, safeFrames)
+        dsp.processStereoInterleavedFloat(samples, safeFrames)
 
         val gain = masterVolumeGain.coerceIn(0f, 1f)
         for (i in 0 until safeFrames * 2) {
-            val scaled = (floatInterleaved[i] * gain).coerceIn(-1.0f, 1.0f)
-            pcm16Stereo[i] = (scaled * 32767.0f).toInt().toShort()
+            samples[i] = (samples[i] * gain).coerceIn(-1.0f, 1.0f)
         }
 
         _realtimeProcessedFrames.value += safeFrames.toLong()
@@ -1212,7 +1224,7 @@ class OndaluneAudioEngine(
     /**
      * Synthesizes a pure, uncolored dry 16-bit stereo PCM WAV master (`${track.id}_DRY_MASTER.wav`).
      * Reverb and EQ are never baked into this file; instead, they are applied in real time on the
-     * live PCM stream by [processRealtimePcm16StereoChunk].
+     * live PCM stream by [processRealtimeStereoChunk].
      */
     fun ensureDryMasterTrackWav(track: SubsonicTrack): File {
         val cacheDir = File(context.cacheDir, "ondalune_synth")

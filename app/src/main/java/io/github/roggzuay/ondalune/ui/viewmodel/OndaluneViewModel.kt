@@ -741,7 +741,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                     bitsPerSample = p.decoded?.bitsPerSample ?: 0,
                     ownPipeline = p.ownPipeline,
                     outputSampleRate = p.outputSampleRate,
-                    dolbyEngine = p.dolbyEngine
+                    dolbyEngine = p.dolbyEngine,
+                    decodedBits = p.decoded?.decodedBits ?: 0
                 )
             }
             audioQualityOf(track, opened, convertedBy, processing, device, audioCapabilities.dolbyDecodable)

@@ -12,17 +12,18 @@ import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import java.io.File
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * Decoded audio as interleaved stereo 16-bit frames, read in exact frame counts so two songs can
- * be mixed sample-for-sample during a crossfade. Not thread-safe: one reader at a time.
+ * Decoded audio as interleaved stereo float frames (full scale = ±1), read in exact frame counts so
+ * two songs can be mixed sample-for-sample during a crossfade. Float keeps a 24-bit song's full
+ * resolution all the way to the AudioTrack. Not thread-safe: one reader at a time.
  */
 internal interface PcmSource {
     val sampleRate: Int
@@ -33,35 +34,103 @@ internal interface PcmSource {
     /** Song position of the next frame [read] returns. */
     val positionFrames: Long
     /** Reads up to [frames] frames into [dst] starting at frame [offset]; returns fewer only at the end. */
-    fun read(dst: ShortArray, offset: Int, frames: Int): Int
+    fun read(dst: FloatArray, offset: Int, frames: Int): Int
     fun seekTo(ms: Long)
     fun release()
 }
 
-/** 16-bit PCM WAV file (offline demo masters). */
+/**
+ * A WAV file on this phone (a download, or the demo's dry masters): integer PCM of 8 to 32 bits or
+ * 32-bit float, any channel count. Anything else throws, and the file goes to Android's extractor.
+ */
 internal class WavPcmSource(file: File) : PcmSource {
-    override val stream get() = DecodedStream("audio/wav", sampleRate, channels = 2, bitrate = 0, bitsPerSample = 16, decoder = "")
     private val raf = RandomAccessFile(file, "r")
-    private val channels: Int
-    override val sampleRate: Int
-    override val durationFrames: Long
+    private var channels = 2
+    private var encoding = PcmConvert.PCM_16BIT
+    private var dataStart = 0L
+    override var sampleRate = 44100
+        private set
+    override var durationFrames = 0L
+        private set
     override var positionFrames = 0L
         private set
+    override val stream get() = DecodedStream(
+        "audio/wav", sampleRate, channels, bitrate = 0, bitsPerSample = PcmConvert.bitsOf(encoding), decoder = "", decodedBits = PcmConvert.bitsOf(encoding)
+    )
+    private var downmix = Downmix(2)
+    private var bytesPerFrame = 4
     private var bytes = ByteArray(0)
+    private var buffer: ByteBuffer = ByteBuffer.wrap(bytes)
+    private var samples = FloatArray(0)
 
     init {
-        require(raf.length() > 44L) { "WAV source too short" }
-        raf.seek(22)
-        channels = java.lang.Short.reverseBytes(raf.readShort()).toInt().coerceIn(1, 2)
-        sampleRate = Integer.reverseBytes(raf.readInt()).coerceIn(8000, 96000)
-        durationFrames = ((raf.length() - 44L) / (channels * 2)).coerceAtLeast(1L)
-        raf.seek(44L)
+        try {
+            parse()
+        } catch (e: Throwable) {
+            runCatching { raf.close() }
+            throw e
+        }
     }
 
-    override fun read(dst: ShortArray, offset: Int, frames: Int): Int {
-        val bytesPerFrame = channels * 2
-        val want = frames * bytesPerFrame
-        if (bytes.size < want) bytes = ByteArray(want)
+    private fun parse() {
+        val header = ByteArray(12)
+        raf.readFully(header)
+        require(String(header, 0, 4, Charsets.US_ASCII) == "RIFF" && String(header, 8, 4, Charsets.US_ASCII) == "WAVE") { "Not a WAV file" }
+        var fmt: ByteBuffer? = null
+        var start = -1L
+        var size = 0L
+        // Chunks follow one another, each padded to an even length; only "fmt " and "data" matter.
+        while (start < 0 && raf.filePointer + 8 <= raf.length()) {
+            val id = ByteArray(4).also { raf.readFully(it) }.toString(Charsets.US_ASCII)
+            val length = Integer.reverseBytes(raf.readInt()).toLong() and 0xFFFFFFFFL
+            when (id) {
+                "fmt " -> {
+                    val body = ByteArray(length.coerceAtMost(64L).toInt()).also { raf.readFully(it) }
+                    fmt = ByteBuffer.wrap(body).order(ByteOrder.LITTLE_ENDIAN)
+                    raf.seek(raf.filePointer - body.size + length + (length and 1L))
+                }
+                "data" -> {
+                    start = raf.filePointer
+                    // Files still being written (or streamed) can say 0 or too much.
+                    size = if (length == 0L || start + length > raf.length()) raf.length() - start else length
+                }
+                else -> raf.seek(raf.filePointer + length + (length and 1L))
+            }
+        }
+        val f = requireNotNull(fmt) { "WAV without a format" }
+        require(start >= 0 && f.capacity() >= 16) { "WAV without audio" }
+        var tag = f.getShort(0).toInt() and 0xFFFF
+        channels = f.getShort(2).toInt().also { require(it in 1..8) { "WAV with $it channels" } }
+        sampleRate = f.getInt(4).also { require(it in 8000..768000) { "WAV at $it Hz" } }
+        val bits = f.getShort(14).toInt()
+        var mask = 0
+        if (tag == 0xFFFE && f.capacity() >= 26) {
+            // WAVE_FORMAT_EXTENSIBLE: the speaker mask (Android's native layout) and the real format.
+            mask = f.getInt(20)
+            tag = f.getShort(24).toInt() and 0xFFFF
+        }
+        encoding = when {
+            tag == 1 && bits == 8 -> PcmConvert.PCM_8BIT
+            tag == 1 && bits == 16 -> PcmConvert.PCM_16BIT
+            tag == 1 && bits == 24 -> PcmConvert.PCM_24BIT_PACKED
+            tag == 1 && bits == 32 -> PcmConvert.PCM_32BIT
+            tag == 3 && bits == 32 -> PcmConvert.PCM_FLOAT
+            else -> throw IllegalArgumentException("WAV format $tag, $bits-bit")
+        }
+        bytesPerFrame = channels * PcmConvert.bytesPerSample(encoding)
+        downmix = Downmix(channels, mask)
+        dataStart = start
+        durationFrames = (size / bytesPerFrame).coerceAtLeast(1L)
+        raf.seek(dataStart)
+    }
+
+    override fun read(dst: FloatArray, offset: Int, frames: Int): Int {
+        val wantFrames = min(frames.toLong(), durationFrames - positionFrames).toInt().coerceAtLeast(0)
+        val want = wantFrames * bytesPerFrame
+        if (bytes.size < want) {
+            bytes = ByteArray(want)
+            buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        }
         var filled = 0
         while (filled < want) {
             val n = raf.read(bytes, filled, want - filled)
@@ -69,20 +138,17 @@ internal class WavPcmSource(file: File) : PcmSource {
             filled += n
         }
         val got = filled / bytesPerFrame
-        for (f in 0 until got) {
-            val b = f * bytesPerFrame
-            val left = ((bytes[b + 1].toInt() shl 8) or (bytes[b].toInt() and 0xFF)).toShort()
-            val right = if (channels == 2) ((bytes[b + 3].toInt() shl 8) or (bytes[b + 2].toInt() and 0xFF)).toShort() else left
-            dst[(offset + f) * 2] = left
-            dst[(offset + f) * 2 + 1] = right
-        }
+        if (samples.size < got * channels) samples = FloatArray(got * channels)
+        buffer.clear()
+        PcmConvert.toFloat(buffer, encoding, got * channels, samples, 0)
+        downmix.toStereo(samples, got, dst, offset)
         positionFrames += got
         return got
     }
 
     override fun seekTo(ms: Long) {
         positionFrames = (ms * sampleRate / 1000L).coerceIn(0L, durationFrames)
-        raf.seek(44L + positionFrames * channels * 2)
+        raf.seek(dataStart + positionFrames * bytesPerFrame)
     }
 
     override fun release() {
@@ -125,27 +191,31 @@ internal class NoDecoderException(val mime: String) : Exception("No decoder for 
 
 /** Any compressed file or HTTP stream Android can decode (FLAC, MP3, AAC, Opus, Vorbis, WAV). */
 internal class CodecPcmSource private constructor(
-    private val extractor: MediaExtractor,
+    private val input: EncodedInput,
     private val codec: MediaCodec,
     rate: Int,
     channelCount: Int,
     channelMask: Int,
     private val durationUs: Long,
-    override val stream: DecodedStream
+    private val opened: DecodedStream
 ) : PcmSource {
     override var sampleRate = rate
         private set
     private var channels = channelCount
     private var mask = channelMask
     private var downmix = Downmix(channelCount, channelMask)
-    /** Some decoders (Dolby ones among them) put out float samples; the rest 16-bit. */
-    private var floatOutput = false
+    /** What the decoder puts out: float when it honours the request, else its own integer PCM. */
+    private var encoding = AudioFormat.ENCODING_PCM_16BIT
     private val info = MediaCodec.BufferInfo()
     private var inputEos = false
     private var outputEos = false
 
+    override val stream get() = opened.copy(decodedBits = PcmConvert.bitsOf(encoding))
+
     // Decoded but not yet read stereo samples, plus the song time of the first one.
-    private var fifo = ShortArray(16384)
+    private var fifo = FloatArray(16384)
+    /** One decoder buffer as float, before it is folded to stereo. */
+    private var decoded = FloatArray(0)
     private var head = 0
     private var size = 0
     private var anchorUs = 0L
@@ -157,7 +227,7 @@ internal class CodecPcmSource private constructor(
     override val positionFrames: Long
         get() = anchorUs * sampleRate / 1_000_000L + consumedSinceAnchor
 
-    override fun read(dst: ShortArray, offset: Int, frames: Int): Int {
+    override fun read(dst: FloatArray, offset: Int, frames: Int): Int {
         var got = 0
         while (got < frames) {
             if (size == 0) {
@@ -176,7 +246,7 @@ internal class CodecPcmSource private constructor(
     }
 
     override fun seekTo(ms: Long) {
-        extractor.seekTo(ms * 1000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        input.seekTo(ms * 1000L)
         codec.flush()
         inputEos = false
         outputEos = false
@@ -189,7 +259,7 @@ internal class CodecPcmSource private constructor(
     override fun release() {
         runCatching { codec.stop() }
         runCatching { codec.release() }
-        runCatching { extractor.release() }
+        input.release()
     }
 
     /** Feeds one input buffer and drains at most one output buffer. */
@@ -198,13 +268,13 @@ internal class CodecPcmSource private constructor(
             val inIndex = codec.dequeueInputBuffer(5_000L)
             if (inIndex >= 0) {
                 val inBuf = codec.getInputBuffer(inIndex)
-                val sampleSize = if (inBuf != null) extractor.readSampleData(inBuf, 0) else -1
+                val sampleSize = if (inBuf != null) input.readSampleData(inBuf, 0) else -1
                 if (sampleSize < 0) {
                     codec.queueInputBuffer(inIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                     inputEos = true
                 } else {
-                    codec.queueInputBuffer(inIndex, 0, sampleSize, extractor.sampleTime, 0)
-                    extractor.advance()
+                    codec.queueInputBuffer(inIndex, 0, sampleSize, input.sampleTime, 0)
+                    input.advance()
                 }
             }
         }
@@ -212,20 +282,14 @@ internal class CodecPcmSource private constructor(
         when {
             outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                 // The decoder's real output can differ from the container (e.g. HE-AAC doubles the rate).
-                val f = codec.outputFormat
-                if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
-                if (f.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                mask = f.intOr(MediaFormat.KEY_CHANNEL_MASK)
-                if (downmix.channels != channels || mask != 0) downmix = Downmix(channels, mask)
-                floatOutput = f.intOr(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
+                readOutputFormat(codec.outputFormat)
             }
             outIndex >= 0 -> {
                 val outBuf = codec.getOutputBuffer(outIndex)
                 if (outBuf != null && info.size > 0) {
                     outBuf.position(info.offset)
                     outBuf.limit(info.offset + info.size)
-                    val bytesPerSample = if (floatOutput) 4 else 2
-                    val frameCount = (info.size / bytesPerSample) / channels
+                    val frameCount = info.size / (PcmConvert.bytesPerSample(encoding) * channels)
                     if (size == 0) {
                         head = 0
                         anchorUs = info.presentationTimeUs
@@ -235,11 +299,11 @@ internal class CodecPcmSource private constructor(
                         head = 0
                     }
                     if (fifo.size < size + frameCount * 2) fifo = fifo.copyOf(size + frameCount * 2)
+                    if (decoded.size < frameCount * channels) decoded = FloatArray(frameCount * channels)
+                    PcmConvert.toFloat(outBuf.order(ByteOrder.nativeOrder()), encoding, frameCount * channels, decoded, 0)
                     // Surround is folded to stereo here (centre and surrounds into both or one side) rather
                     // than keeping only the first two channels, which would drop the vocals of a 5.1 mix.
-                    val samples = outBuf.order(ByteOrder.nativeOrder())
-                    if (floatOutput) downmix.toStereo(samples.asFloatBuffer(), frameCount, fifo, size / 2)
-                    else downmix.toStereo(samples.asShortBuffer(), frameCount, fifo, size / 2)
+                    downmix.toStereo(decoded, frameCount, fifo, size / 2)
                     size += frameCount * 2
                 }
                 codec.releaseOutputBuffer(outIndex, false)
@@ -248,30 +312,55 @@ internal class CodecPcmSource private constructor(
         }
     }
 
+    private fun readOutputFormat(f: MediaFormat) {
+        if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) channels = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+        if (f.containsKey(MediaFormat.KEY_SAMPLE_RATE)) sampleRate = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        mask = f.intOr(MediaFormat.KEY_CHANNEL_MASK)
+        if (downmix.channels != channels || mask != 0) downmix = Downmix(channels, mask)
+        // No encoding said means 16-bit; one this can't read is taken as 16-bit too, as before.
+        val said = f.intOr(MediaFormat.KEY_PCM_ENCODING)
+        encoding = if (PcmConvert.bytesPerSample(said) > 0) said else AudioFormat.ENCODING_PCM_16BIT
+    }
+
     companion object {
         /**
          * Decodes [opened] (which it takes over, released even on failure) far enough that the real
          * sample rate is known; null if nothing here decodes it. A Dolby stream this phone has no
          * decoder for throws [NoDecoderException] instead.
          */
-        fun from(opened: OpenedAudio): CodecPcmSource? {
-            val extractor = opened.extractor
-            val format = opened.format
+        fun from(opened: OpenedAudio): CodecPcmSource? = start(ExtractorInput(opened.extractor), opened.format, opened.mime)
+
+        /** A FLAC deeper than 16-bit, read by [FlacFrames] so its decoder can give float; null if it won't decode. */
+        fun from(flac: FlacFrames): CodecPcmSource? = start(flac, flac.format(), "audio/flac")
+
+        private fun start(input: EncodedInput, format: MediaFormat, mime: String): CodecPcmSource? {
             var created: MediaCodec? = null
             return try {
                 val stream = DecodedStream.of(format, decoder = "")
-                val (codec, decodesAs) = createDecoder(opened.mime) ?: run {
-                    extractor.release()
-                    if (isDolbyMime(opened.mime)) throw NoDecoderException(opened.mime)
+                val (codec, decodesAs) = createDecoder(mime) ?: run {
+                    input.release()
+                    if (isDolbyMime(mime)) throw NoDecoderException(mime)
                     return null
                 }
                 // An E-AC-3 decoder plays Atmos (JOC) streams as their 5.1 core, under its own type.
-                if (decodesAs != opened.mime) format.setString(MediaFormat.KEY_MIME, decodesAs)
+                if (decodesAs != mime) format.setString(MediaFormat.KEY_MIME, decodesAs)
                 created = codec
-                codec.configure(format, null, null, 0)
+                // Float output keeps a 24-bit song's resolution; a decoder that can't give it says what it
+                // gives instead. Raw PCM goes through its decoder untouched, so it keeps the encoding the
+                // extractor read it in (float for a 24-bit FLAC or WAV on recent Android).
+                if (decodesAs != "audio/raw") format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_FLOAT)
+                try {
+                    codec.configure(format, null, null, 0)
+                } catch (e: Exception) {
+                    if (decodesAs == "audio/raw") throw e
+                    // A decoder that refuses float gets its usual 16-bit.
+                    format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+                    codec.reset()
+                    codec.configure(format, null, null, 0)
+                }
                 codec.start()
                 val source = CodecPcmSource(
-                    extractor,
+                    input,
                     codec,
                     if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100,
                     if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1) else 2,
@@ -279,6 +368,7 @@ internal class CodecPcmSource private constructor(
                     if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L,
                     stream.copy(decoder = codec.name)
                 )
+                runCatching { source.readOutputFormat(codec.outputFormat) }
                 var attempts = 0
                 while (source.size == 0 && !source.outputEos && attempts++ < 400) source.pump()
                 source
@@ -286,7 +376,7 @@ internal class CodecPcmSource private constructor(
                 throw e
             } catch (_: Throwable) {
                 runCatching { created?.release() }
-                runCatching { extractor.release() }
+                input.release()
                 null
             }
         }
@@ -366,7 +456,7 @@ internal class TransitionMixer(var current: QueuedSource) {
     private var fadeLen = 0
     /** After a hand-over mid-fade, the new song keeps fading in for the rest of the fade. */
     private var rampPos = -1
-    private var scratch = ShortArray(0)
+    private var scratch = FloatArray(0)
 
     val isFading: Boolean get() = fadePos >= 0
 
@@ -383,7 +473,11 @@ internal class TransitionMixer(var current: QueuedSource) {
         rampPos = -1
     }
 
-    fun render(out: ShortArray, frames: Int, result: Result): Result {
+    /**
+     * Fills [out] with up to [frames] stereo frames. Gain and the fade sum stay in float, unclipped:
+     * the engine's output stage is the one place that limits the level.
+     */
+    fun render(out: FloatArray, frames: Int, result: Result): Result {
         result.frames = 0
         result.advanced = false
         result.ended = false
@@ -414,14 +508,13 @@ internal class TransitionMixer(var current: QueuedSource) {
                 if (rampPos >= fadeLen) rampPos = -1
             }
             if (fadePos >= 0 && upcoming != null && n > 0) {
-                if (scratch.size < n * 2) scratch = ShortArray(n * 2)
+                if (scratch.size < n * 2) scratch = FloatArray(n * 2)
                 val m = upcoming.source.read(scratch, 0, n)
                 for (i in 0 until m) {
                     val g = upcoming.gain * fadeIn(fadePos + i, fadeLen)
-                    for (c in 0..1) {
-                        val idx = (written + i) * 2 + c
-                        out[idx] = clamp(out[idx] + scratch[i * 2 + c] * g)
-                    }
+                    val idx = (written + i) * 2
+                    out[idx] += scratch[i * 2] * g
+                    out[idx + 1] += scratch[i * 2 + 1] * g
                 }
                 fadePos += n
             }
@@ -447,19 +540,18 @@ internal class TransitionMixer(var current: QueuedSource) {
         return result
     }
 
-    private inline fun applyGain(buf: ShortArray, offsetFrames: Int, frames: Int, gainAt: (Int) -> Float) {
+    private inline fun applyGain(buf: FloatArray, offsetFrames: Int, frames: Int, gainAt: (Int) -> Float) {
         for (i in 0 until frames) {
             val g = gainAt(i)
             if (g == 1f) continue
             val idx = (offsetFrames + i) * 2
-            buf[idx] = clamp(buf[idx] * g)
-            buf[idx + 1] = clamp(buf[idx + 1] * g)
+            buf[idx] *= g
+            buf[idx + 1] *= g
         }
     }
 
     private fun fadeOut(pos: Int, len: Int): Float = cos((pos.toFloat() / len).coerceIn(0f, 1f) * (PI / 2).toFloat())
     private fun fadeIn(pos: Int, len: Int): Float = sin((pos.toFloat() / len).coerceIn(0f, 1f) * (PI / 2).toFloat())
-    private fun clamp(v: Float): Short = v.roundToInt().coerceIn(-32768, 32767).toShort()
 }
 
 /**
@@ -491,7 +583,9 @@ data class DecodedStream(
     /** Bits per sample when the container says (raw PCM, some FLAC); 0 otherwise. */
     val bitsPerSample: Int,
     /** The decoder Android picked, e.g. "c2.android.flac.decoder". */
-    val decoder: String
+    val decoder: String,
+    /** Bits per sample the decoder hands the engine: 16 or 24 for integer PCM, 32 for float; 0 before it says. */
+    val decodedBits: Int = 0
 ) {
     companion object {
         fun of(format: MediaFormat, decoder: String) = DecodedStream(
@@ -503,7 +597,10 @@ data class DecodedStream(
                 android.media.AudioFormat.ENCODING_PCM_8BIT -> 8
                 android.media.AudioFormat.ENCODING_PCM_16BIT -> 16
                 android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 24
-                android.media.AudioFormat.ENCODING_PCM_32BIT, android.media.AudioFormat.ENCODING_PCM_FLOAT -> 32
+                android.media.AudioFormat.ENCODING_PCM_32BIT -> 32
+                // An extractor that decodes as it reads (FLAC, WAV) gives float for anything over 16-bit
+                // and says the file's own depth alongside.
+                android.media.AudioFormat.ENCODING_PCM_FLOAT -> format.intOr("bits-per-sample").takeIf { it > 0 } ?: 32
                 else -> format.intOr("bits-per-sample")
             },
             decoder = decoder
