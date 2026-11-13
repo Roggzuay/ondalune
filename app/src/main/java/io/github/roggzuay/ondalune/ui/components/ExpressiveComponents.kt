@@ -1283,12 +1283,14 @@ fun ExpressiveArtwork(
             // failure. Without this the tile flashed for a frame on every track change. A cover
             // already in memory (a new copy of this one, as the player opens) shows at once.
             var shownKey by remember { mutableStateOf<String?>(null) }
+            var failed by remember(coverArtUrl) { mutableStateOf(false) }
             val key = remember(coverArtUrl) { artworkCacheKey(coverArtUrl) }
             if (shownKey == null) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .mirrorShine(!failed),
                     contentAlignment = Alignment.Center
                 ) {
                     if (monogramText.isNotBlank()) {
@@ -1322,7 +1324,10 @@ fun ExpressiveArtwork(
                 contentDescription = if (monogramText.isNotBlank()) "$monogramText Profile Photo" else "Album Cover Art",
                 contentScale = ContentScale.Crop,
                 onSuccess = { shownKey = key },
-                onError = { shownKey = null },
+                onError = {
+                    shownKey = null
+                    failed = true
+                },
                 modifier = Modifier.fillMaxSize()
             )
         } else if (monogramText.isNotBlank()) {

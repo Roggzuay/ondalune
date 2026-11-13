@@ -12,13 +12,15 @@ class OndaluneApp : Application(), ImageLoaderFactory {
 
     /**
      * Artwork-friendly Coil setup: a large disk cache that ignores the no-cache headers many
-     * Subsonic servers send for getCoverArt, so covers load once and then come from disk.
+     * Subsonic servers send for getCoverArt, so covers load once and then come from disk. It sits
+     * under files rather than the cache folder, so clearing the cache doesn't send every screen
+     * back to loading covers (ArtworkStore keeps the whole library's there).
      */
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.25).build() }
         .diskCache {
             DiskCache.Builder()
-                .directory(cacheDir.resolve("artwork"))
+                .directory(filesDir.resolve("artwork"))
                 .maxSizeBytes(512L * 1024 * 1024)
                 .build()
         }

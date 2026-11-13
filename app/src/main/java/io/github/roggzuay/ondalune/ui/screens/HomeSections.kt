@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.ArtworkImage
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.onSizeChanged
@@ -92,7 +93,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -101,8 +101,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.graphics.shapes.Morph
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
@@ -384,9 +382,10 @@ private fun MixPiece(
             .then(modifier)
     ) {
         if (url != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(300).build(),
+            ArtworkImage(
+                url = url,
                 contentDescription = null,
+                crossfadeMs = 300,
                 contentScale = ContentScale.Crop,
                 modifier = if (rotation != 0f) {
                     // Upright artwork inside the tilted pill: a square as wide as the pill's
@@ -534,9 +533,10 @@ fun TopArtistsShelf(shelves: HomeShelves, header: @Composable () -> Unit) {
                         .clickable { actions?.openArtist(track) }
                         .testTag("top_artist_${track.artist}")
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current).data(track.coverArtUrl).crossfade(200).build(),
+                    ArtworkImage(
+                        url = track.coverArtUrl,
                         contentDescription = null,
+                        crossfadeMs = 200,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(104.dp)
@@ -822,13 +822,13 @@ internal fun MixCollage(covers: List<String>, modifier: Modifier) {
     ) {
         val cells = covers.take(4)
         if (cells.size < 4) {
-            cells.firstOrNull()?.let { AsyncImage(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+            cells.firstOrNull()?.let { ArtworkImage(it, null, Modifier.fillMaxSize()) }
         } else {
             Column(Modifier.fillMaxSize()) {
                 cells.chunked(2).forEach { row ->
                     Row(Modifier.weight(1f)) {
                         row.forEach { url ->
-                            AsyncImage(url, null, contentScale = ContentScale.Crop, modifier = Modifier.weight(1f).fillMaxHeight())
+                            ArtworkImage(url, null, Modifier.weight(1f).fillMaxHeight())
                         }
                     }
                 }

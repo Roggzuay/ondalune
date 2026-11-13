@@ -81,12 +81,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicArtist
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.ui.components.ArtworkImage
 import io.github.roggzuay.ondalune.ui.components.DownloadButton
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.LocalDownloads
@@ -97,7 +96,6 @@ import io.github.roggzuay.ondalune.ui.theme.ArtShape
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPalette
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPaletteCache
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
-import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
 
 /** What the artist page needs beyond its arguments; provided by the shell. */
 class ArtistExtras(
@@ -245,17 +243,11 @@ private fun ArtistPortrait(
         val haze = rememberHazeState()
         Box(Modifier.fillMaxSize().hazeSource(haze).graphicsLayer { translationY = parallax() }) {
             if (artist.coverArtUrl.isNotBlank()) {
-                val key = remember(artist.coverArtUrl) { artworkCacheKey(artist.coverArtUrl) }
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(artist.coverArtUrl)
-                        .memoryCacheKey(key)
-                        .diskCacheKey(key)
-                        .crossfade(250)
-                        .build(),
+                ArtworkImage(
+                    url = artist.coverArtUrl,
                     contentDescription = "${artist.name} portrait",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    crossfadeMs = 250
                 )
             } else {
                 ExpressiveArtwork(

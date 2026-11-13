@@ -13,6 +13,7 @@ import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.roggzuay.ondalune.audio.OndaluneAudioEngine
+import io.github.roggzuay.ondalune.data.local.ArtworkStore
 import io.github.roggzuay.ondalune.data.local.AppUpdateInstaller
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.local.UpdateInstallState
@@ -996,6 +997,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     init {
         if (settings.customization.value.songAnalysis) startSongAnalysis()
+        // Every cover and artist photo is kept on the phone, so browsing doesn't wait on them.
+        viewModelScope.launch {
+            allServerTracks.distinctUntilChangedBy { it.size }.collectLatest { tracks ->
+                if (tracks.isEmpty()) return@collectLatest
+                delay(3_000L)
+                ArtworkStore.saveAll(getApplication(), tracks) { isPlaying.value && !isPlayingOfflineFile.value }
+            }
+        }
         // Confirmation banners ("Reverb set to…", "Added to queue") clear themselves; only the live
         // sync counter stays up while the sync runs.
         viewModelScope.launch {

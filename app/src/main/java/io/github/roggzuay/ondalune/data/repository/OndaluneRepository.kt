@@ -445,6 +445,8 @@ class OndaluneRepository(
         dao.deleteServer(serverId)
     }
 
+    suspend fun tracksOf(server: SubsonicServerConfig): List<SubsonicTrack> = dao.getTracksForServerOnce(server.id)
+
     fun deriveAlbums(tracks: List<SubsonicTrack>, category: AlbumListType): List<SubsonicAlbum> {
         val base = DemoSubsonicCatalog.deriveAlbumsFromTracks(tracks)
         return when (category) {

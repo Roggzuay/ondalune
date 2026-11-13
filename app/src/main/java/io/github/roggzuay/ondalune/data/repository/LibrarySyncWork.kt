@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.data.repository
 
+import io.github.roggzuay.ondalune.data.local.ArtworkStore
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -14,12 +15,15 @@ import java.util.concurrent.TimeUnit
  * The optional background library scan (WorkManager), every few hours as picked in Settings →
  * Music sources: it syncs the server in use and looks through the picked folders, so new music is
  * already there when Ondalune opens. On any network, never while the battery is low, and it
- * shows nothing.
+ * shows nothing. Covers new to the library are saved with it.
  */
 class LibrarySyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val repository = OndaluneRepository.from(applicationContext)
-        repository.activeServer()?.takeUnless { it.isDemoServer }?.let { repository.syncServerCatalog(it) }
+        repository.activeServer()?.takeUnless { it.isDemoServer }?.let { server ->
+            repository.syncServerCatalog(server)
+            ArtworkStore.saveAll(applicationContext, repository.tracksOf(server))
+        }
         val reader = FolderReader(applicationContext)
         repository.localFolders().forEach { repository.scanLocalFolder(it, reader) }
         return Result.success()
