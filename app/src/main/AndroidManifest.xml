@@ -19,6 +19,7 @@
          read access to that folder alone (Storage Access Framework). -->
     <application
         android:name=".OndaluneApp"
+        android:appCategory="audio"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -32,7 +33,14 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyApplication" />
+            android:theme="@style/Theme.MyApplication">
+            <!-- Lists Ondalune with the phone's music players (no launcher entry: that's the aliases). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.APP_MUSIC" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- Launcher icon variants. Exactly one alias is enabled at a time and it is the app's only
              launcher entry (MainActivity has none), so switching icons replaces the icon instead of
