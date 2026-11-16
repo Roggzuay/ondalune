@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.lyrics.LyricsSearch
 import io.github.roggzuay.ondalune.data.lyrics.LyricsSource
 import io.github.roggzuay.ondalune.data.lyrics.RankedCandidate
@@ -119,6 +120,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1193,6 +1195,8 @@ private fun PlayerTopBar(
     onResetSpeedPitch: () -> Unit,
     onSpeedResetHintShown: () -> Unit
 ) {
+    // A soft dark backing keeps white icons readable over light covers.
+    val backing = if (iconColor.luminance() > 0.95f) Color.Black.copy(alpha = 0.28f) else Color.Transparent
     Row(
         modifier = Modifier.fillMaxWidth().height(50.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1201,11 +1205,11 @@ private fun PlayerTopBar(
         ExpressiveBounceIconButton(
             onClick = onCollapse,
             size = 48.dp,
-            containerColor = Color.Transparent,
+            containerColor = backing,
             contentColor = iconColor,
             modifier = Modifier.testTag("collapse_player_button")
         ) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Minimize Player")
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Close player")
         }
 
         Spacer(Modifier.weight(1f))
@@ -1233,11 +1237,11 @@ private fun PlayerTopBar(
                 onLongClick = onResetSpeedPitch,
                 active = speedShaped,
                 size = 48.dp,
-                containerColor = Color.Transparent,
+                containerColor = backing,
                 contentColor = if (speedShaped) MaterialTheme.colorScheme.primaryFixedDim else iconColor,
                 modifier = Modifier.testTag("open_speed_pitch_pill")
             ) {
-                Icon(Icons.Filled.Speed, contentDescription = "Speed, Pitch & Live Reverb Settings", modifier = Modifier.size(22.dp))
+                Icon(Icons.Filled.Speed, contentDescription = "Speed & pitch", modifier = Modifier.size(22.dp))
             }
         }
 
@@ -1245,13 +1249,13 @@ private fun PlayerTopBar(
             onClick = onOpenSonicLab,
             active = soundShaped,
             size = 48.dp,
-            containerColor = Color.Transparent,
+            containerColor = backing,
             contentColor = if (soundShaped) MaterialTheme.colorScheme.primaryFixedDim else iconColor,
             modifier = Modifier.testTag("open_sonic_lab_pill")
         ) {
             Icon(
                 imageVector = Icons.Filled.Equalizer,
-                contentDescription = "Sonic Lab: equalizer",
+                contentDescription = "Equalizer",
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -1417,7 +1421,7 @@ private fun PlayerControls(
                 checked = lyricsOpen,
                 onToggle = { onSelectTab(if (lyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
                 icon = Icons.Filled.Lyrics,
-                description = "Synced Lyrics",
+                description = "Lyrics",
                 tag = "now_playing_tab_lyrics",
                 modifier = Modifier.weight(1f)
             )
@@ -1425,7 +1429,7 @@ private fun PlayerControls(
                 checked = queueOpen,
                 onToggle = { onSelectTab(if (queueOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.QUEUE) },
                 icon = Icons.AutoMirrored.Filled.QueueMusic,
-                description = "Up Next Queue",
+                description = "Queue",
                 tag = "now_playing_tab_queue",
                 modifier = Modifier.weight(1f)
             )
@@ -1437,7 +1441,7 @@ private fun PlayerControls(
                         onToggleShuffle()
                     },
                     icon = if (shuffleMode == ShuffleMode.SMART) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
-                    description = "Cycle Shuffle Mode (${shuffleMode.label})",
+                    description = "Shuffle: ${shuffleMode.label}",
                     tag = "shuffle_button",
                     modifier = Modifier.weight(1f)
                 )
@@ -1448,7 +1452,7 @@ private fun PlayerControls(
                         onToggleRepeatOne()
                     },
                     icon = Icons.Filled.RepeatOne,
-                    description = "Toggle Repeat One",
+                    description = "Repeat this song",
                     tag = "repeat_button",
                     modifier = Modifier.weight(1f)
                 )
@@ -1457,7 +1461,7 @@ private fun PlayerControls(
                 checked = sleepTimerActive,
                 onToggle = onOpenSleepTimerSheet,
                 icon = Icons.Filled.Bedtime,
-                description = "Sleep Timer",
+                description = "Sleep timer",
                 tag = "open_sleep_timer_pill",
                 modifier = Modifier.weight(1f)
             )
@@ -1503,8 +1507,8 @@ private fun PlayerProgress(
 private fun playerToggleColors() = IconButtonDefaults.iconToggleButtonColors(
     containerColor = Color.Transparent,
     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    checkedContainerColor = Color.Transparent,
-    checkedContentColor = MaterialTheme.colorScheme.primary
+    checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
 )
 
 /** One of the icon toggles in the player's bottom row. */
@@ -1668,7 +1672,7 @@ private fun UpNextPartialBottomSheet(
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "${queue.size} tracks in queue",
+                            text = "${countOf(queue.size, "track")} in queue",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

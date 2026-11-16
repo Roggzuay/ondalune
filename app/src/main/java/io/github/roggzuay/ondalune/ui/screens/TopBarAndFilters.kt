@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -313,7 +314,7 @@ fun LibraryFilterSheet(
                 ListItem(
                     leadingContent = { Icon(Icons.Filled.Cloud, contentDescription = null) },
                     headlineContent = { Text(serverName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    supportingContent = { Text(if (isSyncing) "Syncing…" else "$trackCount tracks in library") },
+                    supportingContent = { Text(if (isSyncing) "Syncing…" else "${countOf(trackCount, "track")} in library") },
                     trailingContent = {
                         TextButton(onClick = onSync, enabled = !isSyncing, shapes = ButtonDefaults.shapes()) {
                             Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(18.dp))

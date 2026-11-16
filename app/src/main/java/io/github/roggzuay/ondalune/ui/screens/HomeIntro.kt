@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -190,7 +190,7 @@ private fun IntroVisual(page: Int, mixes: List<LibraryMix>) {
                 .size(160.dp)
                 .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.extraLarge)
         ) {
-            Icon(if (page == 3) Icons.Filled.GraphicEq else Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(72.dp))
+            Icon(if (page == 3) Icons.Filled.GraphicEq else Icons.Filled.LibraryMusic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(72.dp))
         }
         return
     }

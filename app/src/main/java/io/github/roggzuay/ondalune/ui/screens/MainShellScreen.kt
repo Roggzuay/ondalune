@@ -476,14 +476,25 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
-    // First playback: offer to lift battery optimisation so locking the phone doesn't stop music.
+    // Offer to lift battery optimisation the first time the user comes back after leaving the app
+    // with music playing: that's when it matters, and the first song isn't interrupted by it.
     var showBatteryPrompt by remember { mutableStateOf(false) }
-    LaunchedEffect(isPlaying) {
-        if (isPlaying && BackgroundPlayback.shouldPrompt(context)) {
-            delay(1500L)
-            BackgroundPlayback.markPrompted(context)
-            showBatteryPrompt = true
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val playingNow by rememberUpdatedState(isPlaying)
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        var leftWhilePlaying = false
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> if (playingNow) leftWhilePlaying = true
+                Lifecycle.Event.ON_START -> if (leftWhilePlaying && BackgroundPlayback.shouldPrompt(context)) {
+                    BackgroundPlayback.markPrompted(context)
+                    showBatteryPrompt = true
+                }
+                else -> Unit
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(isPlaying, activeDownloads.isNotEmpty()) {
@@ -816,6 +827,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             genres = genres,
                                             folders = folders,
                                             activeTab = libraryFilterTab,
+                                            // Artists and Playlists have their own tabs in the bottom bar.
+                                            visibleTabs = LibraryFilterTab.entries - LibraryFilterTab.ARTISTS - LibraryFilterTab.PLAYLISTS,
                                             scrollToTopSignal = scrollToTopSignal,
                                             viewMode = libraryViewMode,
                                             sortOption = librarySortOption,

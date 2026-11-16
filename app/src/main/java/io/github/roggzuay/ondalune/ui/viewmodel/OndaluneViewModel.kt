@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.viewmodel
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.model.overrideFor
 import io.github.roggzuay.ondalune.data.model.withOverride
 import io.github.roggzuay.ondalune.data.model.source
@@ -171,7 +172,7 @@ enum class LibraryFilterTab(val label: String) {
 }
 
 enum class FavouritesFilterTab(val label: String) {
-    ALL("All Starred"),
+    ALL("All"),
     TRACKS("Songs"),
     ALBUMS("Albums")
 }
@@ -858,7 +859,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         if (mix.tracks.isEmpty()) return
         prefetchCovers(mix.tracks.take(2))
         playback.playInOrder(mix.tracks)
-        _statusBanner.value = "${mix.title}: ${mix.tracks.size} songs"
+        _statusBanner.value = "${mix.title}: ${countOf(mix.tracks.size, "song")}"
     }
 
     private val _scrollToTopSignal = MutableStateFlow(0)
@@ -1251,7 +1252,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                     val next = pacer.next(found.get(), SystemClock.uptimeMillis())
                     if (next != shown) {
                         shown = next
-                        _statusBanner.value = "Syncing library… $shown songs"
+                        _statusBanner.value = "Syncing library… ${countOf(shown, "song")}"
                     }
                     delay(32L)
                 }
@@ -1264,7 +1265,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             markFullSync(server)
             refreshHomeShelves(server)
             _isSyncing.value = false
-            _statusBanner.value = "Synced $syncedCount tracks from ${server.name}"
+            _statusBanner.value = "Synced ${countOf(syncedCount, "track")} from ${server.name}"
             delay(450L)
             _isCutoutSyncActive.value = false
         }
@@ -1584,7 +1585,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             _onboardingSync.value = OnboardingSync(synced, synced, OnboardingSync.Phase.DONE)
             delay(900L) // let 100% land before zooming in
             completeServerOnboarding()
-            _statusBanner.value = "Synced $synced songs from ${saved.name}"
+            _statusBanner.value = "Synced ${countOf(synced, "song")} from ${saved.name}"
         }
     }
 
@@ -2017,7 +2018,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             prefetchCovers(picks.take(2))
             startAfter?.join()
             playback.playInOrder(picks)
-            _statusBanner.value = "Your Mix: ${picks.size} songs picked for you"
+            _statusBanner.value = "Your Mix: ${countOf(picks.size, "song")} picked for you"
         }
     }
 
@@ -2189,8 +2190,8 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         _statusBanner.value = when {
             list.size == 1 && favourite -> "Added \"${list.first().title}\" to favourites"
             list.size == 1 -> "Removed \"${list.first().title}\" from favourites"
-            favourite -> "Added ${list.size} tracks to favourites"
-            else -> "Removed ${list.size} tracks from favourites"
+            favourite -> "Added ${countOf(list.size, "track")} to favourites"
+            else -> "Removed ${countOf(list.size, "track")} from favourites"
         }
     }
 
@@ -2210,7 +2211,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                     if (list.any { it.isOnDevice }) "Songs on this phone can't go in a server playlist"
                     else "${activeServer().name} didn't let Ondalune change \"${playlist.name}\""
                 list.size == 1 -> "Added \"${list.first().title}\" to ${playlist.name}"
-                else -> "Added ${list.size} tracks to ${playlist.name}"
+                else -> "Added ${countOf(list.size, "track")} to ${playlist.name}"
             }
         }
     }

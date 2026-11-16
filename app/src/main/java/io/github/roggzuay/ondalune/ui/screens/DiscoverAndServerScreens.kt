@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SegmentedButton
@@ -300,7 +301,7 @@ fun FavouritesCollectionScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "${starredTracks.size} songs • ${starredAlbums.size} albums",
+                            text = "${countOf(starredTracks.size, "song")} • ${countOf(starredAlbums.size, "album")}",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
@@ -343,12 +344,12 @@ fun FavouritesCollectionScreen(
                             Text("Shuffle")
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FavouritesFilterTab.entries.forEach { tab ->
                             FilterChip(
                                 selected = tab == activeFilter,
                                 onClick = { onSelectFilter(tab) },
-                                label = { Text(tab.label) },
+                                label = { Text(tab.label, maxLines = 1, softWrap = false) },
                                 modifier = Modifier.testTag("fav_filter_${tab.name.lowercase()}")
                             )
                         }
@@ -356,7 +357,14 @@ fun FavouritesCollectionScreen(
                 }
             }
 
-            if ((activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.ALBUMS) && starredAlbums.isNotEmpty()) {
+            if (starredTracks.isEmpty() && starredAlbums.isEmpty()) item(key = "fav_empty") {
+                Text(
+                    "Nothing here yet. Tap the heart on a song or an album and it shows up here, and on your server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 24.dp).testTag("favourites_empty")
+                )
+            } else if ((activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.ALBUMS) && starredAlbums.isNotEmpty()) {
                 item(key = "fav_albums_title") { Text("Albums", style = MaterialTheme.typography.titleLarge) }
                 collectionEntries(
                     starredAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }) },
@@ -364,7 +372,7 @@ fun FavouritesCollectionScreen(
                 )
             }
 
-            if (activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.TRACKS) {
+            if ((starredTracks.isNotEmpty() || starredAlbums.isNotEmpty()) && (activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.TRACKS)) {
                 item(key = "fav_tracks_title") { Text("Songs", style = MaterialTheme.typography.titleLarge) }
                 trackCollection(
                     tracks = starredTracks,
@@ -858,7 +866,7 @@ fun SettingsCustomizationScreen(
                         title = "Save next songs",
                         choices = listOf(3, 5, 10),
                         selected = settings.readAheadTrackBuffer,
-                        label = { "$it songs" },
+                        label = { "${countOf(it, "song")}" },
                         onSelect = onSetReadAheadBuffer
                     )
 
@@ -896,7 +904,7 @@ fun SettingsCustomizationScreen(
                         }
                         Text("Downloads & storage", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "Downloaded: ${offlineStorageSummary.completedTrackCount} songs (${offlineStorageSummary.formattedOfflineSize})\n" +
+                            text = "Downloaded: ${countOf(offlineStorageSummary.completedTrackCount, "song")} (${offlineStorageSummary.formattedOfflineSize})\n" +
                                 "Next songs: ${offlineStorageSummary.formattedSongsAheadSize} • Covers: ${offlineStorageSummary.formattedArtworkSize} • Other cache: " +
                                 "%.1f MB".format((offlineStorageSummary.temporaryCacheBytes - offlineStorageSummary.songsAheadBytes).coerceAtLeast(0L) / (1024.0 * 1024.0)),
                             style = MaterialTheme.typography.bodySmall,
@@ -1263,7 +1271,7 @@ fun SettingsCustomizationScreen(
 
                     SettingsToggleRow(
                         title = "Use your phone's colours (Android 12+)",
-                        subtitle = "Extract system wallpaper Monet palette as base theme",
+                        subtitle = "Base the colours on your wallpaper",
                         checked = settings.useMaterialYouDynamicColor,
                         onCheckedChange = onSetUseMaterialYou,
                         testTag = "toggle_material_you"
@@ -3565,7 +3573,7 @@ private fun MoodMixesPanel(
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(mix.title, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "${mix.tracks.size} songs",
+                                "${countOf(mix.tracks.size, "song")}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

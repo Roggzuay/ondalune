@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.components
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Edit
@@ -179,7 +180,7 @@ fun TrackOptionsSheet(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = single?.title ?: "${tracks.size} tracks selected",
+                        text = single?.title ?: "${countOf(tracks.size, "track")} selected",
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -208,7 +209,7 @@ fun TrackOptionsSheet(
             if (downloaded) {
                 SheetItem(Icons.Filled.DeleteOutline, "Remove download", "option_remove_download") { run { actions.removeDownload(single!!) } }
             } else {
-                SheetItem(Icons.Filled.CloudDownload, if (single != null) "Download" else "Download ${tracks.size} tracks", "option_download") {
+                SheetItem(Icons.Filled.CloudDownload, if (single != null) "Download" else "Download ${countOf(tracks.size, "track")}", "option_download") {
                     run { actions.download(tracks) }
                 }
             }

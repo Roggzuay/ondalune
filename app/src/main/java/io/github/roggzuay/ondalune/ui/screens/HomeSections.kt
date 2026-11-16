@@ -1,6 +1,7 @@
 package io.github.roggzuay.ondalune.ui.screens
 
 import io.github.roggzuay.ondalune.ui.components.ArtworkImage
+import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.onSizeChanged
@@ -539,15 +540,16 @@ fun TopArtistsShelf(shelves: HomeShelves, header: @Composable () -> Unit) {
                         .clickable { actions?.openArtist(track) }
                         .testTag("top_artist_${track.artist}")
                 ) {
-                    ArtworkImage(
-                        url = track.coverArtUrl,
-                        contentDescription = null,
-                        crossfadeMs = 200,
-                        contentScale = ContentScale.Crop,
+                    // Same picture as the Artists tab: the cover, or the artist's initials on generated art.
+                    ExpressiveArtwork(
+                        seedHex = track.paletteSeedHex,
+                        accentHex = track.accentHex,
+                        artStyleIndex = track.artStyleIndex,
+                        coverArtUrl = track.coverArtUrl,
+                        monogramText = track.artist,
                         modifier = Modifier
                             .size(104.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -570,7 +572,7 @@ fun CustomizeHomeButton(onClick: () -> Unit) {
         OutlinedButton(onClick = onClick, modifier = Modifier.testTag("home_customize_button")) {
             Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Customize Home")
+            Text("Customize home")
         }
     }
 }

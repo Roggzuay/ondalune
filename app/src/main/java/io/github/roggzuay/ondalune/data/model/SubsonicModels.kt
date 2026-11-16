@@ -1007,13 +1007,12 @@ data class OfflineSummary(
     /** "12 songs, 2 albums, 1 partly downloaded album, 1 playlist", or null with nothing offline. */
     val description: String?
         get() = if (songs == 0) null else listOfNotNull(
-            plural(songs, "song"),
-            wholeAlbums.takeIf { it > 0 }?.let { plural(it, "album") },
+            countOf(songs, "song"),
+            wholeAlbums.takeIf { it > 0 }?.let { countOf(it, "album") },
             partialAlbums.size.takeIf { it > 0 }?.let { if (it == 1) "1 partly downloaded album" else "$it partly downloaded albums" },
-            playlists.takeIf { it > 0 }?.let { plural(it, "playlist") }
+            playlists.takeIf { it > 0 }?.let { countOf(it, "playlist") }
         ).joinToString(", ")
 
-    private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 }
 
 /** Counts what is offline in [library], given the ids of completed downloads. Incomplete downloads don't count. */
@@ -1033,3 +1032,6 @@ fun offlineSummaryOf(library: List<SubsonicTrack>, downloadedIds: Set<String>, p
     val fullPlaylists = playlists.count { p -> p.trackIds.isNotEmpty() && p.trackIds.all { it in offlineIds } }
     return OfflineSummary(offlineIds.size, whole, partial, fullPlaylists)
 }
+
+/** "1 song", "3 songs". */
+fun countOf(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
