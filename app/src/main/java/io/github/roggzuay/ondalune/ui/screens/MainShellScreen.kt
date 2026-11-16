@@ -217,6 +217,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val folders by viewModel.filteredFolders.collectAsStateWithLifecycle()
 
     val currentDestination by viewModel.currentDestination.collectAsStateWithLifecycle()
+    // The Settings page open inside Settings; its title and back arrow are in the top bar.
+    var settingsSection by rememberSaveable { mutableStateOf<SettingsExpandableSection?>(null) }
+    LaunchedEffect(currentDestination) { if (currentDestination != PrimaryDestination.SETTINGS) settingsSection = null }
     val selectedListType by viewModel.selectedAlbumListType.collectAsStateWithLifecycle()
     val libraryFilterTab by viewModel.libraryFilterTab.collectAsStateWithLifecycle()
     val libraryViewMode by viewModel.libraryViewMode.collectAsStateWithLifecycle()
@@ -568,7 +571,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             SelectionTopBar(selection = trackSelection, onMore = { selectionSheetOpen = true })
                         } else {
                         OndaluneTopBar(
-                            title = currentDestination.label,
+                            title = settingsSection?.takeIf { currentDestination == PrimaryDestination.SETTINGS }?.title ?: currentDestination.label,
                             searchQuery = searchQuery,
                             searchOpen = searchOpen,
                             statusBanner = statusBanner,
@@ -579,7 +582,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             onSearchOpenChange = { searchOpen = it },
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
-                            onDismissBanner = viewModel::dismissBanner
+                            onDismissBanner = viewModel::dismissBanner,
+                            onBack = if (currentDestination == PrimaryDestination.SETTINGS && settingsSection != null) {
+                                { settingsSection = null }
+                            } else {
+                                null
+                            }
                         )
                         }
                         }
@@ -944,6 +952,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
                                     PrimaryDestination.SETTINGS -> {
                                         SettingsCustomizationScreen(
+                                            openSection = settingsSection,
+                                            onOpenSection = { settingsSection = it },
                                             settings = customizationSettings,
                                             speedPitchState = speedPitchState,
                                             reverbState = reverbState,

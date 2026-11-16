@@ -409,15 +409,15 @@ data class TabDisplayPreference(
 }
 
 enum class ShuffleMode(val label: String, val shortLabel: String, val description: String) {
-    OFF("Sequential Order", "Off", "Play tracks in sequential album or playlist order"),
-    SMART("Smart Shuffle", "Smart", "Prioritizes high-rated (4–5★), starred, and frequently played tracks"),
-    STANDARD("Standard Shuffle", "Random", "Uniform random order across all tracks in the queue")
+    OFF("Sequential Order", "Off", "Songs play in album or playlist order"),
+    SMART("Smart Shuffle", "Smart", "Favours songs with a heart and songs you play often"),
+    STANDARD("Standard Shuffle", "Random", "Every song in the queue equally likely")
 }
 
 enum class SmartShuffleProfile(val label: String, val description: String) {
     BALANCED("Balanced", "Favourites and much-played songs come up a little more often"),
     FAVOURITES("Favourites first", "Songs with a heart come up more often"),
-    MOST_PLAYED("Heavy Rotation", "Your most-played songs come up more often")
+    MOST_PLAYED("Most played", "Your most-played songs come up more often")
 }
 
 enum class DockStyle(val label: String, val description: String) {
@@ -525,10 +525,10 @@ enum class ReplayGainMode(val label: String) {
 }
 
 enum class DownloadSpeedLimit(val label: String, val mbpsValue: Int) {
-    UNLIMITED("Unlimited (Max Line Speed)", 0),
-    FAST_25("25 MB/s High-Speed", 25),
-    BALANCED_10("10 MB/s Balanced", 10),
-    SAVER_3("3 MB/s Background Saver", 3)
+    UNLIMITED("No limit", 0),
+    FAST_25("200 Mbit/s", 25),
+    BALANCED_10("80 Mbit/s", 10),
+    SAVER_3("24 Mbit/s", 3)
 }
 
 /**
@@ -594,13 +594,13 @@ enum class ReverbPreset(
     val defaultDecay: Float,
     val defaultDamping: Float
 ) {
-    OFF("Bypass (Dry)", "Unprocessed direct signal path with zero reverberation", 0.0f, 0.30f, 0.25f, 0.50f),
-    SMALL_ROOM("Small Booth", "Tight acoustic vocal booth with fast early reflections", 0.18f, 0.32f, 0.28f, 0.65f),
-    STUDIO_ROOM("Mastering Studio", "Balanced live control room with natural warmth and controlled tail", 0.28f, 0.52f, 0.46f, 0.52f),
-    HALL("Symphony Hall", "Spacious concert hall with rich midrange bloom and smooth decay", 0.38f, 0.76f, 0.72f, 0.40f),
-    LARGE_HALL("Cathedral Arena", "Expansive acoustic arena with deep, enveloping sustain", 0.48f, 0.90f, 0.86f, 0.32f),
-    AMBIENT("Dreamscape Wash", "Lush, atmospheric shimmer tail for ambient and slowed/reverb listening", 0.60f, 0.95f, 0.92f, 0.24f),
-    CUSTOM("Custom Acoustic", "User-sculpted room size, decay tail, HF damping, and wet/dry balance", 0.32f, 0.60f, 0.55f, 0.45f)
+    OFF("Off", "No reverb", 0.0f, 0.30f, 0.25f, 0.50f),
+    SMALL_ROOM("Small room", "A small room with short echoes", 0.18f, 0.32f, 0.28f, 0.65f),
+    STUDIO_ROOM("Studio", "A warm room with a short tail", 0.28f, 0.52f, 0.46f, 0.52f),
+    HALL("Hall", "A concert hall", 0.38f, 0.76f, 0.72f, 0.40f),
+    LARGE_HALL("Large hall", "A big space with a long tail", 0.48f, 0.90f, 0.86f, 0.32f),
+    AMBIENT("Dreamy", "A long, soft wash, for ambient and slowed + reverb", 0.60f, 0.95f, 0.92f, 0.24f),
+    CUSTOM("Custom", "Your own room size, tail, damping and mix", 0.32f, 0.60f, 0.55f, 0.45f)
 }
 
 /**
@@ -832,10 +832,10 @@ enum class EqualizerPreset(
     val bandsDb: List<Float> // 60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz (-10f..+10f)
 ) {
     FLAT_STUDIO("Flat", "No EQ: every band at 0 dB", listOf(0f, 0f, 0f, 0f, 0f)),
-    WARM_ANALOG("Warm Analog Vinyl", "Lush low-mids and silky high-frequency roll-off", listOf(3.5f, 4.2f, 1.0f, -1.2f, -2.0f)),
-    DEEP_SUB("Sub-Bass Kinetic", "Punchy 60Hz sub-bass shelf with crisp air", listOf(6.8f, 4.0f, -1.0f, 2.5f, 4.5f)),
-    VOCAL_PRISM("Vocal & Acoustic Prism", "Forward midrange presence and acoustic detail", listOf(-1.5f, 1.2f, 4.8f, 4.0f, 2.0f)),
-    SPATIAL_CLUB("Late Night Widestage", "V-shaped dynamic contour for low-volume listening", listOf(5.0f, 2.0f, -2.0f, 3.5f, 6.0f))
+    WARM_ANALOG("Warm", "Fuller low-mids, softer highs", listOf(3.5f, 4.2f, 1.0f, -1.2f, -2.0f)),
+    DEEP_SUB("Bass boost", "More deep bass, a little more air", listOf(6.8f, 4.0f, -1.0f, 2.5f, 4.5f)),
+    VOCAL_PRISM("Vocals", "Voices and acoustic instruments come forward", listOf(-1.5f, 1.2f, 4.8f, 4.0f, 2.0f)),
+    SPATIAL_CLUB("Late night", "More bass and treble for listening quietly", listOf(5.0f, 2.0f, -2.0f, 3.5f, 6.0f))
 }
 
 data class PingDiagnosticResult(

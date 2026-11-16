@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -93,7 +94,9 @@ fun OndaluneTopBar(
     onSearchOpenChange: (Boolean) -> Unit,
     onOpenFilters: () -> Unit,
     onOpenSettings: () -> Unit,
-    onDismissBanner: () -> Unit
+    onDismissBanner: () -> Unit,
+    /** Shown as a back arrow before the title, for a page inside a destination. */
+    onBack: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -122,6 +125,13 @@ fun OndaluneTopBar(
                         .height(64.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (onBack != null) {
+                        IconButton(
+                            onClick = onBack,
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier.offset(x = (-12).dp).testTag("settings_back_button")
+                        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
