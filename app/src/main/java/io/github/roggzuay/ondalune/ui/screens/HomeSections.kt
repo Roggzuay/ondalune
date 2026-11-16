@@ -4,6 +4,7 @@ import io.github.roggzuay.ondalune.ui.components.ArtworkImage
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -240,10 +241,15 @@ fun YourMixHero(
         val w = if (wide) minOf(fullWidth * 0.58f, 470.dp) else fullWidth
         val left = fullWidth - w
         val rise = if (wide) 200.dp else 0.dp
+        // Wide screens put the play button under the title, clear of "New mix" at any text size.
+        val density = LocalDensity.current
+        var titleBottom by remember { mutableStateOf(0.dp) }
+        val buttonTop = if (wide) maxOf(200.dp, titleBottom + 16.dp) else 86.dp
         // Centre of the play button: the point the launch zooms into.
-        val focus = if (wide) DpOffset(64.dp, 264.dp) else DpOffset(fullWidth - 64.dp, 150.dp)
-        Box(Modifier.fillMaxWidth().height(if (wide) 380.dp else 540.dp)) {
+        val focus = if (wide) DpOffset(64.dp, buttonTop + HeroButtonRadius) else DpOffset(fullWidth - 64.dp, 150.dp)
+        Box(Modifier.fillMaxWidth().height(if (wide) maxOf(380.dp, buttonTop + HeroButtonRadius * 2 + 16.dp) else 540.dp)) {
         Column(modifier = Modifier
+            .onSizeChanged { titleBottom = with(density) { it.height.toDp() } }
             .padding(top = 8.dp)
             // Offscreen: the text is drawn once and the cached picture scales, instead of the
             // glyphs being re-rendered at a new size every frame.
@@ -307,7 +313,7 @@ fun YourMixHero(
             onCentre = { heroLaunch.centre = it },
             modifier = Modifier
                 .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
-                .padding(top = if (wide) 200.dp else 86.dp)
+                .padding(top = buttonTop)
                 .resting(0.6f, entranceValue, 0)
         )
         }
