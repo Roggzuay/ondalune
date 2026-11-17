@@ -471,6 +471,9 @@ fun SettingsCustomizationScreen(
     onViewUpdate: () -> Unit = {},
     onSetUpdateNotifications: (Boolean) -> Unit = {},
     onSetUpdatePrereleases: (Boolean) -> Unit = {},
+    previousVersion: AppUpdate? = null,
+    onGoBackVersion: (() -> Unit)? = null,
+    onAllVersions: () -> Unit = {},
     onRestoreDefaults: () -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -2113,7 +2116,10 @@ fun SettingsCustomizationScreen(
                 notify = settings.updateNotifications,
                 onSetNotify = onSetUpdateNotifications,
                 prereleases = settings.updatePrereleases,
-                onSetPrereleases = onSetUpdatePrereleases
+                onSetPrereleases = onSetUpdatePrereleases,
+                previous = previousVersion,
+                onGoBack = onGoBackVersion,
+                onAllVersions = onAllVersions
             )
             Spacer(modifier = Modifier.height(12.dp))
             AboutLicencesRow()

@@ -22,6 +22,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
+import io.github.roggzuay.ondalune.ui.components.RollbackDialog
 import io.github.roggzuay.ondalune.ui.components.UpdateDetailsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadActivityButton
@@ -272,6 +273,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val updateCheckStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
     val updateDetailsOpen by viewModel.updateDetailsOpen.collectAsStateWithLifecycle()
     val updateBannerFolded by viewModel.updateBannerFolded.collectAsStateWithLifecycle()
+    val previousVersion by viewModel.previousVersion.collectAsStateWithLifecycle()
+    val rollback by viewModel.rollback.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
@@ -1026,6 +1029,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCheckForUpdatesNow = viewModel::checkForUpdatesNow,
                                             onSetUpdateNotifications = viewModel::setUpdateNotifications,
                                             onSetUpdatePrereleases = viewModel::setUpdatePrereleases,
+                                            previousVersion = previousVersion,
+                                            onGoBackVersion = viewModel::openRollback.takeIf { viewModel.canGoBack },
+                                            onAllVersions = { runCatching { uriHandler.openUri(ALL_VERSIONS_URL) } },
                                             onViewUpdate = viewModel::showUpdateDetails,
                                             onRestoreDefaults = viewModel::restoreDefaultCustomizationSettings,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
@@ -1522,13 +1528,24 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onDismiss = viewModel::closeUpdateDetails
                     )
                 }
+                rollback?.let { state ->
+                    RollbackDialog(
+                        state,
+                        onStart = viewModel::startRollback,
+                        onRemove = { runCatching { context.startActivity(AppUpdateInstaller.uninstallIntent(context)) } },
+                        onClose = viewModel::closeRollback
+                    )
+                }
                 // Downloaded and allowed: open Android's installer, which asks to confirm.
                 LaunchedEffect(updateInstall) {
                     (updateInstall as? UpdateInstallState.Ready)?.let { ready ->
                         runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, ready.apk)) }
                     }
                 }
-                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.resumeUpdateInstall() }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    viewModel.resumeUpdateInstall()
+                    viewModel.refreshUpdateInfo() // each time the app comes to the front
+                }
 
                 // Application Introduction / Server Details Onboarding Modal
                 // Leaving onboarding zooms in: the screen grows towards you and fades while Home
@@ -1790,3 +1807,6 @@ private fun sharedAxisX(forward: Boolean): ContentTransform {
     return (slideInHorizontally(slide) { dir * it / 8 } + fadeIn(tween(210, delayMillis = 90, easing = LinearOutSlowInEasing)))
         .togetherWith(slideOutHorizontally(slide) { -dir * it / 8 } + fadeOut(tween(90, easing = FastOutLinearInEasing)))
 }
+
+/** Every release of Ondalune, for picking a version by hand. */
+private const val ALL_VERSIONS_URL = "https://github.com/Roggzuay/ondalune/releases"

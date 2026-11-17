@@ -26,8 +26,8 @@ import java.util.concurrent.TimeUnit
 val updateChecksBuiltIn: Boolean get() = BuildConfig.SELF_UPDATE
 
 /**
- * The daily background update check (WorkManager): only with a network and enough battery, at
- * most once a day (the store keeps the answer), and it tells about each release once.
+ * The background update check (WorkManager), every six hours: only with a network and enough
+ * battery, and the store answers from its cache within the hour. It tells about each release once.
  */
 class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -45,7 +45,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
     companion object {
         private const val NAME = "ondalune-update-check"
 
-        /** Starts (or stops) the daily check; a check already scheduled keeps its timing. */
+        /** Starts (or stops) the background check, every few hours; UPDATE moves older daily schedules over. */
         fun schedule(context: Context, enabled: Boolean) {
             // Absent only where Android's startup didn't run (unit tests); never stop the app for it.
             val work = runCatching { WorkManager.getInstance(context) }.getOrNull() ?: return
@@ -53,10 +53,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
                 work.cancelUniqueWork(NAME)
                 return
             }
-            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(24, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(6, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build())
                 .build()
-            work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }

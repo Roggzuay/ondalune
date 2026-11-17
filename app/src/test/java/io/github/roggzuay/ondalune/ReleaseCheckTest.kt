@@ -2,6 +2,7 @@ package io.github.roggzuay.ondalune
 
 import io.github.roggzuay.ondalune.data.update.newestRelease
 import io.github.roggzuay.ondalune.data.update.parseRelease
+import io.github.roggzuay.ondalune.data.update.previousRelease
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -48,5 +49,20 @@ class ReleaseCheckTest {
     fun `the newest stable release wins whatever the order`() {
         val list = JSONArray().put(release("v1.5.0")).put(release("v1.10.0")).put(release("v1.9.2"))
         assertEquals("1.10.0", newestRelease(list, false)!!.version)
+    }
+
+    @Test
+    fun `the previous version is the one directly before this one`() {
+        val list = JSONArray().put(release("v1.7.1.3-preview", pre = true)).put(release("v1.7.1.2-preview", pre = true))
+            .put(release("v1.7.1")).put(release("v1.6.1")).put(release("v1.7.1.1-preview", pre = true))
+        assertEquals("1.7.1.2-preview", previousRelease(list, "1.7.1.3-preview", includePrereleases = true)!!.version)
+        assertEquals("1.7.1", previousRelease(list, "1.7.1.3-preview", includePrereleases = false)!!.version)
+        assertEquals("1.6.1", previousRelease(list, "1.7.1", includePrereleases = false)!!.version)
+    }
+
+    @Test
+    fun `nothing is before the oldest release`() {
+        val list = JSONArray().put(release("v1.0.0")).put(release("v1.1.0"))
+        assertNull(previousRelease(list, "1.0.0", includePrereleases = true))
     }
 }
