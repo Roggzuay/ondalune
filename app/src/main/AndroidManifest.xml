@@ -33,6 +33,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:configChanges="uiMode"
             android:theme="@style/Theme.MyApplication">
             <!-- Lists Ondalune with the phone's music players (no launcher entry: that's the aliases). -->
             <intent-filter>
