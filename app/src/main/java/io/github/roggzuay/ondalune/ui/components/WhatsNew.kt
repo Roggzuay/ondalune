@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -325,7 +326,7 @@ fun UpdatesCard(
             }
             SwitchLine("Include pre-releases", "Test versions before they are released. Off: stable releases only", prereleases, onSetPrereleases, "toggle_update_prereleases")
             if (previous != null && onGoBack != null) ActionLine(
-                "Previous version", "Go back to ${previous.version}", "Go back", onGoBack, "go_back_version"
+                "Previous version", "Go back to ${previous.version}. Clears the app's data", "Go back", onGoBack, "go_back_version"
             )
             ActionLine("All versions", "Pick any release on GitHub", "Open", onAllVersions, "all_versions")
         }
@@ -356,32 +357,50 @@ fun RollbackDialog(state: RollbackState, onStart: () -> Unit, onRemove: () -> Un
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (state) {
-                    is RollbackState.Confirm -> StatusText(
-                        "Android only installs an older version after this one is removed, and removing it clears " +
-                            "Ondalune's data on this phone: servers, settings and downloads. Your music on the server is untouched. " +
-                            "Ondalune saves ${state.version} to your Downloads folder first."
-                    )
+                    is RollbackState.Confirm -> {
+                        StatusText(
+                            "Android only installs an older version after this one is removed. " +
+                                "Ondalune saves ${state.version} to your Downloads folder first."
+                        )
+                        DataLossNote()
+                    }
                     is RollbackState.Downloading -> {
                         LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                         StatusText("Downloading… ${(state.progress * 100).roundToInt()}%")
                     }
-                    is RollbackState.Saved -> StatusText(
-                        "${state.fileName} is in your Downloads. Next, remove this version when Android asks, then open " +
-                            "that file from Downloads to install ${state.version}."
-                    )
+                    is RollbackState.Saved -> {
+                        StatusText(
+                            "${state.fileName} is in your Downloads. Next, remove this version when Android asks, then open " +
+                                "that file from Downloads to install ${state.version}."
+                        )
+                        DataLossNote()
+                    }
                     is RollbackState.Failed -> StatusText(state.message, MaterialTheme.colorScheme.error)
                 }
             }
         },
         confirmButton = {
             when (state) {
-                is RollbackState.Confirm -> TextButton(onClick = onStart, modifier = Modifier.testTag("rollback_start")) { Text("Download") }
+                is RollbackState.Confirm -> TextButton(onClick = onStart, modifier = Modifier.testTag("rollback_start")) { Text("Continue") }
                 is RollbackState.Downloading -> Unit
                 is RollbackState.Saved -> TextButton(onClick = onRemove, modifier = Modifier.testTag("rollback_remove")) { Text("Remove this version") }
                 is RollbackState.Failed -> TextButton(onClick = onStart) { Text("Try again") }
             }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(if (state is RollbackState.Saved) "Not now" else "Cancel") } }
+    )
+}
+
+/** The cost of going back, in the error colour so it isn't skimmed past. */
+@Composable
+private fun DataLossNote() {
+    Text(
+        "This clears all of Ondalune's data on this phone: servers, settings and downloads. " +
+            "Your music on the server and any files in Downloads stay.",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.testTag("rollback_data_warning")
     )
 }
 
