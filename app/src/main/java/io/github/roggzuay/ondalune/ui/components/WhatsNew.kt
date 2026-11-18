@@ -107,6 +107,13 @@ private val releaseNotes = mapOf(
         "Hi-res, 24-bit and Dolby songs play at their real quality",
         "Lyrics from LRCLIB when your server has none, and Android Auto",
         "Fixes & improvements: a play now counts after 30 seconds of listening"
+    ),
+    "1.8" to listOf(
+        "A new look: a proper light mode, clearer search, and player buttons that show when they're on",
+        "Settings in plain words, one row per choice",
+        "Updates show up when you open the app, and the previous version is one tap away",
+        "Empty Favourites and Playlists tell you how to fill them",
+        "Fixes & improvements: switching between dark and light no longer restarts the app"
     )
 )
 
