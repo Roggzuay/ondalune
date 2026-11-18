@@ -22,6 +22,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
+import io.github.roggzuay.ondalune.ui.components.RollbackDialog
 import io.github.roggzuay.ondalune.ui.components.UpdateDetailsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadsSheet
 import io.github.roggzuay.ondalune.ui.components.DownloadActivityButton
@@ -217,6 +218,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val folders by viewModel.filteredFolders.collectAsStateWithLifecycle()
 
     val currentDestination by viewModel.currentDestination.collectAsStateWithLifecycle()
+    // The Settings page open inside Settings; its title and back arrow are in the top bar.
+    var settingsSection by rememberSaveable { mutableStateOf<SettingsExpandableSection?>(null) }
+    LaunchedEffect(currentDestination) { if (currentDestination != PrimaryDestination.SETTINGS) settingsSection = null }
     val selectedListType by viewModel.selectedAlbumListType.collectAsStateWithLifecycle()
     val libraryFilterTab by viewModel.libraryFilterTab.collectAsStateWithLifecycle()
     val libraryViewMode by viewModel.libraryViewMode.collectAsStateWithLifecycle()
@@ -269,6 +273,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val updateCheckStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
     val updateDetailsOpen by viewModel.updateDetailsOpen.collectAsStateWithLifecycle()
     val updateBannerFolded by viewModel.updateBannerFolded.collectAsStateWithLifecycle()
+    val previousVersion by viewModel.previousVersion.collectAsStateWithLifecycle()
+    val rollback by viewModel.rollback.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
@@ -473,14 +479,25 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
-    // First playback: offer to lift battery optimisation so locking the phone doesn't stop music.
+    // Offer to lift battery optimisation the first time the user comes back after leaving the app
+    // with music playing: that's when it matters, and the first song isn't interrupted by it.
     var showBatteryPrompt by remember { mutableStateOf(false) }
-    LaunchedEffect(isPlaying) {
-        if (isPlaying && BackgroundPlayback.shouldPrompt(context)) {
-            delay(1500L)
-            BackgroundPlayback.markPrompted(context)
-            showBatteryPrompt = true
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val playingNow by rememberUpdatedState(isPlaying)
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        var leftWhilePlaying = false
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> if (playingNow) leftWhilePlaying = true
+                Lifecycle.Event.ON_START -> if (leftWhilePlaying && BackgroundPlayback.shouldPrompt(context)) {
+                    BackgroundPlayback.markPrompted(context)
+                    showBatteryPrompt = true
+                }
+                else -> Unit
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(isPlaying, activeDownloads.isNotEmpty()) {
@@ -568,7 +585,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             SelectionTopBar(selection = trackSelection, onMore = { selectionSheetOpen = true })
                         } else {
                         OndaluneTopBar(
-                            title = currentDestination.label,
+                            title = settingsSection?.takeIf { currentDestination == PrimaryDestination.SETTINGS }?.title ?: currentDestination.label,
                             searchQuery = searchQuery,
                             searchOpen = searchOpen,
                             statusBanner = statusBanner,
@@ -579,7 +596,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             onSearchOpenChange = { searchOpen = it },
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
-                            onDismissBanner = viewModel::dismissBanner
+                            onDismissBanner = viewModel::dismissBanner,
+                            onBack = if (currentDestination == PrimaryDestination.SETTINGS && settingsSection != null) {
+                                { settingsSection = null }
+                            } else {
+                                null
+                            }
                         )
                         }
                         }
@@ -808,6 +830,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             genres = genres,
                                             folders = folders,
                                             activeTab = libraryFilterTab,
+                                            // Artists and Playlists have their own tabs in the bottom bar.
+                                            visibleTabs = LibraryFilterTab.entries - LibraryFilterTab.ARTISTS - LibraryFilterTab.PLAYLISTS,
                                             scrollToTopSignal = scrollToTopSignal,
                                             viewMode = libraryViewMode,
                                             sortOption = librarySortOption,
@@ -944,6 +968,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
                                     PrimaryDestination.SETTINGS -> {
                                         SettingsCustomizationScreen(
+                                            openSection = settingsSection,
+                                            onOpenSection = { settingsSection = it },
                                             settings = customizationSettings,
                                             speedPitchState = speedPitchState,
                                             reverbState = reverbState,
@@ -1003,6 +1029,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onCheckForUpdatesNow = viewModel::checkForUpdatesNow,
                                             onSetUpdateNotifications = viewModel::setUpdateNotifications,
                                             onSetUpdatePrereleases = viewModel::setUpdatePrereleases,
+                                            previousVersion = previousVersion,
+                                            onGoBackVersion = viewModel::openRollback.takeIf { viewModel.canGoBack },
+                                            onAllVersions = { runCatching { uriHandler.openUri(ALL_VERSIONS_URL) } },
                                             onViewUpdate = viewModel::showUpdateDetails,
                                             onRestoreDefaults = viewModel::restoreDefaultCustomizationSettings,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
@@ -1499,13 +1528,24 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onDismiss = viewModel::closeUpdateDetails
                     )
                 }
+                rollback?.let { state ->
+                    RollbackDialog(
+                        state,
+                        onStart = viewModel::startRollback,
+                        onRemove = { runCatching { context.startActivity(AppUpdateInstaller.uninstallIntent(context)) } },
+                        onClose = viewModel::closeRollback
+                    )
+                }
                 // Downloaded and allowed: open Android's installer, which asks to confirm.
                 LaunchedEffect(updateInstall) {
                     (updateInstall as? UpdateInstallState.Ready)?.let { ready ->
                         runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, ready.apk)) }
                     }
                 }
-                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.resumeUpdateInstall() }
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    viewModel.resumeUpdateInstall()
+                    viewModel.refreshUpdateInfo() // each time the app comes to the front
+                }
 
                 // Application Introduction / Server Details Onboarding Modal
                 // Leaving onboarding zooms in: the screen grows towards you and fades while Home
@@ -1767,3 +1807,6 @@ private fun sharedAxisX(forward: Boolean): ContentTransform {
     return (slideInHorizontally(slide) { dir * it / 8 } + fadeIn(tween(210, delayMillis = 90, easing = LinearOutSlowInEasing)))
         .togetherWith(slideOutHorizontally(slide) { -dir * it / 8 } + fadeOut(tween(90, easing = FastOutLinearInEasing)))
 }
+
+/** Every release of Ondalune, for picking a version by hand. */
+private const val ALL_VERSIONS_URL = "https://github.com/Roggzuay/ondalune/releases"

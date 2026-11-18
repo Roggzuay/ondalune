@@ -82,10 +82,34 @@ fun newestRelease(list: JSONArray, includePrereleases: Boolean): AppUpdate? =
         .filter { includePrereleases || !it.prerelease }
         .fold(null as AppUpdate?) { best, r -> if (best == null || isNewerVersion(r.version, best.version)) r else best }
 
+/** Just what [previousRelease] needs from each release, so the kept list stays small. */
+private fun compactReleases(list: JSONArray): String {
+    val out = JSONArray()
+    for (i in 0 until list.length()) {
+        val o = list.optJSONObject(i) ?: continue
+        out.put(
+            JSONObject().put("tag_name", o.optString("tag_name")).put("html_url", o.optString("html_url"))
+                .put("prerelease", o.optBoolean("prerelease")).put("draft", o.optBoolean("draft"))
+                .put("published_at", o.optString("published_at"))
+        )
+    }
+    return out.toString()
+}
+
+/**
+ * The release just before [installedVersion] in the same channel (the direct previous one, nothing
+ * older); pre-releases count only when [includePrereleases].
+ */
+fun previousRelease(list: JSONArray, installedVersion: String, includePrereleases: Boolean): AppUpdate? =
+    (0 until list.length()).mapNotNull { list.optJSONObject(it)?.let(::parseRelease) }
+        .filter { (includePrereleases || !it.prerelease) && isNewerVersion(installedVersion, it.version) }
+        .fold(null as AppUpdate?) { best, r -> if (best == null || isNewerVersion(r.version, best.version)) r else best }
+
 /**
  * Release information from GitHub, cached in preferences so Home, the notification and the worker
  * agree without asking again. A check within [MAX_AGE_MS] of the last one uses the cache unless
  * forced; GitHub's ETag makes a repeated check cheap; a refusal (rate limit) keeps the cache.
+ * The recent releases list is kept too, which is where the previous version comes from.
  */
 class UpdateStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("ondalune_prefs", Context.MODE_PRIVATE)
@@ -109,8 +133,7 @@ class UpdateStore(context: Context) {
         val sameChannel = prefs.getBoolean(KEY_CHANNEL_PRE, false) == includePrereleases
         if (!force && sameChannel && now - prefs.getLong(KEY_CHECKED_AT, 0L) < MAX_AGE_MS) return@withContext Result.CACHED
         if (now < prefs.getLong(KEY_RETRY_AFTER, 0L)) return@withContext Result.FAILED
-        val url = if (includePrereleases) "https://api.github.com/repos/$REPO/releases?per_page=15"
-        else "https://api.github.com/repos/$REPO/releases/latest"
+        val url = "https://api.github.com/repos/$REPO/releases?per_page=100"
         val request = Request.Builder().url(url)
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "Ondalune (update check)")
@@ -131,12 +154,13 @@ class UpdateStore(context: Context) {
                     !resp.isSuccessful -> Result.FAILED
                     else -> {
                         val body = resp.body?.string().orEmpty()
-                        val release = if (includePrereleases) newestRelease(JSONArray(body), true) else parseRelease(JSONObject(body))
+                        val release = newestRelease(JSONArray(body), includePrereleases)
                         release ?: return@use Result.FAILED
                         prefs.edit()
                             .putLong(KEY_CHECKED_AT, now)
                             .putBoolean(KEY_CHANNEL_PRE, includePrereleases)
                             .putString(KEY_ETAG, resp.header("ETag"))
+                            .putString(KEY_LIST, compactReleases(JSONArray(body)))
                             .putString(KEY_VERSION, release.version)
                             .putString(KEY_NOTES, release.notes.joinToString("\n"))
                             .putString(KEY_DATE, release.publishedOn)
@@ -150,6 +174,12 @@ class UpdateStore(context: Context) {
         }.getOrDefault(Result.FAILED)
     }
 
+    /** The release just before [installedVersion] (see [previousRelease]), from the last list GitHub gave. */
+    fun previousFor(installedVersion: String, includePrereleases: Boolean): AppUpdate? {
+        val body = prefs.getString(KEY_LIST, null) ?: return null
+        return runCatching { previousRelease(JSONArray(body), installedVersion, includePrereleases) }.getOrNull()
+    }
+
     /** The release worth telling about: newer than [installedVersion], else null. */
     fun availableFor(installedVersion: String): AppUpdate? = cached()?.takeIf { isNewerVersion(it.version, installedVersion) }
 
@@ -159,7 +189,7 @@ class UpdateStore(context: Context) {
     fun markNotified(version: String) = prefs.edit().putString(KEY_NOTIFIED, version).apply()
 
     companion object {
-        const val MAX_AGE_MS = 24 * 60 * 60 * 1000L
+        const val MAX_AGE_MS = 60 * 60 * 1000L
         private const val KEY_CHECKED_AT = "update_checked_at"
         private const val KEY_VERSION = "update_latest_version"
         private const val KEY_NOTES = "update_latest_notes"
@@ -168,6 +198,7 @@ class UpdateStore(context: Context) {
         private const val KEY_PRE = "update_latest_prerelease"
         private const val KEY_CHANNEL_PRE = "update_channel_prereleases"
         private const val KEY_ETAG = "update_etag"
+        private const val KEY_LIST = "update_releases_list"
         private const val KEY_RETRY_AFTER = "update_retry_after"
         private const val KEY_NOTIFIED = "update_notified_version"
     }

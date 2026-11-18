@@ -29,11 +29,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
 import io.github.roggzuay.ondalune.BuildConfig
+import io.github.roggzuay.ondalune.data.local.RollbackState
 import io.github.roggzuay.ondalune.data.local.UpdateInstallState
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
@@ -105,6 +107,13 @@ private val releaseNotes = mapOf(
         "Hi-res, 24-bit and Dolby songs play at their real quality",
         "Lyrics from LRCLIB when your server has none, and Android Auto",
         "Fixes & improvements: a play now counts after 30 seconds of listening"
+    ),
+    "1.8" to listOf(
+        "A new look: a proper light mode, clearer search, and player buttons that show when they're on",
+        "Settings in plain words, one row per choice",
+        "Updates show up when you open the app, and the previous version is one tap away",
+        "Empty Favourites and Playlists tell you how to fill them",
+        "Fixes & improvements: switching between dark and light no longer restarts the app"
     )
 )
 
@@ -217,7 +226,8 @@ fun UpdateDetailsSheet(
                     )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.align(Alignment.End).padding(bottom = 12.dp)) {
-                TextButton(onClick = { onOpenLink(update.pageUrl) }) { Text("Full release notes") }
+                TextButton(onClick = onDismiss) { Text("Not now") }
+                TextButton(onClick = { onOpenLink(update.pageUrl) }) { Text("Release notes") }
                 when (source) {
                     InstallSource.GITHUB -> when (install) {
                         UpdateInstallState.Idle -> FilledTonalButton(onClick = onUpdate, modifier = Modifier.testTag("update_now")) { Text("Update") }
@@ -266,6 +276,9 @@ fun UpdatesCard(
     onSetNotify: (Boolean) -> Unit = {},
     prereleases: Boolean = false,
     onSetPrereleases: (Boolean) -> Unit = {},
+    previous: AppUpdate? = null,
+    onGoBack: (() -> Unit)? = null,
+    onAllVersions: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -275,16 +288,8 @@ fun UpdatesCard(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Spacer(Modifier.width(16.dp))
+                Icon(Icons.Filled.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(20.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Updates", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -312,7 +317,7 @@ fun UpdatesCard(
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text("Check automatically", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Once a day, in the background, asks GitHub for a newer version",
+                        "In the background, and whenever you open the app or pull Home down, asks GitHub for a newer version",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -327,8 +332,83 @@ fun UpdatesCard(
                 SwitchLine("Notify me", "A quiet notification once per new version; Home keeps showing it until you update", notify, onSetNotify, "toggle_update_notifications")
             }
             SwitchLine("Include pre-releases", "Test versions before they are released. Off: stable releases only", prereleases, onSetPrereleases, "toggle_update_prereleases")
+            if (previous != null && onGoBack != null) ActionLine(
+                "Previous version", "Go back to ${previous.version}. Clears the app's data", "Go back", onGoBack, "go_back_version"
+            )
+            ActionLine("All versions", "Pick any release on GitHub", "Open", onAllVersions, "all_versions")
         }
     }
+}
+
+@Composable
+private fun ActionLine(title: String, detail: String, button: String, onClick: () -> Unit, tag: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onClick, modifier = Modifier.testTag(tag)) { Text(button) }
+    }
+}
+
+/**
+ * Going back one version. Android only lets an older version in once this one is removed, which
+ * clears the app's data, so this says so plainly and saves the older APK before asking to remove.
+ */
+@Composable
+fun RollbackDialog(state: RollbackState, onStart: () -> Unit, onRemove: () -> Unit, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        modifier = Modifier.testTag("rollback_dialog"),
+        title = { Text("Go back to ${state.version}?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                when (state) {
+                    is RollbackState.Confirm -> {
+                        StatusText(
+                            "Android only installs an older version after this one is removed. " +
+                                "Ondalune saves ${state.version} to your Downloads folder first."
+                        )
+                        DataLossNote()
+                    }
+                    is RollbackState.Downloading -> {
+                        LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
+                        StatusText("Downloading… ${(state.progress * 100).roundToInt()}%")
+                    }
+                    is RollbackState.Saved -> {
+                        StatusText(
+                            "${state.fileName} is in your Downloads. Next, remove this version when Android asks, then open " +
+                                "that file from Downloads to install ${state.version}."
+                        )
+                        DataLossNote()
+                    }
+                    is RollbackState.Failed -> StatusText(state.message, MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            when (state) {
+                is RollbackState.Confirm -> TextButton(onClick = onStart, modifier = Modifier.testTag("rollback_start")) { Text("Continue") }
+                is RollbackState.Downloading -> Unit
+                is RollbackState.Saved -> TextButton(onClick = onRemove, modifier = Modifier.testTag("rollback_remove")) { Text("Remove this version") }
+                is RollbackState.Failed -> TextButton(onClick = onStart) { Text("Try again") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text(if (state is RollbackState.Saved) "Not now" else "Cancel") } }
+    )
+}
+
+/** The cost of going back, in the error colour so it isn't skimmed past. */
+@Composable
+private fun DataLossNote() {
+    Text(
+        "This clears all of Ondalune's data on this phone: servers, settings and downloads. " +
+            "Your music on the server and any files in Downloads stay.",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.testTag("rollback_data_warning")
+    )
 }
 
 @Composable

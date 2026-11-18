@@ -335,6 +335,17 @@ fun OndaluneExpressiveTheme(
     }
     val reducedMotion = remember(context) { isSystemReducedMotionEnabled(context) }
 
+    // Status and navigation bar icons follow the app's own light/dark choice, not the phone's.
+    val view = androidx.compose.ui.platform.LocalView.current
+    val darkIcons = !isDark
+    androidx.compose.runtime.SideEffect {
+        val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = darkIcons
+            isAppearanceLightNavigationBars = darkIcons
+        }
+    }
+
     CompositionLocalProvider(
         LocalReducedMotion provides reducedMotion,
         LocalInterfaceStyle provides interfaceStyle,

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.0 (2026-11-18)
+
+### New
+- A new look: a proper light mode where the status bar stays readable, clearer search with the best match on top, player buttons that show when they're on, and album pages with one title.
+- Settings in plain words, one row per choice, with the section title in the top bar.
+- Updates show up when you open the app or pull Home down, once per version. The previous version is one tap away, with a clear warning that going back clears the app's data.
+
+### Fixes & improvements
+- Switching between dark and light no longer restarts the app.
+- Removing downloads asks first and shows how much space it frees.
+- Empty Favourites and Playlists tell you how to fill them; Library no longer repeats Artists and Playlists from the bottom bar.
+- "1 song", not "1 songs". The battery tip waits until you've left the app with music playing.
+
 ## 1.6.1 (2026-11-08)
 
 - **Fixes & improvements:**

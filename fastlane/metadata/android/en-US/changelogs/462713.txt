@@ -1,0 +1,1 @@
+A new look: a proper light mode, clearer search, player buttons that show when they're on, and Settings in plain words. Updates show up when you open the app, and the previous version is one tap away. Switching between dark and light no longer restarts the app.

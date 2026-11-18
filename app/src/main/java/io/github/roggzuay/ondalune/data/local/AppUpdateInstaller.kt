@@ -1,11 +1,14 @@
 package io.github.roggzuay.ondalune.data.local
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.github.roggzuay.ondalune.data.network.updateApkUrl
@@ -27,6 +30,18 @@ sealed interface UpdateInstallState {
     /** Handed to Android's installer, which asks the user to confirm. */
     data class Ready(val apk: File) : UpdateInstallState
     data class Failed(val message: String) : UpdateInstallState
+}
+
+/**
+ * Going back to the previous version. Android won't install an older version over a newer one, so
+ * the older APK is saved to Downloads first, then this version is removed and that file installed.
+ */
+sealed interface RollbackState {
+    val version: String
+    data class Confirm(override val version: String) : RollbackState
+    data class Downloading(override val version: String, val progress: Float) : RollbackState
+    data class Saved(override val version: String, val fileName: String) : RollbackState
+    data class Failed(override val version: String, val message: String) : RollbackState
 }
 
 /**
@@ -106,6 +121,28 @@ object AppUpdateInstaller {
                 "application/vnd.android.package-archive"
             )
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+    /** Copies [apk] into the Downloads folder (Android 10+, no permission needed); false if it can't. */
+    fun saveToDownloads(context: Context, apk: File, name: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        val resolver = context.contentResolver
+        val downloads = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        runCatching { resolver.delete(downloads, "${MediaStore.Downloads.DISPLAY_NAME}=?", arrayOf(name)) }
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(downloads, values) ?: return false
+        return runCatching {
+            resolver.openOutputStream(uri)!!.use { out -> apk.inputStream().use { it.copyTo(out) } }
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Android's own "remove this app" confirmation for Ondalune. */
+    fun uninstallIntent(context: Context): Intent =
+        Intent(Intent.ACTION_DELETE, Uri.parse("package:${context.packageName}"))
 
     fun clearDownloads(context: Context) {
         updatesDir(context).deleteRecursively()

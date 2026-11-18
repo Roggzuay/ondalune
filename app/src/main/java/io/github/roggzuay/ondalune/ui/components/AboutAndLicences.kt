@@ -85,16 +85,8 @@ fun AboutLicencesRow(modifier: Modifier = Modifier) {
             .testTag("about_licences_button")
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(16.dp))
+            Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(20.dp))
             Column(Modifier.weight(1f)) {
                 Text("About & licences", style = MaterialTheme.typography.titleMedium)
                 Text(

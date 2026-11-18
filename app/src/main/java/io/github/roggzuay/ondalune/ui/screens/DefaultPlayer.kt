@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ContainedLoadingIndicator
@@ -1655,7 +1656,7 @@ private fun UpNextPartialBottomSheet(
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = "${queue.size} tracks in queue",
+                            text = "${countOf(queue.size, "track")} in queue",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

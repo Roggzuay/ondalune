@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -236,7 +237,7 @@ fun ListenNowHomeScreen(
         if (shelfTracks != null) {
             GenreOrFolderDetailSubScreen(
                 title = openShelf.title,
-                subtitle = "${shelfTracks.size} tracks",
+                subtitle = "${countOf(shelfTracks.size, "track")}",
                 tracks = shelfTracks,
                 currentTrackId = currentTrackId,
                 isPlaying = isPlaying,
@@ -725,7 +726,7 @@ fun AlbumExpressiveCard(
             if (!standard) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = listOfNotNull("${album.songCount} tracks", album.year.takeIf { it > 0 }).joinToString(" • "),
+                    text = listOfNotNull("${countOf(album.songCount, "track")}", album.year.takeIf { it > 0 }).joinToString(" • "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1031,8 +1032,8 @@ internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit, offli
     key = "alb_$id",
     title = name,
     subtitle = artist,
-    detail = offline?.let { (have, total) -> "Partly downloaded: $have of $total songs" }
-        ?: listOfNotNull(year.takeIf { it > 0 }?.toString(), "$songCount tracks", genre.takeIf { it.isNotBlank() }).joinToString(" • "),
+    detail = offline?.let { (have, total) -> "Partly downloaded: $have of ${countOf(total, "song")}" }
+        ?: listOfNotNull(year.takeIf { it > 0 }?.toString(), "${countOf(songCount, "track")}", genre.takeIf { it.isNotBlank() }).joinToString(" • "),
     coverArtUrl = coverArtUrl,
     seedHex = paletteSeedHex,
     accentHex = accentHex,
@@ -1042,7 +1043,7 @@ internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit, offli
 )
 
 /**
- * Playlists show the server's cover, else their first track's; delete sits on the row and on
+ * Playlists show the server's cover, else their first track's; delete is in the row's menu and on
  * long-press. The subtitle says where the playlist lives: on the server (and whose, when it was
  * shared with you) or in Ondalune.
  */
@@ -1055,7 +1056,7 @@ internal fun SubsonicPlaylist.toEntry(
 ) = CollectionEntry(
     key = "pl_$id",
     title = name,
-    subtitle = "${trackIds.size} tracks • ${sourceLabel(serverName)}",
+    subtitle = "${countOf(trackIds.size, "track")} • ${sourceLabel(serverName)}",
     detail = comment,
     coverArtUrl = coverArtUrl.ifBlank {
         trackIds.firstNotNullOfOrNull { trackMap[it]?.coverArtUrl?.takeIf(String::isNotBlank) }.orEmpty()
@@ -1068,8 +1069,20 @@ internal fun SubsonicPlaylist.toEntry(
     onLongClick = onDelete,
     trailing = onDelete?.let { delete ->
         {
-            IconButton(onClick = delete, modifier = Modifier.testTag("playlist_delete_$id")) {
-                Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete playlist", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Delete lives in a menu, away from Play; it still asks before deleting.
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("playlist_menu_$id")) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Playlist options", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Delete playlist") },
+                        leadingIcon = { Icon(Icons.Filled.DeleteOutline, contentDescription = null) },
+                        onClick = { menuOpen = false; delete() },
+                        modifier = Modifier.testTag("playlist_delete_$id")
+                    )
+                }
             }
         }
     }
@@ -1319,7 +1332,7 @@ fun LibraryCollectionScreen(
         val genreTracks = tracks.filter { it.hasGenre(detailGenre.name) }
         GenreOrFolderDetailSubScreen(
             title = detailGenre.name,
-            subtitle = "${detailGenre.trackCount} tracks • ${detailGenre.albumCount} albums",
+            subtitle = "${countOf(detailGenre.trackCount, "track")} • ${countOf(detailGenre.albumCount, "album")}",
             tracks = genreTracks,
             currentTrackId = currentTrackId,
             isPlaying = isPlaying,
@@ -1381,7 +1394,7 @@ fun LibraryCollectionScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (visibleTabs.size == 1) Text(
-                    text = "${artists.size} artists",
+                    text = "${countOf(artists.size, "artist")}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
@@ -1475,7 +1488,7 @@ fun LibraryCollectionScreen(
                     CollectionEntry(
                         key = "art_${artist.id}_${artist.name}",
                         title = artist.name,
-                        subtitle = "${artist.albumCount} albums • ${artist.trackCount} tracks",
+                        subtitle = "${countOf(artist.albumCount, "album")} • ${countOf(artist.trackCount, "track")}",
                         detail = artist.genre,
                         coverArtUrl = artist.coverArtUrl.ifBlank { fallbackUrl },
                         seedHex = artist.paletteSeedHex,
@@ -1551,7 +1564,7 @@ fun LibraryCollectionScreen(
                     CollectionEntry(
                         key = "gen_${genre.name}",
                         title = genre.name,
-                        subtitle = "${genre.trackCount} tracks • ${genre.albumCount} albums",
+                        subtitle = "${countOf(genre.trackCount, "track")} • ${countOf(genre.albumCount, "album")}",
                         seedHex = genre.paletteSeedHex,
                         accentHex = genre.accentHex,
                         artStyleIndex = genre.artStyleIndex,
@@ -1657,7 +1670,7 @@ private fun AlbumGridSubScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            SubScreenHeader(title, "${albums.size} albums", onBack, onPlayAll = null)
+            SubScreenHeader(title, "${countOf(albums.size, "album")}", onBack, onPlayAll = null)
         }
         items(albums, key = { it.id }) { album ->
             AlbumExpressiveCard(
@@ -1742,13 +1755,8 @@ fun AlbumDetailSubScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
-                Text(
-                    text = album.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                // The album's name is in the header just below; only back and download up here.
+                Spacer(modifier = Modifier.weight(1f))
                 val downloadActions = LocalTrackActions.current
                 val downloads = LocalDownloads.current
                 // The album's songs as one download: the cloud becomes a spinner, then a ring that
@@ -1930,7 +1938,7 @@ fun PlaylistsCollectionScreen(
         GenreOrFolderDetailSubScreen(
             title = selectedPlaylist.name,
             subtitle = listOf(
-                "${playlistTracks.size} tracks",
+                "${countOf(playlistTracks.size, "track")}",
                 if (unavailable > 0) "$unavailable unavailable" else "",
                 selectedPlaylist.sourceLabel(serverName),
                 selectedPlaylist.comment
@@ -1961,7 +1969,7 @@ fun PlaylistsCollectionScreen(
             item(key = "playlists_header") {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "${playlists.size} playlists",
+                        text = "${countOf(playlists.size, "playlist")}",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
@@ -1998,6 +2006,14 @@ fun PlaylistsCollectionScreen(
                 },
                 viewMode, columns
             )
+            if (playlists.isEmpty()) item(key = "playlists_empty") {
+                Text(
+                    "No playlists yet. Tap New to make one, or add songs to a playlist from a song's ⋮ menu.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 24.dp).testTag("playlists_empty")
+                )
+            }
             item { Spacer(modifier = Modifier.height(160.dp)) }
         }
     }
@@ -2104,7 +2120,7 @@ fun SmartDynamicSearchScreen(
         val genreTracks = allTracks.filter { it.hasGenre(selectedGenreName) }
         GenreOrFolderDetailSubScreen(
             title = selectedGenreName,
-            subtitle = "${genreTracks.size} tracks in genre",
+            subtitle = "${countOf(genreTracks.size, "track")} in genre",
             tracks = genreTracks,
             currentTrackId = currentTrackId,
             isPlaying = isPlaying,
@@ -2176,7 +2192,7 @@ fun SmartDynamicSearchScreen(
                         },
                         cornerRadius = 18.dp,
                         modifier = Modifier
-                            .height(40.dp)
+                            .heightIn(min = 40.dp)
                             .testTag("search_scope_${tab.name.lowercase()}")
                     ) {
                         Row(
@@ -2192,7 +2208,7 @@ fun SmartDynamicSearchScreen(
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                 ),
                                 color = if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 }
@@ -2206,9 +2222,7 @@ fun SmartDynamicSearchScreen(
         // Empty State when Search Query has 0 matches in the Library
         if (totalMatches == 0) {
             item {
-                Surface(
-                    shape = cornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp)
@@ -2217,24 +2231,16 @@ fun SmartDynamicSearchScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(28.dp),
+                            .padding(horizontal = 12.dp, vertical = 28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Surface(
-                            shape = cornerShape(22.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(64.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.SearchOff,
-                                    contentDescription = "No results found",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Filled.SearchOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(40.dp)
+                        )
 
                         Text(
                             text = "No results found for \"${searchQuery.trim()}\"",
@@ -2296,7 +2302,7 @@ fun SmartDynamicSearchScreen(
                                 modifier = Modifier.padding(horizontal = 22.dp)
                             ) {
                                 Text(
-                                    text = "Clear Search",
+                                    text = "Clear search",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
@@ -2348,21 +2354,11 @@ fun SmartDynamicSearchScreen(
                             )
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Surface(
-                                    shape = cornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer
-                                ) {
-                                    Text(
-                                        text = when {
-                                            topTrack != null -> "TOP SONG MATCH"
-                                            topAlbum != null -> "TOP ALBUM MATCH"
-                                            else -> "TOP ARTIST MATCH"
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
+                                Text(
+                                    text = "Best match",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = topTrack?.title ?: topAlbum?.name ?: topArtist?.name.orEmpty(),
@@ -2374,8 +2370,8 @@ fun SmartDynamicSearchScreen(
                                 Text(
                                     text = when {
                                         topTrack != null -> "${topTrack.artist} • ${topTrack.album} • ${topTrack.suffix}"
-                                        topAlbum != null -> listOfNotNull(topAlbum.artist, topAlbum.year.takeIf { it > 0 }, "${topAlbum.songCount} tracks").joinToString(" • ")
-                                        else -> "${topArtist?.genre} • ${topArtist?.albumCount} albums"
+                                        topAlbum != null -> listOfNotNull(topAlbum.artist, topAlbum.year.takeIf { it > 0 }, "${countOf(topAlbum.songCount, "track")}").joinToString(" • ")
+                                        else -> "${topArtist?.genre} • ${countOf(topArtist?.albumCount ?: 0, "album")}"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2485,7 +2481,7 @@ fun SmartDynamicSearchScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "${artist.genre} • ${artist.albumCount} albums • ${artist.trackCount} tracks",
+                                    text = "${artist.genre} • ${countOf(artist.albumCount, "album")} • ${countOf(artist.trackCount, "track")}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -2531,7 +2527,7 @@ fun SmartDynamicSearchScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "${pl.trackIds.size} tracks • ${pl.comment}",
+                                    text = "${countOf(pl.trackIds.size, "track")} • ${pl.comment}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -2584,7 +2580,7 @@ fun SmartDynamicSearchScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(text = genre.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    text = "${genre.trackCount} tracks • ${genre.albumCount} albums",
+                                    text = "${countOf(genre.trackCount, "track")} • ${countOf(genre.albumCount, "album")}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -2614,7 +2610,7 @@ fun SmartDynamicSearchScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(text = folder.displayName, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    text = "${folder.tracks.size} tracks • ${folder.path}",
+                                    text = "${countOf(folder.tracks.size, "track")} • ${folder.path}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

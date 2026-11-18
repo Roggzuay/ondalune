@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SegmentedButton
@@ -27,6 +28,7 @@ import io.github.roggzuay.ondalune.ui.components.SelectableTracks
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import io.github.roggzuay.ondalune.ui.theme.LocalCornerScale
@@ -80,6 +82,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
@@ -297,7 +301,7 @@ fun FavouritesCollectionScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "${starredTracks.size} songs • ${starredAlbums.size} albums",
+                            text = "${countOf(starredTracks.size, "song")} • ${countOf(starredAlbums.size, "album")}",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
@@ -340,12 +344,12 @@ fun FavouritesCollectionScreen(
                             Text("Shuffle")
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FavouritesFilterTab.entries.forEach { tab ->
                             FilterChip(
                                 selected = tab == activeFilter,
                                 onClick = { onSelectFilter(tab) },
-                                label = { Text(tab.label) },
+                                label = { Text(tab.label, maxLines = 1, softWrap = false) },
                                 modifier = Modifier.testTag("fav_filter_${tab.name.lowercase()}")
                             )
                         }
@@ -353,7 +357,14 @@ fun FavouritesCollectionScreen(
                 }
             }
 
-            if ((activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.ALBUMS) && starredAlbums.isNotEmpty()) {
+            if (starredTracks.isEmpty() && starredAlbums.isEmpty()) item(key = "fav_empty") {
+                Text(
+                    "Nothing here yet. Tap the heart on a song or an album and it shows up here, and on your server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 24.dp).testTag("favourites_empty")
+                )
+            } else if ((activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.ALBUMS) && starredAlbums.isNotEmpty()) {
                 item(key = "fav_albums_title") { Text("Albums", style = MaterialTheme.typography.titleLarge) }
                 collectionEntries(
                     starredAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }) },
@@ -361,7 +372,7 @@ fun FavouritesCollectionScreen(
                 )
             }
 
-            if (activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.TRACKS) {
+            if ((starredTracks.isNotEmpty() || starredAlbums.isNotEmpty()) && (activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.TRACKS)) {
                 item(key = "fav_tracks_title") { Text("Songs", style = MaterialTheme.typography.titleLarge) }
                 trackCollection(
                     tracks = starredTracks,
@@ -395,6 +406,8 @@ fun FavouritesCollectionScreen(
  */
 @Composable
 fun SettingsCustomizationScreen(
+    openSection: SettingsExpandableSection?,
+    onOpenSection: (SettingsExpandableSection?) -> Unit,
     settings: PlayerCustomizationSettings,
     speedPitchState: SpeedPitchState,
     reverbState: ReverbState = ReverbState(),
@@ -458,6 +471,9 @@ fun SettingsCustomizationScreen(
     onViewUpdate: () -> Unit = {},
     onSetUpdateNotifications: (Boolean) -> Unit = {},
     onSetUpdatePrereleases: (Boolean) -> Unit = {},
+    previousVersion: AppUpdate? = null,
+    onGoBackVersion: (() -> Unit)? = null,
+    onAllVersions: () -> Unit = {},
     onRestoreDefaults: () -> Unit = {},
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -498,8 +514,7 @@ fun SettingsCustomizationScreen(
     }
 
     // Compact root list of categories; a tapped category opens as its own page.
-    var openSection by rememberSaveable { mutableStateOf<SettingsExpandableSection?>(null) }
-    BackHandler(enabled = openSection != null) { openSection = null }
+    BackHandler(enabled = openSection != null) { onOpenSection(null) }
 
     AnimatedContent(
         targetState = openSection,
@@ -511,7 +526,7 @@ fun SettingsCustomizationScreen(
         },
         label = "settingsPage"
     ) { shownSection ->
-    CompositionLocalProvider(LocalSettingsPage provides SettingsPageState(shownSection) { openSection = it }) {
+    CompositionLocalProvider(LocalSettingsPage provides SettingsPageState(shownSection, onOpenSection)) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -519,25 +534,6 @@ fun SettingsCustomizationScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(if (shownSection == null) 3.dp else 12.dp)
     ) {
-        if (shownSection != null) item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ExpressiveBounceIconButton(
-                    onClick = { openSection = null },
-                    size = 44.dp,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag("settings_back_button")
-                ) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(text = shownSection.title, style = MaterialTheme.typography.titleLarge)
-            }
-        }
-
         // 0. Expandable Section: Simplified App Icon Selector with Live Preview
         if (shownSection == null || shownSection == SettingsExpandableSection.APP_ICON) item {
             val isExpanded = expandedMap[SettingsExpandableSection.APP_ICON] == true
@@ -603,18 +599,6 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(16.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                Surface(
-                                    shape = cornerShape(10.dp),
-                                    color = iconAccent.copy(alpha = 0.22f)
-                                ) {
-                                    Text(
-                                        text = "LIVE ICON PREVIEW",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = activeIcon.label,
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -697,7 +681,7 @@ fun SettingsCustomizationScreen(
                                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                                 ),
                                                 color = if (selected) {
-                                                    MaterialTheme.colorScheme.primary
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
                                                 } else {
                                                     MaterialTheme.colorScheme.onSurface
                                                 },
@@ -727,22 +711,22 @@ fun SettingsCustomizationScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Filled.Apps,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "Open App Icon Settings & Preview Gallery",
+                                        text = "All icons and shapes",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Text(
-                                        text = "Inspect adaptive shapes, home screen dock & Activity Alias state",
+                                        text = "Preview each icon in your launcher's shape, or let it follow the theme",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     )
@@ -804,7 +788,7 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Open Equalizer & Bitrate Studio",
+                                    text = "Equalizer",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
@@ -829,7 +813,7 @@ fun SettingsCustomizationScreen(
                     }
 
                     Text(
-                        text = "Quick Acoustic EQ Presets",
+                        text = "EQ presets",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -865,107 +849,29 @@ fun SettingsCustomizationScreen(
                     }
 
                     listOf(false, true).forEach { mobile ->
-                        Text(
-                            text = if (mobile) "Mobile Data Streaming Quality" else "Wi-Fi / LAN Streaming Quality",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
+                        SettingChoiceRow(
+                            title = if (mobile) "Streaming on mobile data" else "Streaming on Wi-Fi",
+                            choices = StreamQualities,
+                            selected = settings.streamQuality(mobile),
+                            label = { it.label },
+                            onSelect = { onSetStreamQuality(mobile, it) },
+                            modifier = Modifier.testTag("${if (mobile) "mobile" else "wifi"}_quality_row")
                         )
-                        StreamQualities.forEach { quality ->
-                            val active = settings.streamQuality(mobile) == quality
-                            SpringPressableSurface(
-                                onClick = { onSetStreamQuality(mobile, quality) },
-                                color = if (active) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                cornerRadius = 18.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("${if (mobile) "mobile" else "wifi"}_quality_${quality.format.lowercase()}_${quality.maxBitRate}")
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(text = quality.label, style = MaterialTheme.typography.labelLarge)
-                                    if (active) {
-                                        Icon(
-                                            imageVector = Icons.Filled.CheckCircle,
-                                            contentDescription = null,
-                                            tint = LocalContentColor.current,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
                     }
-
-                    Text(
-                        text = "Download & Pre-Cache Bandwidth Limit",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                    SettingChoiceRow(
+                        title = "Download speed limit",
+                        choices = DownloadSpeedLimit.entries,
+                        selected = settings.downloadSpeedLimit,
+                        label = { it.label },
+                        onSelect = onSetDownloadSpeedLimit
                     )
-                    DownloadSpeedLimit.entries.forEach { limit ->
-                        val active = settings.downloadSpeedLimit == limit
-                        SpringPressableSurface(
-                            onClick = { onSetDownloadSpeedLimit(limit) },
-                            color = if (active) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            cornerRadius = 18.dp,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = limit.label, style = MaterialTheme.typography.labelLarge)
-                                if (active) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = LocalContentColor.current,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Save next songs", style = MaterialTheme.typography.titleSmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(3, 5, 10).forEach { count ->
-                                val selected = settings.readAheadTrackBuffer == count
-                                SpringPressableSurface(
-                                    onClick = { onSetReadAheadBuffer(count) },
-                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    cornerRadius = 12.dp
-                                ) {
-                                    Text(
-                                        text = "$count tracks",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    SettingChoiceRow(
+                        title = "Save next songs",
+                        choices = listOf(3, 5, 10),
+                        selected = settings.readAheadTrackBuffer,
+                        label = { "${countOf(it, "song")}" },
+                        onSelect = onSetReadAheadBuffer
+                    )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
 
@@ -973,9 +879,35 @@ fun SettingsCustomizationScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Offline Downloads & Storage", style = MaterialTheme.typography.titleSmall)
+                        var confirmClearDownloads by remember { mutableStateOf(false) }
+                        if (confirmClearDownloads) {
+                            val count = offlineStorageSummary.completedTrackCount
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { confirmClearDownloads = false },
+                                title = { Text("Remove all downloads?") },
+                                text = {
+                                    Text(
+                                        "$count ${if (count == 1) "song" else "songs"} (${offlineStorageSummary.formattedOfflineSize}) " +
+                                            "will be removed from this phone. They stay on your server, and you can download them again."
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            confirmClearDownloads = false
+                                            onClearOfflineDownloads()
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) { Text("Remove") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { confirmClearDownloads = false }) { Text("Cancel") }
+                                }
+                            )
+                        }
+                        Text("Downloads & storage", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "Downloaded: ${offlineStorageSummary.completedTrackCount} songs (${offlineStorageSummary.formattedOfflineSize})\n" +
+                            text = "Downloaded: ${countOf(offlineStorageSummary.completedTrackCount, "song")} (${offlineStorageSummary.formattedOfflineSize})\n" +
                                 "Next songs: ${offlineStorageSummary.formattedSongsAheadSize} • Covers: ${offlineStorageSummary.formattedArtworkSize} • Other cache: " +
                                 "%.1f MB".format((offlineStorageSummary.temporaryCacheBytes - offlineStorageSummary.songsAheadBytes).coerceAtLeast(0L) / (1024.0 * 1024.0)),
                             style = MaterialTheme.typography.bodySmall,
@@ -990,17 +922,22 @@ fun SettingsCustomizationScreen(
                         ) {
                             Text("Manage downloads", style = MaterialTheme.typography.labelMedium)
                         }
-                        Row(
+                        // Side by side while the labels fit; stacked when the text is large.
+                        androidx.compose.foundation.layout.FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            maxItemsInEachRow = if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) 1 else 2
                         ) {
                             androidx.compose.material3.OutlinedButton(
-                                onClick = onClearOfflineDownloads,
+                                onClick = { confirmClearDownloads = true },
+                                enabled = offlineStorageSummary.completedTrackCount > 0,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("settings_clear_offline_downloads_button")
                             ) {
-                                Text("Clear Offline", style = MaterialTheme.typography.labelMedium)
+                                Text("Remove downloads", style = MaterialTheme.typography.labelMedium)
                             }
                             androidx.compose.material3.OutlinedButton(
                                 onClick = onClearTempAudioCache,
@@ -1008,7 +945,7 @@ fun SettingsCustomizationScreen(
                                     .weight(1f)
                                     .testTag("settings_clear_temp_cache_button")
                             ) {
-                                Text("Clear Cache", style = MaterialTheme.typography.labelMedium)
+                                Text("Clear cache", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -1020,9 +957,9 @@ fun SettingsCustomizationScreen(
         if (shownSection == null || shownSection == SettingsExpandableSection.APPEARANCE_THEME) item {
             val isExpanded = expandedMap[SettingsExpandableSection.APPEARANCE_THEME] == true
             val modeBadge = if (settings.unifiedMaterialYouColor) {
-                "Material You Unified"
+                "Phone colours"
             } else {
-                "Dynamic Song Theme"
+                "Cover colours"
             }
             ExpandableSettingsSectionCard(
                 section = SettingsExpandableSection.APPEARANCE_THEME,
@@ -1082,7 +1019,7 @@ fun SettingsCustomizationScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     Text(
-                        text = "Color Palette Mode (App, Player, Notification & Widget)",
+                        text = "Colours for the app, player, notification and widget",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1114,7 +1051,7 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Material You Expressive (1 Unified Phone Color)",
+                                    text = "Your phone's colours (Material You)",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
@@ -1163,7 +1100,7 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Dynamic Song Artwork Palette",
+                                    text = "Colours from the playing cover",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
@@ -1186,7 +1123,7 @@ fun SettingsCustomizationScreen(
 
                     // Player Background Animation Style Selector
                     Text(
-                        text = "Player Background Animation Style",
+                        text = "Player background",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1238,7 +1175,7 @@ fun SettingsCustomizationScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     Text(
-                        text = "Navigation Dock Style",
+                        text = "Navigation bar",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1301,7 +1238,7 @@ fun SettingsCustomizationScreen(
                     )
 
                     Text(
-                        text = "Theme Brightness Mode",
+                        text = "Light or dark",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1336,15 +1273,15 @@ fun SettingsCustomizationScreen(
                     }
 
                     SettingsToggleRow(
-                        title = "Material You Dynamic Color (Android 12+)",
-                        subtitle = "Extract system wallpaper Monet palette as base theme",
+                        title = "Use your phone's colours (Android 12+)",
+                        subtitle = "Base the colours on your wallpaper",
                         checked = settings.useMaterialYouDynamicColor,
                         onCheckedChange = onSetUseMaterialYou,
                         testTag = "toggle_material_you"
                     )
 
                     SettingsToggleRow(
-                        title = "Artwork Color Harmonization",
+                        title = "Blend cover colours with the theme",
                         subtitle = "Morph player & surface accents based on current song cover art",
                         checked = settings.harmonizePlayerWithArtwork,
                         onCheckedChange = onSetHarmonizeArtwork,
@@ -1352,7 +1289,7 @@ fun SettingsCustomizationScreen(
                     )
 
                     Text(
-                        text = "Curated Accent Palette (When Material You is Off)",
+                        text = "Accent colour (when phone colours are off)",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1379,7 +1316,7 @@ fun SettingsCustomizationScreen(
                     }
 
                     Text(
-                        text = "Corner Radius & Shape Scale",
+                        text = "Corner roundness",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1450,7 +1387,7 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Studio Speed & Pitch DSP (0.8x – 2.0x)",
+                                    text = "Speed & pitch",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
@@ -1471,7 +1408,7 @@ fun SettingsCustomizationScreen(
                     }
 
                     Text(
-                        text = "Live Studio Reverb DSP Preset",
+                        text = "Reverb",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1509,7 +1446,7 @@ fun SettingsCustomizationScreen(
                         ) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = "Smart Shuffle Personalization",
+                                    text = "Shuffle",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
@@ -1559,7 +1496,7 @@ fun SettingsCustomizationScreen(
                             }
 
                             Text(
-                                text = "Smart Shuffle Weighting Profile",
+                                text = "What Smart shuffle favours",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1590,7 +1527,7 @@ fun SettingsCustomizationScreen(
                                                 text = profile.label,
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = if (selected) {
-                                                    MaterialTheme.colorScheme.primary
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
                                                 } else {
                                                     MaterialTheme.colorScheme.onSurface
                                                 }
@@ -1683,16 +1620,16 @@ fun SettingsCustomizationScreen(
                     }
 
                     SettingsToggleRow(
-                        title = "Animated Squiggly Waveform Scrubber",
-                        subtitle = "Animate the progress wave while audio is actively playing",
+                        title = "Animated progress wave",
+                        subtitle = "The progress line waves while music plays",
                         checked = settings.animatedSquigglyWave,
                         onCheckedChange = onSetAnimatedSquiggly,
                         testTag = "toggle_squiggly"
                     )
 
                     SettingsToggleRow(
-                        title = "Tactile Haptic Feedback Patterns",
-                        subtitle = "Subtle haptics for viscous-glue controls, play/pause transitions, and squiggly waveform scrubbing",
+                        title = "Haptics",
+                        subtitle = "A light tap you feel on buttons, play and pause, and when you drag the progress line",
                         checked = settings.hapticWobbleButtons,
                         onCheckedChange = onSetHapticFeedback,
                         testTag = "toggle_haptics"
@@ -1707,8 +1644,8 @@ fun SettingsCustomizationScreen(
                     )
 
                     SettingsToggleRow(
-                        title = "OpenSubsonic Live Scrobbling",
-                        subtitle = "Report Now Playing & completed listens via /rest/scrobble.view",
+                        title = "Report plays to your server",
+                        subtitle = "Your server sees what you play, for its play counts and history",
                         checked = settings.autoScrobble,
                         onCheckedChange = onSetAutoScrobble,
                         testTag = "toggle_scrobble"
@@ -1825,7 +1762,7 @@ fun SettingsCustomizationScreen(
                     )
 
                     Text(
-                        text = "Home Widget Layout Mode",
+                        text = "Widget layout",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1856,7 +1793,7 @@ fun SettingsCustomizationScreen(
                     }
 
                     Text(
-                        text = "Home Widget Theme Appearance",
+                        text = "Widget look",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1887,7 +1824,7 @@ fun SettingsCustomizationScreen(
                     }
 
                     SettingsToggleRow(
-                        title = "Show Album Artwork on Home Widget",
+                        title = "Show the cover on the widget",
                         subtitle = "Display rounded album cover art in the home screen widget",
                         checked = settings.widgetShowArtwork,
                         onCheckedChange = onSetWidgetShowArtwork,
@@ -1941,7 +1878,8 @@ fun SettingsCustomizationScreen(
                 testTag = "settings_section_server"
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Surface(
+                    // The server in use shows once: in the list below when it's there.
+                    if (servers.none { it.id == activeServer.id }) Surface(
                         shape = cornerShape(22.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.fillMaxWidth()
@@ -2017,11 +1955,21 @@ fun SettingsCustomizationScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = LocalContentColor.current.copy(alpha = 0.78f)
                                     )
+                                    val diag = pingDiagnostic
+                                    if (isCurrent && diag != null) {
+                                        Text(
+                                            text = diag.statusMessage,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (diag.success) LocalContentColor.current else MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
-                                if (isCurrent) {
+                                if (isCurrent && isSyncing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                                } else if (isCurrent) {
                                     Icon(
                                         imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = "Active Node",
+                                        contentDescription = "In use",
                                         tint = LocalContentColor.current
                                     )
                                 }
@@ -2045,7 +1993,7 @@ fun SettingsCustomizationScreen(
                     OutlinedTextField(
                         value = serverName,
                         onValueChange = { serverName = it },
-                        label = { Text("Server Label (e.g. Home Navidrome)") },
+                        label = { Text("Server name (e.g. Home Navidrome)") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2055,7 +2003,7 @@ fun SettingsCustomizationScreen(
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("Server Base URL (https://...)") },
+                        label = { Text("Server address (https://...)") },
                         singleLine = true,
                         supportingText = if (serverUrl.trim().startsWith("http://", ignoreCase = true)) {
                             { Text("Plain HTTP isn't encrypted. Fine on your home network; use https:// over the internet.") }
@@ -2110,7 +2058,7 @@ fun SettingsCustomizationScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "MD5 Salt + Token Auth (t & s)",
+                                    text = "Secure sign-in (token)",
                                     style = MaterialTheme.typography.labelLarge
                                 )
                                 Text(
@@ -2168,7 +2116,10 @@ fun SettingsCustomizationScreen(
                 notify = settings.updateNotifications,
                 onSetNotify = onSetUpdateNotifications,
                 prereleases = settings.updatePrereleases,
-                onSetPrereleases = onSetUpdatePrereleases
+                onSetPrereleases = onSetUpdatePrereleases,
+                previous = previousVersion,
+                onGoBack = onGoBackVersion,
+                onAllVersions = onAllVersions
             )
             Spacer(modifier = Modifier.height(12.dp))
             AboutLicencesRow()
@@ -2265,16 +2216,8 @@ private fun ExpandableSettingsSectionCard(
                 .testTag("${testTag}_header"),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.size(44.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(modifier = Modifier.width(16.dp))
+            Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = section.title, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -3636,7 +3579,7 @@ private fun MoodMixesPanel(
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(mix.title, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "${mix.tracks.size} songs",
+                                "${countOf(mix.tracks.size, "song")}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -3713,6 +3656,7 @@ private fun EqResponseCurveCanvas(
 
         drawPath(
             path = path,
+            // unslopovich-ignore gradient-text: the EQ curve's stroke, not text
             brush = Brush.horizontalGradient(listOf(primaryColor, accentColor)),
             style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
         )
@@ -4119,7 +4063,7 @@ fun ServerOnboardingIntroModal(
                         OutlinedTextField(
                             value = serverName,
                             onValueChange = { serverName = it },
-                            label = { Text("Server Label (e.g. Home Navidrome)") },
+                            label = { Text("Server name (e.g. Home Navidrome)") },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -4129,7 +4073,7 @@ fun ServerOnboardingIntroModal(
                         OutlinedTextField(
                             value = serverUrl,
                             onValueChange = { serverUrl = it },
-                            label = { Text("Server Base URL (https://...)") },
+                            label = { Text("Server address (https://...)") },
                             singleLine = true,
                             supportingText = if (serverUrl.trim().startsWith("http://", ignoreCase = true)) {
                                 { Text("Plain HTTP isn't encrypted. Fine on your home network; use https:// over the internet.") }
@@ -4183,7 +4127,7 @@ fun ServerOnboardingIntroModal(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "MD5 Salt + Token Auth (t & s)",
+                                        text = "Secure sign-in (token)",
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                     Text(
@@ -4371,4 +4315,50 @@ internal fun PhoneCacheProgress(
     }
     line("Next songs", songsAhead.ready, songsAhead.total, songsAhead.active)
     line("Covers & artist photos", coversSaved.saved, coversSaved.total, coversSaved.active)
+}
+
+
+/** A setting with a few choices: its name and current value, with the choices in a menu under it. */
+@Composable
+private fun <T> SettingChoiceRow(
+    title: String,
+    choices: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(cornerShape(12.dp))
+                .clickable { open = true }
+                .padding(horizontal = 4.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(label(selected), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            choices.forEach { choice ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(label(choice)) },
+                    onClick = {
+                        open = false
+                        onSelect(choice)
+                    },
+                    trailingIcon = if (choice == selected) {
+                        { Icon(Icons.Filled.Check, contentDescription = "Selected") }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+    }
 }

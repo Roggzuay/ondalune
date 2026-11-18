@@ -435,7 +435,13 @@ fun <T> ExpressiveNavigationDock(
 ) {
     val floating = dockStyle != DockStyle.STATIC
     val pill = RoundedCornerShape(percent = 50)
+    // The bar keeps its height, so its labels grow with the user's text size only so far, and
+    // never into each other.
+    val density = LocalDensity.current
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalDensity provides Density(density.density, density.fontScale.coerceAtMost(1.15f))
+        ) {
         DockItems(
             items = items,
             selectedId = selectedId,
@@ -462,6 +468,7 @@ fun <T> ExpressiveNavigationDock(
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             }
         )
+        }
     }
 }
 
@@ -603,7 +610,8 @@ private fun <T> DockItems(
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         ),
                         color = if (selected || underLens) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }

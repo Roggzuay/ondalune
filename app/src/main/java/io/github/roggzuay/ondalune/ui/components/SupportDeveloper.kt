@@ -49,16 +49,8 @@ fun SupportDeveloperCard(modifier: Modifier = Modifier) {
             .testTag("support_developer_button")
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.LocalCafe, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(16.dp))
+            Icon(Icons.Filled.LocalCafe, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(20.dp))
             Column(Modifier.weight(1f)) {
                 Text("Support Ondalune", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(

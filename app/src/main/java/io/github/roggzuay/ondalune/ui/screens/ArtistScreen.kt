@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import android.content.Intent
 import android.os.Build
@@ -303,7 +304,7 @@ private fun ArtistPortrait(
                 text = listOfNotNull(
                     artist.genre.takeIf { it.isNotBlank() },
                     "${artist.albumCount} ${if (artist.albumCount == 1) "album" else "albums"}",
-                    "${artist.trackCount} songs"
+                    "${countOf(artist.trackCount, "song")}"
                 ).joinToString(" • "),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -430,7 +431,7 @@ private fun LazyListScope.artistSections(
                 }
                 if (popular.size > PopularPreview) {
                     TextButton(onClick = { showAll = !showAll }) {
-                        Text(if (showAll) "Show less" else "Show all ${popular.size} songs")
+                        Text(if (showAll) "Show less" else "Show all ${countOf(popular.size, "song")}")
                     }
                 }
             }

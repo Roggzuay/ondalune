@@ -151,7 +151,7 @@ class OpenSubsonicClient {
             if (server.isDemoServer) {
                 return@withContext PingDiagnosticResult(
                     success = true,
-                    statusMessage = "Connected to Ondalune OpenSubsonic Sandbox (Local DSP Engine)",
+                    statusMessage = "Connected to the sandbox server",
                     serverType = "OpenSubsonic Reference 1.16.1",
                     apiVersion = "1.16.1",
                     openSubsonicExtensions = listOf(

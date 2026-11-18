@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.data.model.countOf
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -132,7 +133,7 @@ fun MusicFoldersCard(state: MusicFolders, modifier: Modifier = Modifier) {
                     Column(Modifier.weight(1f)) {
                         Text(
                             if (scan.read > 0) "Reading ${scan.folderName}: ${scan.read} of ${scan.found} new or changed songs"
-                            else "Looking in ${scan.folderName}: ${scan.found} songs found",
+                            else "Looking in ${scan.folderName}: ${countOf(scan.found, "song")} found",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Spacer(Modifier.size(4.dp))
@@ -192,7 +193,7 @@ private fun FolderRow(folder: LocalFolder, scanning: Boolean, onAllowAgain: () -
                     !folder.accessible -> "Can't be opened. Its songs stay until it can"
                     scanning -> "Scanning…"
                     folder.lastScanMs == 0L -> "Not scanned yet"
-                    else -> "${folder.trackCount} songs"
+                    else -> "${countOf(folder.trackCount, "song")}"
                 } + " • ${folder.location}",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (folder.accessible) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,

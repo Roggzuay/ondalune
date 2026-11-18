@@ -15,7 +15,6 @@ val ExpressiveOnPrimaryDefault = Color(0xFF3B0904)
 val ExpressivePrimaryContainerDefault = Color(0xFF6B1B12)
 val ExpressiveOnPrimaryContainerDefault = Color(0xFFFFDAD5)
 
-val ExpressiveSecondaryDefault = Color(0xFFD0BCFF)
 val ExpressiveOnSecondaryDefault = Color(0xFF381E72)
 val ExpressiveSecondaryContainerDefault = Color(0xFF4F378B)
 val ExpressiveOnSecondaryContainerDefault = Color(0xFFEADDFF)
