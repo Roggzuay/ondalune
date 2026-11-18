@@ -1,0 +1,109 @@
+<template>
+  <style>
+    @font-face { font-family: "Unbounded"; src: url("assets/fonts/unbounded.ttf"); font-weight: 200 900; }
+    @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree.ttf"); font-weight: 300 900; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #07070a; }
+    #ethos-wall { position: absolute; left: -280px; top: -250px; width: 1640px; height: 2624px; }
+    .ethos-tile { position: absolute; width: 300px; height: 300px; border-radius: 34px; object-fit: cover; }
+    #ethos-dim { position: absolute; inset: 0; background: rgba(6, 6, 9, 0.76); }
+    #ethos-pool {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 75% 28% at 50% 50%, rgba(6, 6, 9, 0.55) 0%, transparent 100%);
+    }
+    .ethos-line {
+      position: absolute; left: 120px; right: auto; width: 768px; top: 654px; text-align: center;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 124px; letter-spacing: -0.02em;
+      line-height: 1.1; color: #f4f2ee;
+    }
+    .ethos-line span, #ethos-quiet span { display: inline-block; }
+    #ethos-l4 { font-size: 92px; top: 605px; line-height: 1.18; }
+    .ethos-line { font-size: 104px; } #ethos-l4 { font-size: 92px; }
+  </style>
+  <div id="root" data-composition-id="ethos" data-width="1080" data-height="1920">
+    <div id="ethos-wall">
+      <img class="ethos-tile" src="assets/covers/AIOT_YesAnd.jpg" style="left: 0px; top: 0px" />
+      <img class="ethos-tile" src="assets/covers/WordsAndMusicAboutGenerative.jpg" style="left: 328px; top: 0px" />
+      <img class="ethos-tile" src="assets/covers/dtrash210.jpg" style="left: 656px; top: 0px" />
+      <img class="ethos-tile" src="assets/covers/yuxta.jpg" style="left: 984px; top: 0px" />
+      <img class="ethos-tile" src="assets/covers/SRS06507.jpg" style="left: 1312px; top: 0px" />
+      <img class="ethos-tile" src="assets/covers/derek-nigell-distant-ocean.jpg" style="left: 0px; top: 328px" />
+      <img class="ethos-tile" src="assets/covers/yarn022.jpg" style="left: 328px; top: 328px" />
+      <img class="ethos-tile" src="assets/covers/QuBIT033-Flavour-AldousHuxley.jpg" style="left: 656px; top: 328px" />
+      <img class="ethos-tile" src="assets/covers/constants_202003.jpg" style="left: 984px; top: 328px" />
+      <img class="ethos-tile" src="assets/covers/tranzcd009Va-TranzmitterResearchvolume3.jpg" style="left: 1312px; top: 328px" />
+      <img class="ethos-tile" src="assets/covers/ParticularStreamsRemixes3.jpg" style="left: 0px; top: 656px" />
+      <img class="ethos-tile" src="assets/covers/chase052.jpg" style="left: 328px; top: 656px" />
+      <img class="ethos-tile" src="assets/covers/secretcentre.jpg" style="left: 656px; top: 656px" />
+      <img class="ethos-tile" src="assets/covers/MysticalRecursionRemixes.jpg" style="left: 984px; top: 656px" />
+      <img class="ethos-tile" src="assets/covers/bof066.jpg" style="left: 1312px; top: 656px" />
+      <img class="ethos-tile" src="assets/covers/okkulta-deepspacetrip.jpg" style="left: 0px; top: 984px" />
+      <img class="ethos-tile" src="assets/covers/GroveOfWhispersBetween.jpg" style="left: 328px; top: 984px" />
+      <img class="ethos-tile" src="assets/covers/aquatone-synthetic-clouds.jpg" style="left: 656px; top: 984px" />
+      <img class="ethos-tile" src="assets/covers/nchr010.jpg" style="left: 984px; top: 984px" />
+      <img class="ethos-tile" src="assets/covers/FNet045.jpg" style="left: 1312px; top: 984px" />
+      <img class="ethos-tile" src="assets/covers/aquatone-mental-images.jpg" style="left: 0px; top: 1312px" />
+      <img class="ethos-tile" src="assets/covers/gt427PureCamomileJam-PureCamomileJam.jpg" style="left: 328px; top: 1312px" />
+      <img class="ethos-tile" src="assets/covers/AIOT_YesAnd.jpg" style="left: 656px; top: 1312px" />
+      <img class="ethos-tile" src="assets/covers/WordsAndMusicAboutGenerative.jpg" style="left: 984px; top: 1312px" />
+      <img class="ethos-tile" src="assets/covers/dtrash210.jpg" style="left: 1312px; top: 1312px" />
+      <img class="ethos-tile" src="assets/covers/yuxta.jpg" style="left: 0px; top: 1640px" />
+      <img class="ethos-tile" src="assets/covers/SRS06507.jpg" style="left: 328px; top: 1640px" />
+      <img class="ethos-tile" src="assets/covers/derek-nigell-distant-ocean.jpg" style="left: 656px; top: 1640px" />
+      <img class="ethos-tile" src="assets/covers/yarn022.jpg" style="left: 984px; top: 1640px" />
+      <img class="ethos-tile" src="assets/covers/QuBIT033-Flavour-AldousHuxley.jpg" style="left: 1312px; top: 1640px" />
+      <img class="ethos-tile" src="assets/covers/constants_202003.jpg" style="left: 0px; top: 1968px" />
+      <img class="ethos-tile" src="assets/covers/tranzcd009Va-TranzmitterResearchvolume3.jpg" style="left: 328px; top: 1968px" />
+      <img class="ethos-tile" src="assets/covers/ParticularStreamsRemixes3.jpg" style="left: 656px; top: 1968px" />
+      <img class="ethos-tile" src="assets/covers/chase052.jpg" style="left: 984px; top: 1968px" />
+      <img class="ethos-tile" src="assets/covers/secretcentre.jpg" style="left: 1312px; top: 1968px" />
+      <img class="ethos-tile" src="assets/covers/AIOT_YesAnd.jpg" style="left: 0px; top: 2296px" />
+      <img class="ethos-tile" src="assets/covers/WordsAndMusicAboutGenerative.jpg" style="left: 328px; top: 2296px" />
+      <img class="ethos-tile" src="assets/covers/dtrash210.jpg" style="left: 656px; top: 2296px" />
+      <img class="ethos-tile" src="assets/covers/yuxta.jpg" style="left: 984px; top: 2296px" />
+      <img class="ethos-tile" src="assets/covers/SRS06507.jpg" style="left: 1312px; top: 2296px" />
+    </div>
+    <div id="ethos-dim"></div>
+    <div id="ethos-pool"></div>
+    <div id="ethos-l1" class="ethos-line"><span>Your</span><br /><span style="color: #b4b9ff">library.</span></div>
+    <div id="ethos-l2" class="ethos-line"><span>Your</span><br /><span style="color: #ffa696">server.</span></div>
+    <div id="ethos-l3" class="ethos-line"><span>Your</span><br /><span style="color: #b1e8a3">experience.</span></div>
+    <div id="ethos-l4" class="ethos-line"><span class="ethos-p0">Open</span> <span class="ethos-p0">source.</span><br /><span class="ethos-p1">No</span> <span class="ethos-p1">ads.</span><br /><span class="ethos-p2">No</span> <span class="ethos-p2">trackers.</span></div>
+  </div>
+  <script>
+    (function () {
+      const B = 60 / 83.35;
+      const BAR = 4 * B;
+      const tl = gsap.timeline({ paused: true });
+      const wordsIn = (sel, at, gap = 0.1) =>
+        tl.fromTo(`${sel} span`, { opacity: 0, filter: "blur(8px)" },
+          { opacity: 1, filter: "blur(0px)", duration: 0.26, stagger: gap, ease: "power2.out" }, at);
+      const wordsOut = (sel, at) =>
+        tl.fromTo(`${sel} span`, { opacity: 1, filter: "blur(0px)" },
+          { opacity: 0, filter: "blur(8px)", duration: 0.2, stagger: 0.04, ease: "power2.in", immediateRender: false }, at);
+
+      // The wall rises out of the dark the phone sank into, then the camera steps across it on each bar.
+      tl.fromTo("#ethos-wall", { opacity: 0, scale: 1.18 }, { opacity: 1, scale: 1.06, duration: 1.4, ease: "power2.out" }, 0);
+      [0, 1, 2].forEach((k) =>
+        tl.fromTo("#ethos-wall", { y: -110 * k + 110 }, { y: -110 * (k + 1) + 110, duration: 1.4, ease: "power2.inOut", immediateRender: k === 0 }, k * BAR));
+      tl.fromTo("#ethos-dim", { opacity: 1 }, { opacity: 0.86, duration: 1.2, ease: "power2.inOut" }, 0.4);
+
+      // One line every two beats.
+      ["#ethos-l1", "#ethos-l2", "#ethos-l3"].forEach((sel, k) => {
+        wordsIn(sel, k * 2 * B + 0.15, 0.12);
+        wordsOut(sel, (k + 1) * 2 * B - 0.3);
+      });
+
+      // The promise, one phrase a beat, then held.
+      const P = 6 * B;
+      [0, 1, 2].forEach((k) =>
+        tl.fromTo(`.ethos-p${k}`, { opacity: 0, filter: "blur(8px)" },
+          { opacity: 1, filter: "blur(0px)", duration: 0.24, stagger: 0.08, ease: "power2.out" }, P + 0.1 + k * B));
+
+      // Out: the wall goes dark for the finale.
+      wordsOut("#ethos-l4", 8.45);
+      tl.fromTo("#ethos-dim", { opacity: 0.86 }, { opacity: 1, duration: 0.7, ease: "power2.in", immediateRender: false }, 8.5);
+
+      window.__timelines["ethos"] = tl;
+    })();
+  </script>
+</template>

@@ -1,0 +1,118 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"repo","type":"string","label":"Repository","default":"github.com/Roggzuay/ondalune"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>Ondalune — launch film (9:16)</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Unbounded";
+        src: url("assets/fonts/unbounded.ttf");
+        font-weight: 200 900;
+      }
+      @font-face {
+        font-family: "Figtree";
+        src: url("assets/fonts/figtree.ttf");
+        font-weight: 300 900;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #07070a;
+      }
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+      }
+      #ground {
+        position: absolute;
+        inset: 0;
+        background: #07070a;
+      }
+      #vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 60;
+        pointer-events: none;
+        background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.3) 100%);
+      }
+      #grain {
+        position: absolute;
+        inset: 0;
+        z-index: 61;
+        pointer-events: none;
+        background: url("assets/brand/grain.png");
+        mix-blend-mode: overlay;
+        opacity: 0.05;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="60"
+      data-width="1080"
+      data-height="1920"
+    >
+      <div id="ground"></div>
+
+      <div id="intro" data-composition-id="intro" data-composition-src="compositions/intro.html"
+        data-start="0" data-duration="6.8" data-track-index="1" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 1"></div>
+      <div id="library" data-composition-id="library" data-composition-src="compositions/library.html"
+        data-start="6.2" data-duration="9.24" data-track-index="2" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 2"></div>
+      <div id="player" data-composition-id="player" data-composition-src="compositions/player.html"
+        data-start="14.84" data-duration="12.12" data-track-index="1" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 3"></div>
+      <div id="custom" data-composition-id="custom" data-composition-src="compositions/custom.html"
+        data-start="26.36" data-duration="14.99" data-track-index="2" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 4"></div>
+      <div id="ethos" data-composition-id="ethos" data-composition-src="compositions/ethos.html"
+        data-start="40.75" data-duration="9.24" data-track-index="1" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 5"></div>
+      <div id="finale" data-composition-id="finale" data-composition-src="compositions/finale.html"
+        data-start="49.39" data-duration="10.61" data-track-index="2" data-track-kind="graphics"
+        data-width="1080" data-height="1920" style="z-index: 6"></div>
+
+      <div id="vignette"></div>
+      <div id="grain"></div>
+
+      <audio id="music" class="clip" src="assets/audio/music.wav" data-start="0" data-duration="60"
+        data-track-index="10" data-volume="0.8"></audio>
+      <audio id="sfx-swell" class="clip" src="assets/audio/swell.wav" data-start="0" data-duration="3"
+        data-track-index="11" data-volume="0.7"></audio>
+      <audio id="sfx-mark" class="clip" src="assets/audio/shimmer.wav" data-start="2.45" data-duration="3.86"
+        data-track-index="12" data-volume="0.45"></audio>
+      <audio id="sfx-through-1" class="clip" src="assets/audio/whoosh.wav" data-start="5.75" data-duration="0.9"
+        data-track-index="11" data-volume="0.5"></audio>
+      <audio id="sfx-through-2" class="clip" src="assets/audio/whoosh.wav" data-start="14.5" data-duration="0.9"
+        data-track-index="11" data-volume="0.5"></audio>
+      <audio id="sfx-pan" class="clip" src="assets/audio/whoosh.wav" data-start="26.0" data-duration="0.9"
+        data-track-index="11" data-volume="0.45"></audio>
+      <audio id="sfx-end" class="clip" src="assets/audio/shimmer.wav" data-start="52.6" data-duration="3.86"
+        data-track-index="12" data-volume="0.45"></audio>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

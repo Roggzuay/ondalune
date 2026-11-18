@@ -1,0 +1,117 @@
+<template>
+  <style>
+    @font-face { font-family: "Unbounded"; src: url("assets/fonts/unbounded.ttf"); font-weight: 200 900; }
+    @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree.ttf"); font-weight: 300 900; }
+    #root { position: absolute; inset: 0; overflow: hidden; }
+    #library-bg { position: absolute; inset: 0; background: #0a0809; }
+    #library-glow {
+      position: absolute; left: -210px; top: 560px; width: 1500px; height: 1500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(196, 82, 64, 0.38) 0%, rgba(120, 40, 46, 0.16) 36%, transparent 64%);
+    }
+    .library-layer { position: absolute; inset: 0; }
+    .library-cover { position: absolute; border-radius: 26px; object-fit: cover; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); }
+    #library-far .library-cover { width: 150px; height: 150px; opacity: 0.26; border-radius: 20px; }
+    #library-mid .library-cover { width: 220px; height: 220px; opacity: 0.55; }
+    .phone {
+      position: absolute; left: 305px; top: 780px; width: 470px; height: 1015px; border-radius: 64px;
+      background: #050505; box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6), inset 0 0 0 1.5px rgba(255, 255, 255, 0.1);
+    }
+    .screen { position: absolute; inset: 12px; border-radius: 52px; overflow: hidden; background: #000; }
+    .screen img { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #library-title {
+      position: absolute; left: 120px; top: 300px; width: 760px;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 104px; letter-spacing: -0.02em;
+      line-height: 1.15; color: #f4f2ee;
+    }
+    #library-your { display: inline-block; }
+    #library-slot { display: block; height: 1.2em; overflow: hidden; color: #ffb4a6; }
+    #library-words { display: block; }
+    #library-words span { display: block; height: 1.2em; }
+    #library-quiet {
+      position: absolute; left: 120px; top: 580px; width: 720px;
+      font-family: "Figtree", sans-serif; font-weight: 500; font-size: 38px; line-height: 1.3;
+      color: rgba(244, 242, 238, 0.66);
+    }
+    #library-quiet span { display: inline-block; }
+  </style>
+  <div id="root" data-composition-id="library" data-width="1080" data-height="1920">
+    <div id="library-bg"></div>
+    <div id="library-glow"></div>
+    <div id="library-far" class="library-layer">
+      <img class="library-cover" src="assets/covers/okkulta-deepspacetrip.jpg" style="left: 70px; top: 860px" />
+      <img class="library-cover" src="assets/covers/GroveOfWhispersBetween.jpg" style="left: 870px; top: 980px" />
+      <img class="library-cover" src="assets/covers/nchr010.jpg" style="left: 40px; top: 1500px" />
+      <img class="library-cover" src="assets/covers/yuxta.jpg" style="left: 880px; top: 1620px" />
+      <img class="library-cover" src="assets/covers/constants_202003.jpg" style="left: 110px; top: 1760px" />
+      <img class="library-cover" src="assets/covers/secretcentre.jpg" style="left: 880px; top: 80px" />
+    </div>
+    <div id="library-mid" class="library-layer">
+      <img class="library-cover" src="assets/covers/aquatone-mental-images.jpg" style="left: 40px; top: 1080px" />
+      <img class="library-cover" src="assets/covers/dtrash210.jpg" style="left: 820px; top: 1260px" />
+      <img class="library-cover" src="assets/covers/SRS06507.jpg" style="left: 30px; top: 1620px" />
+      <img class="library-cover" src="assets/covers/AIOT_YesAnd.jpg" style="left: 830px; top: 760px" />
+    </div>
+    <div id="library-phone" class="phone">
+      <div class="screen">
+        <img id="library-s0" src="assets/screens/dark_home.png" />
+        <img id="library-s1" src="assets/screens/dark_library.png" />
+        <img id="library-s2" src="assets/screens/dark_artists.png" />
+        <img id="library-s3" src="assets/screens/dark_favourites.png" />
+        <img id="library-s4" src="assets/screens/dark_album.png" />
+      </div>
+    </div>
+    <div id="library-title">
+      <span id="library-your">Your</span>
+      <span id="library-slot"><span id="library-words"><span>Home</span><span>Library</span><span>Artists</span><span>Favourites</span><span>Albums</span></span></span>
+    </div>
+    <div id="library-quiet"><span>Everything</span> <span>on</span> <span>your</span> <span>server,</span> <span>laid</span> <span>out</span> <span>to</span> <span>explore.</span></div>
+  </div>
+  <script>
+    (function () {
+      const spring = (z, w = 11) => (t) => {
+        if (t >= 1) return 1;
+        const wd = w * Math.sqrt(1 - z * z);
+        return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+      };
+      const B = 60 / 83.35;
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo("#library-bg, #library-glow", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0);
+      // Depth: the far covers drift less than the near ones while the camera glides.
+      tl.fromTo("#library-far", { x: 40, opacity: 0 }, { x: -50, opacity: 1, duration: 9.24, ease: "power1.inOut" }, 0);
+      tl.fromTo("#library-mid", { x: 120, opacity: 0 }, { x: -150, opacity: 1, duration: 9.24, ease: "power1.inOut" }, 0);
+      tl.fromTo("#library-glow", { x: 0 }, { x: -80, duration: 9.24, ease: "power1.inOut" }, 0);
+
+      // The phone emerges out of the moon's light, then glides right to make room for the line.
+      tl.fromTo("#library-phone", { scale: 1.32, opacity: 0, filter: "blur(14px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 1.1, ease: "expo.out" }, 0);
+      
+      // Title: "Your" and the rolling word arrive with the move.
+      tl.fromTo("#library-your", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.2, ease: "power2.out" }, 1.55);
+      tl.fromTo("#library-slot", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.2, ease: "power2.out" }, 1.65);
+      tl.fromTo("#library-quiet span", { opacity: 0, filter: "blur(6px)" },
+        { opacity: 1, filter: "blur(0px)", duration: 0.18, stagger: 0.07, ease: "power2.out" }, 2.1);
+
+      // Screens change on beats: the new page slides in, the old one falls back.
+      const at = [4, 6, 8, 10].map((b) => b * B);
+      at.forEach((t, i) => {
+        tl.fromTo(`#library-s${i + 1}`, { xPercent: 100 }, { xPercent: 0, duration: 0.55, ease: "power3.inOut" }, t);
+        tl.fromTo(`#library-s${i}`, { xPercent: 0, opacity: 1 }, { xPercent: -30, opacity: 0.35, duration: 0.55, ease: "power3.inOut", immediateRender: false }, t);
+        tl.fromTo("#library-words", { yPercent: -20 * i }, { yPercent: -20 * (i + 1), duration: 0.5, ease: "power3.inOut", immediateRender: false }, t + 0.03);
+      });
+
+      // A slow push while it plays.
+      tl.fromTo("#library-phone", { y: 0 }, { y: -12, duration: 7, ease: "power1.inOut" }, 1.4);
+
+      // Out: through the phone, toward the player.
+      tl.fromTo(["#library-quiet span", "#library-slot", "#library-your"], { opacity: 1, filter: "blur(0px)" },
+        { opacity: 0, filter: "blur(8px)", duration: 0.2, stagger: 0.04, ease: "power2.in", immediateRender: false }, 8.25);
+      tl.fromTo("#library-phone", { scale: 1, filter: "blur(0px)" },
+        { scale: 1.7, filter: "blur(16px)", duration: 0.75, ease: "power3.in", immediateRender: false }, 8.49);
+      tl.fromTo("#library-phone", { opacity: 1 }, { opacity: 0, duration: 0.4, ease: "power2.in", immediateRender: false }, 8.84);
+      tl.fromTo(".library-layer", { scale: 1 }, { scale: 1.35, duration: 0.75, ease: "power3.in", immediateRender: false }, 8.49);
+
+      window.__timelines["library"] = tl;
+    })();
+  </script>
+</template>

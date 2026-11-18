@@ -1,0 +1,147 @@
+<template>
+  <style>
+    @font-face { font-family: "Unbounded"; src: url("assets/fonts/unbounded.ttf"); font-weight: 200 900; }
+    @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree.ttf"); font-weight: 300 900; }
+    #root { position: absolute; inset: 0; overflow: hidden; }
+    #custom-world { position: absolute; inset: 0; }
+    #custom-bg { position: absolute; inset: 0; background: #0b0a0e; }
+    #custom-glow {
+      position: absolute; left: -210px; top: 560px; width: 1500px; height: 1500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(150, 96, 70, 0.32) 0%, rgba(90, 50, 40, 0.12) 38%, transparent 64%);
+    }
+    .custom-flood { position: absolute; inset: 0; }
+    #custom-light { background: radial-gradient(ellipse 90% 70% at 50% 62%, #fbf8fc 0%, #ece6ef 70%, #e2dbe6 100%); }
+    #custom-dark { background: #0b0a0e; }
+    .phone {
+      position: absolute; left: 305px; top: 780px; width: 470px; height: 1015px; border-radius: 64px;
+      background: #050505; box-shadow: 0 40px 120px rgba(0, 0, 0, 0.45), inset 0 0 0 1.5px rgba(255, 255, 255, 0.1);
+    }
+    .screen { position: absolute; inset: 12px; border-radius: 52px; overflow: hidden; background: #000; }
+    .screen img { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .custom-title {
+      position: absolute; left: 120px; top: 300px; width: 760px;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 84px; letter-spacing: -0.02em;
+      line-height: 1.12; color: #f4f2ee;
+    }
+    .custom-quiet {
+      position: absolute; left: 120px; top: 560px; width: 720px;
+      font-family: "Figtree", sans-serif; font-weight: 500; font-size: 38px; line-height: 1.3;
+      color: rgba(244, 242, 238, 0.7);
+    }
+    .custom-title span, .custom-quiet span, #custom-caption span { display: inline-block; }
+    .on-light { color: #1b1720; }
+    .custom-quiet.on-light { color: rgba(27, 23, 32, 0.68); }
+    #custom-t1 { font-size: 110px; }
+    #custom-caption {
+      position: absolute; left: 120px; right: auto; width: 760px; text-align: left; top: 320px; text-align: center;
+      font-family: "Figtree", sans-serif; font-weight: 600; font-size: 38px; color: #1b1720;
+    }
+    #custom-caption { font-size: 52px; line-height: 1.25; text-align: left; }
+  </style>
+  <div id="root" data-composition-id="custom" data-width="1080" data-height="1920">
+    <div id="custom-world">
+      <div id="custom-bg"></div>
+      <div id="custom-glow"></div>
+      <div id="custom-light" class="custom-flood"></div>
+      <div id="custom-dark" class="custom-flood"></div>
+
+      <div id="custom-left" class="phone"><div class="screen"><img src="assets/screens/bloom_home.png" /></div></div>
+      <div id="custom-right" class="phone"><div class="screen"><img src="assets/screens/light_appearance.png" /></div></div>
+      <div id="custom-main" class="phone">
+        <div class="screen">
+          <img src="assets/screens/dark_home.png" />
+          <img id="custom-main-light" src="assets/screens/light_home.png" />
+        </div>
+      </div>
+      <div id="custom-src" class="phone">
+        <div class="screen">
+          <img src="assets/screens/light_sources.png" />
+          <img id="custom-src-dark" src="assets/screens/dark_appearance_3.png" />
+        </div>
+      </div>
+
+      <div id="custom-t1" class="custom-title"><span>Make</span> <span>it</span> <span>yours.</span></div>
+      <div id="custom-q1" class="custom-quiet on-light" style="top: 640px"><span>Light,</span> <span>dark</span> <span>or</span> <span>pure-black</span> <span>AMOLED.</span></div>
+      <div id="custom-caption"><span>Two</span> <span>styles.</span> <span>Nine</span> <span>fonts.</span><br /><span>Your</span> <span>colours.</span></div>
+      <div id="custom-t2" class="custom-title on-light" style="top: 300px; font-size: 66px"><span>Navidrome,</span> <span>Jellyfin,</span> <span>OpenSubsonic</span> <span>and</span> <span>this</span> <span>phone.</span></div>
+      <div id="custom-q2" class="custom-quiet on-light" style="top: 640px"><span>Offline</span> <span>downloads,</span> <span>background</span> <span>scans,</span> <span>smart</span> <span>shuffle.</span></div>
+      <div id="custom-t3" class="custom-title"><span>Arrange</span> <span>Home</span> <span>your</span> <span>way.</span></div>
+      <div id="custom-q3" class="custom-quiet"><span>Reorder</span> <span>sections,</span> <span>hide</span> <span>the</span> <span>rest.</span></div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const spring = (z, w = 11) => (t) => {
+        if (t >= 1) return 1;
+        const wd = w * Math.sqrt(1 - z * z);
+        return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+      };
+      const B = 60 / 83.35;
+      const BAR = 4 * B;
+      const tl = gsap.timeline({ paused: true });
+      const wordsIn = (sel, at, gap = 0.09) =>
+        tl.fromTo(`${sel} span`, { opacity: 0, filter: "blur(7px)" },
+          { opacity: 1, filter: "blur(0px)", duration: 0.22, stagger: gap, ease: "power2.out" }, at);
+      const wordsOut = (sel, at) =>
+        tl.fromTo(`${sel} span`, { opacity: 1, filter: "blur(0px)" },
+          { opacity: 0, filter: "blur(8px)", duration: 0.18, stagger: 0.03, ease: "power2.in", immediateRender: false }, at);
+      const PC = "540px 1287px"; // the main phone's centre, where each colour change starts
+
+      // Hidden until their moment.
+      tl.fromTo([".custom-flood"], { clipPath: `circle(0px at ${PC})` }, { clipPath: `circle(0px at ${PC})`, duration: 0.01 }, 0);
+      tl.fromTo("#custom-left, #custom-right", { x: 0, scale: 0.55, opacity: 0 }, { x: 0, scale: 0.55, opacity: 0, duration: 0.01 }, 0);
+      tl.fromTo("#custom-src", { x: 1300 }, { x: 1300, duration: 0.01 }, 0);
+      tl.fromTo("#custom-main", { x: 0 }, { x: 0, duration: 0.01 }, 0);
+
+      // In: a pan from the right, matching the player's exit.
+      tl.fromTo("#custom-world", { x: 1080 }, { x: 0, duration: 0.75, ease: "power3.out" }, 0);
+      wordsIn("#custom-t1", 0.5);
+
+      // 1. Dark to light: the colour floods out of the phone, screen and room together.
+      const F = 2 * B;
+      tl.fromTo("#custom-light", { clipPath: `circle(0px at ${PC})` },
+        { clipPath: `circle(2300px at ${PC})`, duration: 1.0, ease: "power2.inOut", immediateRender: false }, F);
+      tl.fromTo("#custom-main-light", { clipPath: "circle(0% at 50% 50%)" },
+        { clipPath: "circle(120% at 50% 50%)", duration: 0.7, ease: "power2.inOut" }, F);
+      tl.fromTo("#custom-t1", { color: "#f4f2ee" }, { color: "#1b1720", duration: 0.6, ease: "power2.inOut" }, F + 0.25);
+      wordsIn("#custom-q1", F + 0.75, 0.07);
+
+      // The styles fan out from behind it.
+      const T = 7 * B;
+      wordsOut("#custom-q1", T - 0.3);
+      wordsOut("#custom-t1", T - 0.18);
+      tl.fromTo("#custom-main", { x: 0, scale: 1 }, { x: 0, scale: 0.62, duration: 0.9, ease: spring(0.82), immediateRender: false }, T);
+      tl.fromTo("#custom-left", { x: 0, scale: 0.55, opacity: 0 }, { x: -320, scale: 0.62, opacity: 1, duration: 1.0, ease: spring(0.8), immediateRender: false }, T + 0.15);
+      tl.fromTo("#custom-right", { x: 0, scale: 0.55, opacity: 0 }, { x: 320, scale: 0.62, opacity: 1, duration: 1.0, ease: spring(0.8), immediateRender: false }, T + 0.27);
+      wordsIn("#custom-caption", T + 0.7, 0.08);
+
+      // 2. Where the music comes from.
+      const M = 11 * B;
+      wordsOut("#custom-caption", M - 0.3);
+      [["#custom-left", 0], ["#custom-main", 0.06], ["#custom-right", 0.12]].forEach(([s, d]) =>
+        tl.fromTo(s, { xPercent: 0 }, { xPercent: -480, duration: 0.7, ease: "power3.in", immediateRender: false }, M - 0.35 + d));
+      tl.fromTo("#custom-src", { x: 1300 }, { x: 0, duration: 1.1, ease: spring(0.82), immediateRender: false }, M + 0.1);
+      wordsIn("#custom-t2", M + 0.35);
+      wordsIn("#custom-q2", M + 1.0, 0.07);
+
+      // 3. Back to dark, into the Home layout editor.
+      const D = 16 * B;
+      wordsOut("#custom-q2", D - 0.3);
+      wordsOut("#custom-t2", D - 0.18);
+      tl.fromTo("#custom-dark", { clipPath: `circle(0px at ${PC})` },
+        { clipPath: `circle(2300px at ${PC})`, duration: 1.0, ease: "power2.inOut", immediateRender: false }, D);
+      tl.fromTo("#custom-src-dark", { clipPath: "circle(0% at 50% 50%)" },
+        { clipPath: "circle(120% at 50% 50%)", duration: 0.7, ease: "power2.inOut" }, D);
+      wordsIn("#custom-t3", D + 0.45);
+      wordsIn("#custom-q3", D + 1.0, 0.06);
+
+      // Out: the phone sinks into depth.
+      wordsOut("#custom-q3", 14.15);
+      wordsOut("#custom-t3", 14.25);
+      tl.fromTo("#custom-src", { scale: 1, opacity: 1, filter: "blur(0px)" },
+        { scale: 0.72, opacity: 0, filter: "blur(10px)", duration: 0.7, ease: "power2.in", immediateRender: false }, 14.3);
+
+      window.__timelines["custom"] = tl;
+    })();
+  </script>
+</template>

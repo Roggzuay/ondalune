@@ -1,0 +1,132 @@
+<template>
+  <style>
+    @font-face { font-family: "Unbounded"; src: url("assets/fonts/unbounded.ttf"); font-weight: 200 900; }
+    @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree.ttf"); font-weight: 300 900; }
+    #root { position: absolute; inset: 0; overflow: hidden; }
+    #player-world { position: absolute; inset: 0; }
+    #player-art { position: absolute; left: -100px; top: -520px; width: 2120px; height: 2120px; }
+    #player-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #player-shade {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, rgba(5, 5, 8, 0.82) 0%, rgba(5, 5, 8, 0.55) 45%, rgba(5, 5, 8, 0.25) 100%);
+    }
+    .phone {
+      position: absolute; left: 749px; top: 84px; width: 422px; height: 911px; border-radius: 58px;
+      background: #050505; box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6), inset 0 0 0 1.5px rgba(255, 255, 255, 0.1);
+    }
+    .screen { position: absolute; inset: 11px; border-radius: 47px; overflow: hidden; background: #000; }
+    .screen img { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .player-title {
+      position: absolute; left: 150px; top: 250px; width: 760px;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 80px; letter-spacing: -0.02em;
+      line-height: 1.12; color: #f4f2ee;
+    }
+    .player-quiet {
+      position: absolute; left: 150px; top: 610px; width: 640px;
+      font-family: "Figtree", sans-serif; font-weight: 500; font-size: 38px; line-height: 1.3;
+      color: rgba(244, 242, 238, 0.72);
+    }
+    .player-title span, .player-quiet span { display: inline-block; }
+    .player-title em { font-style: normal; }
+  </style>
+  <div id="root" data-composition-id="player" data-width="1920" data-height="1080">
+    <div id="player-world">
+      <div id="player-art">
+        <img id="player-a0" src="assets/covers-blur/aquatone-mental-images.jpg" />
+        <img id="player-a1" src="assets/covers-blur/ParticularStreamsRemixes3.jpg" />
+        <img id="player-a2" src="assets/covers-blur/dtrash210.jpg" />
+        <img id="player-a3" src="assets/covers-blur/SRS06507.jpg" />
+        <img id="player-a4" src="assets/covers-blur/tranzcd009Va-TranzmitterResearchvolume3.jpg" />
+      </div>
+      <div id="player-shade"></div>
+
+      <div id="player-phone2" class="phone">
+        <div class="screen"><img src="assets/screens/dark_eq.png" /></div>
+      </div>
+      <div id="player-phone" class="phone">
+        <div class="screen">
+          <img id="player-s0" src="assets/screens/dark_player_0.png" />
+          <img id="player-s1" src="assets/screens/dark_player_1.png" />
+          <img id="player-s2" src="assets/screens/dark_player_2.png" />
+          <img id="player-s3" src="assets/screens/dark_player_3.png" />
+          <img id="player-l0" src="assets/screens/dark_lyrics.png" />
+          <img id="player-sp" src="assets/screens/dark_speed.png" />
+        </div>
+      </div>
+
+      <div id="player-t1" class="player-title"><span>Colour</span> <span>that</span> <span>follows</span> <span><em id="player-accent">every</em></span> <span>cover.</span></div>
+      <div id="player-q1" class="player-quiet"><span>The</span> <span>player</span> <span>takes</span> <span>its</span> <span>colours</span> <span>from</span> <span>whatever</span> <span>is</span> <span>playing.</span></div>
+      <div id="player-t2" class="player-title"><span>Lyrics</span> <span>that</span> <span>keep</span> <span>time.</span></div>
+      <div id="player-q2" class="player-quiet"><span>Synced</span> <span>from</span> <span>your</span> <span>server,</span> <span>line</span> <span>by</span> <span>line.</span></div>
+      <div id="player-t3" class="player-title" style="font-size: 72px; width: 740px"><span>Speed,</span> <span>pitch</span> <span>and</span> <span>EQ,</span> <span>shaped</span> <span>live.</span></div>
+      <div id="player-q3" class="player-quiet"><span>0.80–2.00×,</span> <span>±12</span> <span>semitones,</span> <span>five-band</span> <span>EQ.</span></div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const spring = (z, w = 11) => (t) => {
+        if (t >= 1) return 1;
+        const wd = w * Math.sqrt(1 - z * z);
+        return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+      };
+      const B = 60 / 83.35;
+      const BAR = 4 * B;
+      const tl = gsap.timeline({ paused: true });
+      const wordsIn = (sel, at, gap = 0.09) =>
+        tl.fromTo(`${sel} span`, { opacity: 0, filter: "blur(7px)" },
+          { opacity: 1, filter: "blur(0px)", duration: 0.22, stagger: gap, ease: "power2.out" }, at);
+      const wordsOut = (sel, at) =>
+        tl.fromTo(`${sel} span`, { opacity: 1, filter: "blur(0px)" },
+          { opacity: 0, filter: "blur(8px)", duration: 0.18, stagger: 0.03, ease: "power2.in", immediateRender: false }, at);
+
+      // Arrive out of the zoom, matching the library's push.
+      tl.fromTo("#player-world", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 0);
+      tl.fromTo("#player-art", { scale: 1.12 }, { scale: 1, duration: 12.12, ease: "power1.out" }, 0);
+      tl.fromTo("#player-phone", { scale: 1.38, filter: "blur(14px)" },
+        { scale: 1, filter: "blur(0px)", duration: 1.0, ease: "expo.out" }, 0);
+      tl.fromTo("#player-phone", { x: 380 }, { x: 380, duration: 0.01 }, 0);
+      tl.fromTo("#player-phone2", { x: 1100, opacity: 0 }, { x: 1100, opacity: 0, duration: 0.01 }, 0);
+
+      // 1. Four songs; the screen swipes like the cover does, the room takes each song's colour.
+      wordsIn("#player-t1", 0.55);
+      wordsIn("#player-q1", 1.2, 0.06);
+      const accents = ["#a9b0ff", "#ff9a88", "#9fe68f", "#ef9cff"];
+      tl.fromTo("#player-accent", { color: accents[0] }, { color: accents[0], duration: 0.01 }, 0);
+      [3, 5, 7].forEach((b, i) => {
+        const t = b * B;
+        tl.fromTo(`#player-s${i + 1}`, { xPercent: 100 }, { xPercent: 0, duration: 0.6, ease: "power3.inOut" }, t);
+        tl.fromTo(`#player-s${i}`, { xPercent: 0 }, { xPercent: -100, duration: 0.6, ease: "power3.inOut", immediateRender: false }, t);
+        tl.fromTo(`#player-a${i + 1}`, { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.inOut" }, t);
+        tl.fromTo("#player-accent", { color: accents[i] }, { color: accents[i + 1], duration: 0.8, ease: "power2.inOut", immediateRender: false }, t);
+      });
+
+      // 2. Lyrics: a punch-in on the synced lines.
+      const L = 2 * BAR;
+      wordsOut("#player-q1", L - 0.32);
+      wordsOut("#player-t1", L - 0.2);
+      tl.fromTo("#player-l0", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, L);
+      tl.fromTo("#player-a4", { opacity: 0 }, { opacity: 1, duration: 0.9, ease: "power2.inOut" }, L);
+      tl.fromTo("#player-phone", { scale: 1, transformOrigin: "50% 36%" },
+        { scale: 1.55, duration: 1.0, ease: "power2.inOut", immediateRender: false }, L + 0.1);
+      tl.fromTo("#player-phone", { x: 380 }, { x: 400, duration: 1.0, ease: "power2.inOut", immediateRender: false }, L + 0.1);
+      wordsIn("#player-t2", L + 0.35);
+      wordsIn("#player-q2", L + 0.9, 0.06);
+
+      // 3. Speed & pitch, then the equalizer beside it.
+      const S = 3 * BAR;
+      wordsOut("#player-q2", S - 0.32);
+      wordsOut("#player-t2", S - 0.2);
+      tl.fromTo("#player-phone", { scale: 1.55 }, { scale: 1, duration: 0.85, ease: "power2.inOut", immediateRender: false }, S);
+      tl.fromTo("#player-sp", { opacity: 0, yPercent: 6 }, { opacity: 1, yPercent: 0, duration: 0.55, ease: "power3.out" }, S + 0.25);
+      wordsIn("#player-t3", S + 0.3);
+      wordsIn("#player-q3", S + 0.85, 0.06);
+      tl.fromTo("#player-phone", { x: 400 }, { x: 190, duration: 0.9, ease: spring(0.82), immediateRender: false }, S + B);
+      tl.fromTo("#player-phone2", { x: 1100, opacity: 0 }, { x: 680, opacity: 1, duration: 1.0, ease: spring(0.8), immediateRender: false }, S + B + 0.12);
+
+      // Out: the whole room pans left; the next scene pans in from the right.
+      tl.fromTo("#player-world", { x: 0 }, { x: -760, duration: 0.6, ease: "power3.in", immediateRender: false }, 11.52);
+
+      window.__timelines["player"] = tl;
+    })();
+  </script>
+</template>

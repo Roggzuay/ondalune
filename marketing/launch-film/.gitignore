@@ -1,0 +1,12 @@
+# Rendered video stays out of git; re-render with the commands in README.md.
+renders/
+*.mp4
+*.mov
+*.webm
+
+# HyperFrames working files
+.hyperframes/
+node_modules/
+.waveform-cache/
+.thumbnails/
+__pycache__/

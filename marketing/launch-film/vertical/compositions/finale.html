@@ -1,0 +1,135 @@
+<template>
+  <style>
+    @font-face { font-family: "Unbounded"; src: url("assets/fonts/unbounded.ttf"); font-weight: 200 900; }
+    @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree.ttf"); font-weight: 300 900; }
+    #root { position: absolute; inset: 0; overflow: hidden; background: #07070a; }
+    #finale-dust { position: absolute; inset: 0; }
+    #finale-glow {
+      position: absolute; left: -46px; top: 0px; width: 1100px; height: 1100px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(236, 232, 255, 0.3) 0%, rgba(160, 150, 210, 0.1) 34%, transparent 62%);
+    }
+    #finale-line {
+      position: absolute; left: 120px; right: auto; width: 768px; top: 560px; line-height: 1.12; text-align: center;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 92px; letter-spacing: -0.02em; color: #f4f2ee;
+    }
+    #finale-line span, #finale-sub span { display: inline-block; }
+    #finale-lockup { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+    #finale-mark { position: absolute; left: 389px; top: 380px; width: 230px; height: 230px; overflow: visible; }
+    #finale-word {
+      position: absolute; left: 120px; top: 650px; width: 768px; text-align: center;
+      font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 136px; letter-spacing: -0.02em;
+      line-height: 1; color: #f4f2ee;
+    }
+    #finale-sub {
+      position: absolute; left: 120px; right: auto; width: 768px; top: 786px; text-align: center;
+      font-family: "Figtree", sans-serif; font-weight: 500; font-size: 44px; color: rgba(244, 242, 238, 0.78);
+    }
+    #finale-repo {
+      position: absolute; left: 50%; top: 880px; width: 640px; margin-left: -320px; padding: 20px 0;
+      border-radius: 999px; text-align: center; background: rgba(244, 242, 238, 0.08);
+      box-shadow: inset 0 0 0 1.5px rgba(244, 242, 238, 0.28);
+      font-family: "Figtree", sans-serif; font-weight: 600; font-size: 38px; color: #f4f2ee;
+    }
+    #finale-credits {
+      position: absolute; left: 120px; right: auto; width: 768px; top: 1060px; text-align: center;
+      font-family: "Figtree", sans-serif; font-weight: 500; font-size: 28px; line-height: 1.4;
+      color: rgba(244, 242, 238, 0.5);
+    }
+    #finale-line { font-size: 80px; } #finale-word { font-size: 112px; } #finale-sub { font-size: 36px; } #finale-repo { left: 244px; width: 520px; margin-left: 0; font-size: 32px; }
+  </style>
+  <div id="root" data-composition-id="finale" data-width="1080" data-height="1920">
+    <canvas id="finale-dust" width="1080" height="1920"></canvas>
+    <div id="finale-glow"></div>
+    <div id="finale-line"><span>Music</span> <span>without</span><br /><span>boundaries.</span></div>
+    <div id="finale-lockup">
+      <svg id="finale-mark" viewBox="22 22 64 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="finale-g1" gradientUnits="userSpaceOnUse" x1="30" y1="30" x2="60" y2="80"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1F1F4"/></linearGradient>
+          <linearGradient id="finale-g2" gradientUnits="userSpaceOnUse" x1="20" y1="55" x2="80" y2="80"><stop offset="0" stop-color="#DEDEE3"/><stop offset="1" stop-color="#C9C9CF"/></linearGradient>
+          <linearGradient id="finale-g3" gradientUnits="userSpaceOnUse" x1="20" y1="65" x2="80" y2="90"><stop offset="0" stop-color="#B8B8BF"/><stop offset="1" stop-color="#9C9CA4"/></linearGradient>
+          <linearGradient id="finale-g4" gradientUnits="userSpaceOnUse" x1="60" y1="40" x2="60" y2="62"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6E6EA"/></linearGradient>
+          <clipPath id="finale-clip"><path d="M75.65,64.10 A25.9,25.9 0 1,1 56.75,28.58 A20.9,20.9 0 1,0 75.65,64.10 Z"/></clipPath>
+        </defs>
+        <path id="finale-moon" d="M75.65,64.10 A25.9,25.9 0 1,1 56.75,28.58 A20.9,20.9 0 1,0 75.65,64.10 Z" fill="url(#finale-g1)"/>
+        <g clip-path="url(#finale-clip)">
+          <path id="finale-wave-1" d="M18,49 C26,59 38,66 52,69.5 C64,72 76,70 88,62 L88,98 L18,98 Z" fill="url(#finale-g2)"/>
+          <path id="finale-wave-2" d="M18,61 C27,71 40,77.5 54,79 C66,80 77,76 88,69 L88,98 L18,98 Z" fill="url(#finale-g3)"/>
+        </g>
+        <path id="finale-bar-0" d="M49.70,49.45 A1.7,1.7 0 0,1 53.10,49.45 L53.10,53.55 A1.7,1.7 0 0,1 49.70,53.55 Z" fill="url(#finale-g4)"/>
+        <path id="finale-bar-1" d="M55.30,46.70 A1.7,1.7 0 0,1 58.70,46.70 L58.70,56.30 A1.7,1.7 0 0,1 55.30,56.30 Z" fill="url(#finale-g4)"/>
+        <path id="finale-bar-2" d="M60.90,43.20 A1.7,1.7 0 0,1 64.30,43.20 L64.30,59.80 A1.7,1.7 0 0,1 60.90,59.80 Z" fill="url(#finale-g4)"/>
+        <path id="finale-bar-3" d="M66.50,46.70 A1.7,1.7 0 0,1 69.90,46.70 L69.90,56.30 A1.7,1.7 0 0,1 66.50,56.30 Z" fill="url(#finale-g4)"/>
+        <path id="finale-bar-4" d="M72.10,49.45 A1.7,1.7 0 0,1 75.50,49.45 L75.50,53.55 A1.7,1.7 0 0,1 72.10,53.55 Z" fill="url(#finale-g4)"/>
+      </svg>
+      <div id="finale-word">Ondalune</div>
+    </div>
+    <div id="finale-sub"><span>Open</span> <span>Source.</span> <span>Built</span> <span>for</span> <span>your</span> <span>music.</span></div>
+    <div id="finale-repo" data-var-text="repo">github.com/Roggzuay/ondalune</div>
+    <div id="finale-credits">
+      Music: Aquatone, “Mountains” (CC BY 4.0)<br />Covers: CC netlabel releases<br />
+      Lyrics: Tennyson (public domain)
+    </div>
+  </div>
+  <script>
+    (function () {
+      const spring = (z, w = 11) => (t) => {
+        if (t >= 1) return 1;
+        const wd = w * Math.sqrt(1 - z * z);
+        return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t));
+      };
+      const B = 60 / 83.35;
+      const BAR = 4 * B;
+
+      let seed = 23;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+      const motes = Array.from({ length: 60 }, () => ({
+        x: rnd() * 1080, y: rnd() * 1920, r: 0.6 + rnd() * 1.6, d: 0.3 + rnd() * 0.7, a: 0.12 + rnd() * 0.4,
+      }));
+      const ctx = document.getElementById("finale-dust").getContext("2d");
+      const clock = { t: 0 };
+      const draw = () => {
+        const t = clock.t;
+        ctx.clearRect(0, 0, 1080, 1920);
+        const fade = Math.min(1, t / 1.5);
+        for (const m of motes) {
+          const y = (((m.y - t * 16 * m.d) % 1920) + 1920) % 1920;
+          ctx.globalAlpha = m.a * fade;
+          ctx.fillStyle = "#e9e6ff";
+          ctx.beginPath();
+          ctx.arc(m.x, y, m.r * m.d * 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      };
+
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo(clock, { t: 0 }, { t: 8.81, duration: 8.81, ease: "none", onUpdate: draw }, 0);
+      tl.fromTo("#root", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0);
+
+      // The line, then the lockup on the next bar.
+      tl.fromTo("#finale-line span", { opacity: 0, filter: "blur(8px)" },
+        { opacity: 1, filter: "blur(0px)", duration: 0.28, stagger: 0.12, ease: "power2.out" }, 0.35);
+      tl.fromTo("#finale-line span", { opacity: 1, filter: "blur(0px)" },
+        { opacity: 0, filter: "blur(8px)", duration: 0.2, stagger: 0.05, ease: "power2.in", immediateRender: false }, BAR - 0.45);
+
+      const L = BAR;
+      tl.fromTo("#finale-glow", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 1.6, ease: "power2.out" }, L - 0.2);
+      tl.fromTo("#finale-mark", { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "power2.out" }, L);
+      tl.fromTo("#finale-moon", { scale: 0.85, transformOrigin: "50% 50%" },
+        { scale: 1, duration: 0.9, ease: spring(0.78) }, L);
+      tl.fromTo("#finale-wave-1", { x: -40 }, { x: 0, duration: 1.0, ease: "power3.out" }, L + 0.15);
+      tl.fromTo("#finale-wave-2", { x: -40 }, { x: 0, duration: 1.0, ease: "power3.out" }, L + 0.27);
+      [2, 1, 3, 0, 4].forEach((b, i) =>
+        tl.fromTo(`#finale-bar-${b}`, { scaleY: 0, transformOrigin: "50% 50%" },
+          { scaleY: 1, duration: 0.8, ease: spring(0.72) }, L + 0.5 + i * 0.06));
+      tl.fromTo("#finale-word", { clipPath: "inset(0 100% 0 0)", x: -30 },
+        { clipPath: "inset(0 0% 0 0)", x: 0, duration: 0.9, ease: "power3.out" }, L + 0.65);
+
+      tl.fromTo("#finale-sub span", { opacity: 0, filter: "blur(7px)" },
+        { opacity: 1, filter: "blur(0px)", duration: 0.24, stagger: 0.08, ease: "power2.out" }, L + 1.6);
+      tl.fromTo("#finale-repo", { opacity: 0, scale: 0.96 }, { opacity: 1, scale: 1, duration: 0.6, ease: spring(0.85) }, L + 2.3);
+      tl.fromTo("#finale-credits", { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.out" }, L + 2.0);
+
+      window.__timelines["finale"] = tl;
+    })();
+  </script>
+</template>
