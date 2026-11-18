@@ -22,8 +22,8 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 <img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
 
 <img src="docs/screenshots/home.jpg" width="200" alt="Home with the Your Mix hero and its artwork collage" />
-<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured amber from the cover" />
-<img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with a full-bleed photo and the latest release" />
+<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured blue and violet from the cover" />
+<img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with full-bleed artwork and the latest release" />
 <img src="docs/screenshots/library.jpg" width="200" alt="Library in tiles layout" />
 
 **New look, in the 1.7.1.2 preview:** a proper light mode, clearer search and player controls, and settings in plain words. [Watch the video](docs/demo/new-look.mp4)
@@ -92,9 +92,9 @@ Living Artwork, Velvet Mesh, Aurora, Halo and Still. They move with the music an
 pause.
 
 <p align="center">
-<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in blue and lavender, taken from the cover" />
-<img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in warm rose tones from the artist photo" />
-<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in deep blue from the artist photo" />
+<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in pink and lavender, taken from the cover" />
+<img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in green, taken from the artist image" />
+<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in warm red, taken from the artist image" />
 </p>
 
 ### 🎤 Synced lyrics
@@ -106,7 +106,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 </p>
 
 ### ✨ Make it yours
-- **Six interface styles**: Signature, Standard, Bloom, Poster, Lounge and Classic. Each changes the type, shapes, spacing and layout, not just the colours.
+- **Two interface styles**: Signature and Bloom. Each changes the type, shapes and buttons, not just the colours.
 - **Separate fonts** for headings and for song text, from nine typefaces.
 - **Artwork shapes**: squircle, circle, flower, cookie, clover, arch and more, or a mix.
 - **Home layout editor**: drag sections into the order you like and hide the ones you don't use.
@@ -117,7 +117,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 <p align="center">
 <img src="docs/demo/themes.gif" width="220" alt="Switching between interface styles in Appearance" />
 <img src="docs/demo/artwork-shapes.gif" width="220" alt="Tapping the cover to change its shape" />
-<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: fonts, artwork shapes and the home layout editor" />
+<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: interface style, fonts and artwork shape" />
 </p>
 
 ### 👆 Built for your thumbs
@@ -135,7 +135,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Media notification and resizable widgets** with a blurred-artwork background.
 
 <p align="center">
-<img src="docs/screenshots/downloads.jpg" width="220" alt="Downloads: one in progress and songs saved on the phone" />
+<img src="docs/screenshots/downloads.jpg" width="220" alt="Downloads: songs saved on the phone" />
 <img src="docs/screenshots/library-filter.jpg" width="220" alt="Library filter: downloaded only, hide short tracks, lossless only" />
 <img src="docs/screenshots/settings.jpg" width="220" alt="Settings sections" />
 </p>
