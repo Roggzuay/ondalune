@@ -26,6 +26,13 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 <img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with a full-bleed photo and the latest release" />
 <img src="docs/screenshots/library.jpg" width="200" alt="Library in tiles layout" />
 
+**New look, in the 1.7.1.2 preview:** a proper light mode, clearer search and player controls, and settings in plain words. [Watch the video](docs/demo/new-look.mp4)
+
+<img src="docs/screenshots/new-light-home.jpg" width="200" alt="Home in the new light mode" />
+<img src="docs/screenshots/new-dark-home.jpg" width="200" alt="Home in dark mode, coloured from the playing cover" />
+<img src="docs/screenshots/new-light-search.jpg" width="200" alt="Search with the best match at the top and filter chips" />
+<img src="docs/screenshots/new-light-settings.jpg" width="200" alt="Settings sections in plain words" />
+
 </div>
 
 ---
