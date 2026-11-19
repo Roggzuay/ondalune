@@ -1,12 +1,17 @@
 package io.github.roggzuay.ondalune.audio
 
+import android.app.UiModeManager
 import android.content.Context
+import android.content.res.Configuration
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.MediaCodecList
 import android.os.Build
+import io.github.roggzuay.ondalune.data.model.AudioOutput
+import io.github.roggzuay.ondalune.data.model.OutputKind
 
 /**
  * What this phone can do with audio, as Android reports it: its Dolby decoders, whether spatial
@@ -45,19 +50,36 @@ class AudioCapabilities(private val context: Context) {
         return spatializer.isAvailable && spatializer.isEnabled && spatializer.canBeSpatialized(attributes, format)
     }
 
-    /** "Phone speaker", "Bluetooth · Pixel Buds", "USB · DAC name". */
-    fun deviceName(device: AudioDeviceInfo?): String? {
+    /**
+     * The output [device] as Android reports it: "Phone speaker", "Bluetooth · Pixel Buds", "USB · DAC
+     * name", with the rate Android's mixer now sends to wherever music plays. Android Auto shows as
+     * the car while the phone is in car mode.
+     */
+    fun output(device: AudioDeviceInfo?): AudioOutput? {
         device ?: return null
         val name = device.productName?.toString()?.trim().orEmpty()
+        val rate = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC).coerceAtLeast(0)
+        val car = context.getSystemService(UiModeManager::class.java)?.currentModeType == Configuration.UI_MODE_TYPE_CAR
+        if (car) return AudioOutput("Android Auto", OutputKind.CAR, rate)
         val kind = when (device.type) {
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> return "Phone speaker"
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired headphones"
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth"
-            AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER, AudioDeviceInfo.TYPE_BLE_BROADCAST -> "Bluetooth LE"
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY -> "USB"
-            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC -> "HDMI"
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> return AudioOutput("Phone speaker", OutputKind.PHONE, rate)
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> OutputKind.WIRED
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> OutputKind.BLUETOOTH
+            AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER, AudioDeviceInfo.TYPE_BLE_BROADCAST -> OutputKind.BLUETOOTH_LE
+            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY -> OutputKind.USB
+            AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC -> OutputKind.HDMI
+            AudioDeviceInfo.TYPE_BUS -> OutputKind.CAR
+            else -> OutputKind.OTHER
+        }
+        val label = when (kind) {
+            OutputKind.WIRED -> "Wired headphones"
+            OutputKind.BLUETOOTH -> "Bluetooth"
+            OutputKind.BLUETOOTH_LE -> "Bluetooth LE"
+            OutputKind.USB -> "USB"
+            OutputKind.HDMI -> "HDMI"
+            OutputKind.CAR -> "Car audio"
             else -> "Output"
         }
-        return if (name.isNotBlank() && name != Build.MODEL) "$kind · $name" else kind
+        return AudioOutput(if (name.isNotBlank() && name != Build.MODEL) "$label · $name" else label, kind, rate)
     }
 }

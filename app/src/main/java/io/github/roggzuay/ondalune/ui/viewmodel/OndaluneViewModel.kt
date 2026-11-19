@@ -217,6 +217,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val bridgeSeek: (Long) -> Unit = { posMs -> viewModelScope.launch { seekTo(posMs) } }
     private val bridgePlayMediaId: (String) -> Unit = { mediaId -> playFromCar { it.queueFor(mediaId) } }
     // "Play some music", with nothing named, is Your Mix.
+    /** Plays what a voice request asked for ("" plays Your Mix), from the screen or the car. */
+    fun playFromSearch(query: String) = bridgePlaySearch(query)
+
     private val bridgePlaySearch: (String) -> Unit = { query ->
         if (query.isNotBlank()) playFromCar { it.search(query) } else viewModelScope.launch {
             withTimeoutOrNull(CAR_LIBRARY_WAIT_MS) { allServerTracks.first { it.isNotEmpty() } } ?: return@launch
@@ -774,14 +777,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     // ---- Audio quality ------------------------------------------------------------------
 
     private val audioCapabilities by lazy { AudioCapabilities(getApplication()) }
-    private val _outputDevice = MutableStateFlow<String?>(null)
+    private val _outputDevice = MutableStateFlow<io.github.roggzuay.ondalune.data.model.AudioOutput?>(null)
     private val outputDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refreshOutputDevice()
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refreshOutputDevice()
     }
 
     private fun refreshOutputDevice() {
-        _outputDevice.value = audioCapabilities.deviceName(audioEngine.routedOutput())
+        _outputDevice.value = audioCapabilities.output(audioEngine.routedOutput())
     }
 
     /** What changes the sound right now, in words; empty when nothing does. */

@@ -125,6 +125,15 @@ fun codecName(mime: String): String = when (mime.lowercase()) {
 
 private fun khz(rate: Int) = if (rate % 1000 == 0) "${rate / 1000} kHz" else "%.1f kHz".format(rate / 1000.0)
 
+/** What kind of output the sound reaches; Android names only the device, never its codec. */
+enum class OutputKind { PHONE, WIRED, BLUETOOTH, BLUETOOTH_LE, USB, HDMI, CAR, OTHER }
+
+/**
+ * Where the sound goes: its name ("Bluetooth · Buds4 Pro"), its kind, and the rate Android's mixer
+ * sends it at (0 when not reported). The mixer converts every app's audio to that rate.
+ */
+data class AudioOutput(val name: String, val kind: OutputKind, val sampleRate: Int = 0)
+
 private fun channelName(n: Int) = when (n) {
     1 -> "mono"
     2 -> "stereo"
@@ -145,7 +154,7 @@ fun audioQualityOf(
     opened: OpenedStream?,
     convertedBy: String?,
     processing: List<String>,
-    outputDevice: String?,
+    outputDevice: AudioOutput?,
     phoneDecodes: Set<String>? = null
 ): AudioQuality? {
     val suffix = track.suffix.uppercase()
@@ -233,22 +242,41 @@ fun audioQualityOf(
                     if (reduced) add("Note" to "This phone's decoder gives $decodedBits-bit for this ${track.bitDepth}-bit song")
                     if (converted && track.bitDepth > 0) add("Note" to "A converted copy plays, so the file's ${track.bitDepth}-bit depth doesn't reach the phone")
                     if (opened.channels > 2) add("Note" to "${channelName(opened.channels)} audio is mixed down to stereo (centre and surrounds folded in, LFE left out)")
-                    // Past the app: Android mixes at the output's own rate, and Bluetooth re-encodes.
-                    if (outputDevice?.startsWith("Bluetooth") == true) {
-                        add("Note" to "Bluetooth re-encodes the audio for the headphones, which lowers its resolution")
-                    } else if (opened.outputSampleRate > 48000) {
-                        add("Note" to "Android may resample it to the output's own rate (often 48 kHz)")
-                    }
                 }
                 else -> add("Path" to "Android's media player")
             }
         }
-        outputDevice?.let { add("Device" to it) }
+        outputDevice?.let { addAll(outputRows(it, opened?.outputSampleRate?.takeIf { opened.ownPipeline } ?: 0, mixed = opened?.dolbyEngine != true)) }
     }
     val processingShown = if (opened?.dolbyEngine == true) {
         listOf("Nothing from Ondalune: the phone's Dolby engine plays this song, so EQ, reverb, speed, pitch and levelling don't apply to it")
     } else processing
     return AudioQuality(label, tag, source, stream, output, processingShown)
+}
+
+/**
+ * What happens past Ondalune, from what Android reports: the device, the rate its mixer sends, and
+ * what the link itself does. [engineRate] is the rate Ondalune hands Android (0 when unknown);
+ * [mixed] is false when the phone's Dolby engine takes the stream past the mixer.
+ */
+private fun outputRows(output: AudioOutput, engineRate: Int, mixed: Boolean): List<Pair<String, String>> = buildList {
+    add("Device" to output.name)
+    when (output.kind) {
+        // Android Auto carries media to the car as 16-bit, 48 kHz PCM, whatever the phone mixes at.
+        OutputKind.CAR -> add("Sent to the car" to "16-bit · 48 kHz · stereo, by Android Auto")
+        else -> if (mixed && output.sampleRate > 0) add("Android sends" to khz(output.sampleRate))
+    }
+    if (output.kind != OutputKind.CAR && engineRate > 0 && output.sampleRate > 0 && engineRate != output.sampleRate) {
+        add("Note" to "Android converts ${khz(engineRate)} to ${khz(output.sampleRate)} for this device")
+    }
+    when (output.kind) {
+        OutputKind.BLUETOOTH -> {
+            add("Bluetooth codec" to "Picked by the phone and the headphones; Android doesn't tell apps which")
+            add("Note" to "Bluetooth sends a compressed copy. SBC and AAC keep less; LDAC, aptX HD and Samsung's UHQ mode with Galaxy Buds carry up to 24-bit / 96 kHz")
+        }
+        OutputKind.BLUETOOTH_LE -> add("Bluetooth codec" to "LC3 (Bluetooth LE Audio), a compressed copy")
+        else -> Unit
+    }
 }
 
 /** The short badge on song rows: "FLAC 24/96k", "MP3 320k", or just the format when that's all that's known. */

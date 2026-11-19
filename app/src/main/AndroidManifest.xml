@@ -44,6 +44,20 @@
             </intent-filter>
         </activity>
 
+        <!-- "Play … on Ondalune" from the phone's voice assistant: plays without opening a screen. -->
+        <activity
+            android:name=".VoiceSearchActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <!-- Launcher icon variants. Exactly one alias is enabled at a time and it is the app's only
              launcher entry (MainActivity has none), so switching icons replaces the icon instead of
              adding a second one. Moonlight (the default icon, alias name kept from 1.0.0) starts enabled. -->
@@ -236,6 +250,15 @@
                 <action android:name="io.github.roggzuay.ondalune.ondalune.ACTION_SKIP_NEXT" />
                 <action android:name="io.github.roggzuay.ondalune.ondalune.ACTION_SKIP_PREVIOUS" />
                 <action android:name="io.github.roggzuay.ondalune.ondalune.ACTION_TOGGLE_STAR" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Headphone and car play buttons while Ondalune is closed; also lists it as a media app. -->
+        <receiver
+            android:name=".widget.OndaluneMediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
 

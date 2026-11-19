@@ -1,5 +1,7 @@
 package io.github.roggzuay.ondalune.auto
 
+import android.os.Bundle
+import android.provider.MediaStore
 import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
 import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
@@ -89,6 +91,23 @@ class AutoLibrary(
     }
 
     companion object {
+        /**
+         * What a voice request asked for: the artist, album, playlist or song it named ("song by
+         * artist" for a song), else the words heard. Empty means "play something".
+         */
+        fun spokenQuery(query: String?, extras: Bundle?): String {
+            fun extra(key: String) = extras?.getString(key)?.trim()?.ifEmpty { null }
+            val focused = when (extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)) {
+                MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE -> extra(MediaStore.EXTRA_MEDIA_ARTIST)
+                MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE -> extra(MediaStore.EXTRA_MEDIA_ALBUM)
+                MediaStore.Audio.Playlists.ENTRY_CONTENT_TYPE -> extra(MediaStore.EXTRA_MEDIA_PLAYLIST)
+                MediaStore.Audio.Media.ENTRY_CONTENT_TYPE ->
+                    extra(MediaStore.EXTRA_MEDIA_TITLE)?.let { title -> listOfNotNull(title, extra(MediaStore.EXTRA_MEDIA_ARTIST)).joinToString(" ") }
+                else -> null
+            }
+            return focused ?: query?.trim().orEmpty()
+        }
+
         const val ROOT = "root"
         const val HOME = "home"
         const val PLAYLISTS = "playlists"

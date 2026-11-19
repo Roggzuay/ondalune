@@ -220,6 +220,32 @@ class OndaluneMediaControlReceiver : BroadcastReceiver() {
 }
 
 /**
+ * Headphone, watch and car media buttons. While Ondalune has a player they go to it; with Ondalune
+ * closed, a play press starts Your Mix. Having this receiver is also what lists Ondalune among the
+ * phone's media apps (Samsung's "Favourite media app", for one).
+ */
+class OndaluneMediaButtonReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        if (intent?.action != Intent.ACTION_MEDIA_BUTTON) return
+        val key = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+        if (key == null || key.action != android.view.KeyEvent.ACTION_DOWN || key.repeatCount > 0) return
+        val command = when (key.keyCode) {
+            android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> MediaBridgeCommand.PLAY
+            android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> MediaBridgeCommand.PAUSE
+            android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, android.view.KeyEvent.KEYCODE_HEADSETHOOK -> MediaBridgeCommand.TOGGLE_PLAY_PAUSE
+            android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> MediaBridgeCommand.SKIP_NEXT
+            android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> MediaBridgeCommand.SKIP_PREVIOUS
+            else -> return
+        }
+        when {
+            OndaluneMediaBridge.onCommand != null -> OndaluneMediaBridge.dispatchCommand(context, command)
+            command == MediaBridgeCommand.PLAY || command == MediaBridgeCommand.TOGGLE_PLAY_PAUSE -> OndaluneMediaBridge.playWithoutScreen(context, "")
+        }
+    }
+}
+
+/**
  * Material 3 Expressive Home Screen AppWidgetProvider supporting:
  * 1. Compact Player Widget
  * 2. Expanded Studio Deck Widget (larger artwork, progress bar, elapsed/duration time, favorite action)
@@ -413,6 +439,10 @@ object OndaluneMediaBridge {
      */
     fun closePlayer(context: Context) {
         foregroundStopHandler.removeCallbacksAndMessages(null)
+        heldPlayer?.let {
+            heldPlayer = null
+            (context.applicationContext as io.github.roggzuay.ondalune.OndaluneApp).player.release()
+        }
         OndalunePlaybackRuntime.peekEngine()?.pausePlayback()
         lastIsPlaying = false
         synchronized(this) {
@@ -424,6 +454,31 @@ object OndaluneMediaBridge {
         }
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
         refreshAllWidgets(context.applicationContext)
+    }
+
+    /** The player taken by a voice request or play button with Ondalune closed; [closePlayer] gives it back. */
+    private var heldPlayer: io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel? = null
+
+    /**
+     * Plays what a voice request asked for, or Your Mix for "" (a play button), whether or not
+     * Ondalune is open. The service goes foreground at once, while the request still allows it,
+     * and leaves the foreground again if nothing has started playing (no server reachable, say).
+     */
+    @androidx.annotation.MainThread
+    fun playWithoutScreen(context: Context, query: String) {
+        val app = context.applicationContext as io.github.roggzuay.ondalune.OndaluneApp
+        onPlayFromSearch?.let { return it(query) }
+        runCatching {
+            androidx.core.content.ContextCompat.startForegroundService(
+                app, Intent(app, OndalunePlaybackService::class.java).setAction(ACTION_SERVICE_START_FOREGROUND)
+            )
+        }
+        (heldPlayer ?: app.player.acquire().also { heldPlayer = it }).playFromSearch(query)
+        foregroundStopHandler.postDelayed({
+            if (!lastIsPlaying) runCatching {
+                app.startService(Intent(app, OndalunePlaybackService::class.java).setAction(ACTION_SERVICE_STOP_FOREGROUND))
+            }
+        }, ButtonStartGraceMs)
     }
 
     /** The session's token, for Android Auto; makes the session when nothing has played yet. */
@@ -475,9 +530,22 @@ object OndaluneMediaBridge {
                     }
 
                     override fun onPlayFromSearch(query: String?, extras: Bundle?) {
-                        onPlayFromSearch?.invoke(query.orEmpty())
+                        onPlayFromSearch?.invoke(io.github.roggzuay.ondalune.auto.AutoLibrary.spokenQuery(query, extras))
                     }
                 })
+                // Buttons pressed while the session is inactive come back through the receiver.
+                if (Build.VERSION.SDK_INT >= 31) {
+                    setMediaButtonBroadcastReceiver(ComponentName(appCtx, OndaluneMediaButtonReceiver::class.java))
+                } else {
+                    @Suppress("DEPRECATION")
+                    setMediaButtonReceiver(
+                        PendingIntent.getBroadcast(
+                            appCtx, 0,
+                            Intent(Intent.ACTION_MEDIA_BUTTON).setComponent(ComponentName(appCtx, OndaluneMediaButtonReceiver::class.java)),
+                            PendingIntent.FLAG_IMMUTABLE
+                        )
+                    )
+                }
                 // A car can connect before anything has played; it reads what it may ask for here.
                 setPlaybackState(
                     PlaybackState.Builder().setActions(SESSION_ACTIONS).setState(PlaybackState.STATE_NONE, 0L, 0f).build()
@@ -569,6 +637,9 @@ object OndaluneMediaBridge {
     }
 
     private val foregroundStopHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** How long a start with Ondalune closed may take (the library loads first) before giving up. */
+    private const val ButtonStartGraceMs = 20_000L
 
     /** How long a pause must last before the playback service leaves the foreground. */
     private const val ForegroundStopGraceMs = 30_000L

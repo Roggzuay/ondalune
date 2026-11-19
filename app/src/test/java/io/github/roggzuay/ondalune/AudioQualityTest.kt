@@ -1,6 +1,8 @@
 package io.github.roggzuay.ondalune
 
+import io.github.roggzuay.ondalune.data.model.AudioOutput
 import io.github.roggzuay.ondalune.data.model.OpenedStream
+import io.github.roggzuay.ondalune.data.model.OutputKind
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.audioQualityOf
 import io.github.roggzuay.ondalune.data.model.compactQuality
@@ -10,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioQualityTest {
+    private val speaker = AudioOutput("Phone speaker", OutputKind.PHONE, 48000)
     private fun song(suffix: String, depth: Int = 0, rate: Int = 0, kbps: Int = 0) = SubsonicTrack(
         id = "s", serverId = 1, title = "T", artist = "A", artistId = "a", album = "B", albumId = "b",
         durationSec = 200, bitRate = kbps, suffix = suffix, bitDepth = depth, samplingRate = rate
@@ -27,7 +30,7 @@ class AudioQualityTest {
 
     @Test
     fun `untouched 16-bit FLAC is lossless`() {
-        val q = audioQualityOf(song("FLAC", 16, 44100, 900), opened("audio/flac"), null, emptyList(), "Phone speaker")!!
+        val q = audioQualityOf(song("FLAC", 16, 44100, 900), opened("audio/flac"), null, emptyList(), speaker)!!
         assertEquals("FLAC · 16-bit / 44.1 kHz", q.label)
         assertEquals("Lossless", q.tag)
         assertTrue(q.output.contains("Device" to "Phone speaker"))
@@ -35,15 +38,23 @@ class AudioQualityTest {
 
     @Test
     fun `a 24-bit 96 kHz song plays whole through the float engine`() {
-        val hiRes = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(), "Phone speaker")!!
+        val hiRes = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(), speaker)!!
         assertEquals("FLAC · 24-bit / 96 kHz", hiRes.label)
         assertEquals("Lossless", hiRes.tag)
         assertTrue(hiRes.output.contains("Format" to "32-bit float · 96 kHz · stereo"))
         assertTrue(hiRes.output.none { it.second.contains("16-bit") })
-        // Outside the app: Android's mixer may still resample a hi-res rate.
-        assertTrue(hiRes.output.any { it.second.startsWith("Android may resample") })
-        val bluetooth = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(), "Bluetooth · Buds")!!
-        assertTrue(bluetooth.output.any { it.second.startsWith("Bluetooth re-encodes") })
+        // Outside the app: Android's mixer runs at the output's rate and says so.
+        assertTrue(hiRes.output.contains("Android sends" to "48 kHz"))
+        assertTrue(hiRes.output.contains("Note" to "Android converts 96 kHz to 48 kHz for this device"))
+        val buds = audioQualityOf(song("FLAC", 24, 96000), opened("audio/raw", 96000), null, emptyList(),
+            AudioOutput("Bluetooth · Buds4 Pro", OutputKind.BLUETOOTH, 96000))!!
+        assertTrue(buds.output.contains("Android sends" to "96 kHz"))
+        assertTrue(buds.output.none { it.second.startsWith("Android converts") })
+        assertTrue(buds.output.any { it.first == "Bluetooth codec" })
+        assertTrue(buds.output.none { it.second.contains("lowers its resolution") })
+        val car = audioQualityOf(song("FLAC", 16, 44100), opened("audio/raw"), null, emptyList(),
+            AudioOutput("Android Auto", OutputKind.CAR, 48000))!!
+        assertTrue(car.output.contains("Sent to the car" to "16-bit · 48 kHz · stereo, by Android Auto"))
     }
 
     @Test
@@ -54,7 +65,6 @@ class AudioQualityTest {
 
         val processed = audioQualityOf(song("FLAC", 16, 44100), opened("audio/flac"), null, listOf("Reverb: Mastering Studio"), null)!!
         assertEquals("Lossless source", processed.tag)
-        assertTrue(processed.output.none { it.second.startsWith("Android may resample") })
     }
 
     @Test
