@@ -153,7 +153,7 @@ class MainActivity : ComponentActivity() {
 
             val updateRequest = showUpdateRequests.intValue
             LaunchedEffect(updateRequest) {
-                if (updateRequest > 0) ondaluneViewModel.showUpdateDetails()
+                if (updateRequest > 0) ondaluneViewModel.updates.showUpdateDetails()
             }
 
             OndaluneMainShell(viewModel = ondaluneViewModel)

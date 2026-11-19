@@ -269,15 +269,15 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isUserServerOpen by viewModel.isUserServerSheetOpen.collectAsStateWithLifecycle()
     val isAppIconSettingsOpen by viewModel.isAppIconSettingsOpen.collectAsStateWithLifecycle()
     val showServerOnboarding by viewModel.showServerOnboarding.collectAsStateWithLifecycle()
-    val whatsNew by viewModel.whatsNew.collectAsStateWithLifecycle()
+    val whatsNew by viewModel.updates.whatsNew.collectAsStateWithLifecycle()
     val showSpeedResetHint by viewModel.showSpeedResetHint.collectAsStateWithLifecycle()
-    val availableUpdate by viewModel.availableUpdate.collectAsStateWithLifecycle()
-    val updateInstall by viewModel.updateInstall.collectAsStateWithLifecycle()
-    val updateCheckStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
-    val updateDetailsOpen by viewModel.updateDetailsOpen.collectAsStateWithLifecycle()
-    val updateBannerFolded by viewModel.updateBannerFolded.collectAsStateWithLifecycle()
-    val previousVersion by viewModel.previousVersion.collectAsStateWithLifecycle()
-    val rollback by viewModel.rollback.collectAsStateWithLifecycle()
+    val availableUpdate by viewModel.updates.availableUpdate.collectAsStateWithLifecycle()
+    val updateInstall by viewModel.updates.updateInstall.collectAsStateWithLifecycle()
+    val updateCheckStatus by viewModel.updates.updateCheckStatus.collectAsStateWithLifecycle()
+    val updateDetailsOpen by viewModel.updates.updateDetailsOpen.collectAsStateWithLifecycle()
+    val updateBannerFolded by viewModel.updates.updateBannerFolded.collectAsStateWithLifecycle()
+    val previousVersion by viewModel.updates.previousVersion.collectAsStateWithLifecycle()
+    val rollback by viewModel.updates.rollback.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
     val onboardingSync by viewModel.onboardingSync.collectAsStateWithLifecycle()
     val homeZoom by animateFloatAsState(
@@ -837,8 +837,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onOpenShelf = viewModel::openHomeShelf,
                                             onPlayTrackFrom = { track, queue -> viewModel.playback.playTrack(track, queue) },
                                             availableUpdate = availableUpdate,
-                                            onViewUpdate = viewModel::showUpdateDetails,
-                                            onLaterUpdate = viewModel::dismissUpdate,
+                                            onViewUpdate = viewModel.updates::showUpdateDetails,
+                                            onLaterUpdate = viewModel.updates::dismissUpdate,
                                             updateFolded = updateBannerFolded,
                                             showDownloadsHint = showDownloadsHint,
                                             onShowDownloads = {
@@ -1059,13 +1059,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetCheckForUpdates = viewModel::setCheckForUpdates,
                                             availableUpdate = availableUpdate,
                                             updateCheckStatus = updateCheckStatus,
-                                            onCheckForUpdatesNow = viewModel::checkForUpdatesNow,
-                                            onSetUpdateNotifications = viewModel::setUpdateNotifications,
-                                            onSetUpdatePrereleases = viewModel::setUpdatePrereleases,
+                                            onCheckForUpdatesNow = viewModel.updates::checkForUpdatesNow,
+                                            onSetUpdateNotifications = viewModel.updates::setUpdateNotifications,
+                                            onSetUpdatePrereleases = viewModel.updates::setUpdatePrereleases,
                                             previousVersion = previousVersion,
-                                            onGoBackVersion = viewModel::openRollback.takeIf { viewModel.canGoBack },
+                                            onGoBackVersion = viewModel.updates::openRollback.takeIf { viewModel.updates.canGoBack },
                                             onAllVersions = { runCatching { uriHandler.openUri(ALL_VERSIONS_URL) } },
-                                            onViewUpdate = viewModel::showUpdateDetails,
+                                            onViewUpdate = viewModel.updates::showUpdateDetails,
                                             onRestoreDefaults = viewModel::restoreDefaultCustomizationSettings,
                                             onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                             onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
@@ -1520,7 +1520,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
                 // First launch after a major/minor update (1.1, 2.0): what changed.
                 whatsNew?.takeIf { !showServerOnboarding }?.let { notes ->
-                    WhatsNewDialog(notes, onDismiss = viewModel::dismissWhatsNew)
+                    WhatsNewDialog(notes, onDismiss = viewModel.updates::dismissWhatsNew)
                 }
 
                 // Once the library has mixes, and after setup and any "What's new".
@@ -1562,22 +1562,22 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     UpdateDetailsSheet(
                         update,
                         installedVersion = BuildConfig.VERSION_NAME,
-                        source = viewModel.installSource,
+                        source = viewModel.updates.installSource,
                         install = updateInstall,
-                        onUpdate = viewModel::startUpdate,
+                        onUpdate = viewModel.updates::startUpdate,
                         onAllowInstalls = { runCatching { context.startActivity(AppUpdateInstaller.allowInstallsIntent(context)) } },
                         onInstall = { apk -> runCatching { context.startActivity(AppUpdateInstaller.installIntent(context, apk)) } },
-                        onCancel = viewModel::cancelUpdate,
+                        onCancel = viewModel.updates::cancelUpdate,
                         onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
-                        onDismiss = viewModel::closeUpdateDetails
+                        onDismiss = viewModel.updates::closeUpdateDetails
                     )
                 }
                 rollback?.let { state ->
                     RollbackDialog(
                         state,
-                        onStart = viewModel::startRollback,
+                        onStart = viewModel.updates::startRollback,
                         onRemove = { runCatching { context.startActivity(AppUpdateInstaller.uninstallIntent(context)) } },
-                        onClose = viewModel::closeRollback
+                        onClose = viewModel.updates::closeRollback
                     )
                 }
                 // Downloaded and allowed: open Android's installer, which asks to confirm.
@@ -1587,8 +1587,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     }
                 }
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                    viewModel.resumeUpdateInstall()
-                    viewModel.refreshUpdateInfo() // each time the app comes to the front
+                    viewModel.updates.resumeUpdateInstall()
+                    viewModel.updates.refreshUpdateInfo() // each time the app comes to the front
                 }
 
                 // Application Introduction / Server Details Onboarding Modal
