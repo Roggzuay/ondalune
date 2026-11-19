@@ -245,8 +245,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val songsAhead by viewModel.songsAhead.collectAsStateWithLifecycle()
     val coversSaved by viewModel.coversSaved.collectAsStateWithLifecycle()
 
-    val speedPitchState by viewModel.speedPitchState.collectAsStateWithLifecycle()
-    val reverbState by viewModel.reverbState.collectAsStateWithLifecycle()
+    val speedPitchState by viewModel.sound.speedPitchState.collectAsStateWithLifecycle()
+    val reverbState by viewModel.sound.reverbState.collectAsStateWithLifecycle()
     val sleepTimerState by viewModel.playback.sleepTimerState.collectAsStateWithLifecycle()
     val tabDisplayPreferences by viewModel.tabDisplayPreferences.collectAsStateWithLifecycle()
 
@@ -270,7 +270,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isAppIconSettingsOpen by viewModel.isAppIconSettingsOpen.collectAsStateWithLifecycle()
     val showServerOnboarding by viewModel.showServerOnboarding.collectAsStateWithLifecycle()
     val whatsNew by viewModel.updates.whatsNew.collectAsStateWithLifecycle()
-    val showSpeedResetHint by viewModel.showSpeedResetHint.collectAsStateWithLifecycle()
+    val showSpeedResetHint by viewModel.sound.showSpeedResetHint.collectAsStateWithLifecycle()
     val availableUpdate by viewModel.updates.availableUpdate.collectAsStateWithLifecycle()
     val updateInstall by viewModel.updates.updateInstall.collectAsStateWithLifecycle()
     val updateCheckStatus by viewModel.updates.updateCheckStatus.collectAsStateWithLifecycle()
@@ -292,8 +292,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val shuffleEnabled by viewModel.playback.shuffleEnabled.collectAsStateWithLifecycle()
     val repeatOneEnabled by viewModel.playback.repeatOneEnabled.collectAsStateWithLifecycle()
 
-    val eqPreset by viewModel.equalizerPreset.collectAsStateWithLifecycle()
-    val customEqBands by viewModel.customEqBands.collectAsStateWithLifecycle()
+    val eqPreset by viewModel.sound.equalizerPreset.collectAsStateWithLifecycle()
+    val customEqBands by viewModel.sound.customEqBands.collectAsStateWithLifecycle()
     val customizationSettings by viewModel.customizationSettings.collectAsStateWithLifecycle()
     val localFolders by viewModel.localFolders.collectAsStateWithLifecycle()
     val folderScan by viewModel.folderScan.collectAsStateWithLifecycle()
@@ -1036,7 +1036,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             shuffleMode = shuffleMode,
                                             onSetShuffleMode = viewModel.playback::setShuffleMode,
                                             onSetSmartShuffleProfile = viewModel::setSmartShuffleProfile,
-                                            onSelectReverbPreset = viewModel::selectReverbPreset,
+                                            onSelectReverbPreset = viewModel.sound::selectReverbPreset,
                                             onSetCrossfadeSeconds = viewModel.settings::setCrossfadeSeconds,
                                             onSetGapless = viewModel.settings::setGaplessPlayback,
                                             onSetAutoplay = viewModel.settings::setAutoplaySimilar,
@@ -1073,7 +1073,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onStartSleepTimerMinutes = { mins -> viewModel.playback.startSleepTimerDuration(mins) },
                                             onStartSleepTimerEndOfTrack = viewModel.playback::startSleepTimerEndOfTrack,
                                             onCancelSleepTimer = viewModel.playback::cancelSleepTimer,
-                                            onSelectEqPreset = viewModel::selectEqualizerPreset,
+                                            onSelectEqPreset = viewModel.sound::selectEqualizerPreset,
                                             offlineStorageSummary = offlineStorageSummary,
                                             songsAhead = songsAhead,
                                             coversSaved = coversSaved,
@@ -1231,11 +1231,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                 onResetSpeedPitch = {
-                                    viewModel.resetSpeedAndPitch()
-                                    viewModel.resetReverbToDry()
+                                    viewModel.sound.resetSpeedAndPitch()
+                                    viewModel.sound.resetReverbToDry()
                                 },
                                 showSpeedResetHint = showSpeedResetHint,
-                                onSpeedResetHintShown = viewModel::markSpeedResetHintShown,
+                                onSpeedResetHintShown = viewModel.sound::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
                                 playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
@@ -1300,11 +1300,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                 onResetSpeedPitch = {
-                                    viewModel.resetSpeedAndPitch()
-                                    viewModel.resetReverbToDry()
+                                    viewModel.sound.resetSpeedAndPitch()
+                                    viewModel.sound.resetReverbToDry()
                                 },
                                 showSpeedResetHint = showSpeedResetHint,
-                                onSpeedResetHintShown = viewModel::markSpeedResetHintShown,
+                                onSpeedResetHintShown = viewModel.sound::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
                                 onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
@@ -1335,20 +1335,20 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         state = speedPitchState,
                         reverbState = reverbState,
                         tempo = currentTempo,
-                        onSetSpeed = viewModel::setPlaybackSpeed,
-                        onSetPitchMode = viewModel::setPitchCorrectionMode,
-                        onSetIndependentSemitones = viewModel::setIndependentSemitones,
-                        onSetIndependentPitchRatio = viewModel::setIndependentPitchRatio,
-                        onSetReverbEnabled = viewModel::setReverbEnabled,
-                        onSelectReverbPreset = viewModel::selectReverbPreset,
-                        onSetReverbWetDryMix = viewModel::setReverbWetDryMix,
-                        onSetReverbRoomSize = viewModel::setReverbRoomSize,
-                        onSetReverbDecay = viewModel::setReverbDecay,
-                        onSetReverbDamping = viewModel::setReverbDamping,
-                        onResetReverb = viewModel::resetReverbToDry,
+                        onSetSpeed = viewModel.sound::setPlaybackSpeed,
+                        onSetPitchMode = viewModel.sound::setPitchCorrectionMode,
+                        onSetIndependentSemitones = viewModel.sound::setIndependentSemitones,
+                        onSetIndependentPitchRatio = viewModel.sound::setIndependentPitchRatio,
+                        onSetReverbEnabled = viewModel.sound::setReverbEnabled,
+                        onSelectReverbPreset = viewModel.sound::selectReverbPreset,
+                        onSetReverbWetDryMix = viewModel.sound::setReverbWetDryMix,
+                        onSetReverbRoomSize = viewModel.sound::setReverbRoomSize,
+                        onSetReverbDecay = viewModel.sound::setReverbDecay,
+                        onSetReverbDamping = viewModel.sound::setReverbDamping,
+                        onResetReverb = viewModel.sound::resetReverbToDry,
                         onReset = {
-                            viewModel.resetSpeedAndPitch()
-                            viewModel.resetReverbToDry()
+                            viewModel.sound.resetSpeedAndPitch()
+                            viewModel.sound.resetReverbToDry()
                         },
                         onClose = { viewModel.setSpeedPitchSheetOpen(false) }
                     )
@@ -1405,8 +1405,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         streamQuality = customizationSettings.streamQuality(onMobileData),
                         onMobileData = onMobileData,
                         onSetStreamQuality = { viewModel.setStreamQuality(onMobileData, it) },
-                        onSelectPreset = viewModel::selectEqualizerPreset,
-                        onUpdateBand = viewModel::updateCustomEqBand,
+                        onSelectPreset = viewModel.sound::selectEqualizerPreset,
+                        onUpdateBand = viewModel.sound::updateCustomEqBand,
                         onPlayMix = viewModel::playMix,
                         onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }

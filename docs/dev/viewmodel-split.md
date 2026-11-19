@@ -60,7 +60,7 @@ Least connected first, so the pattern is proven on easy parts before the busy on
 |---|---|---|---|---|
 | 1 ✓ | `UpdateController` | update check, banner, install, rollback, What's new | ~230 | banner only |
 | 2 ✓ | `LyricsController` | lyrics loading, search, choosing, server lyrics | ~130 | track start (from playback host) |
-| 3 | `SoundController` | speed and pitch, reverb, EQ state and saving | ~260 | audio engine setters |
+| 3 ✓ | `SoundController` | speed and pitch, reverb, EQ state and saving | ~260 | audio engine setters |
 | 4 | `FolderController` | phone music folders, scans, permissions | ~110 | library refresh |
 | 5 | `NavigationState` | destination, detail ids, sheets, jumps, scroll-to-top | ~250 | none (pure UI state) |
 | 6 | `AppearanceController` | theme, colours, icon, style, widget, refresh rate | ~180 | icon manager |
