@@ -1,5 +1,8 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.LocalHold
+import io.github.roggzuay.ondalune.ui.components.HoldTarget
+import androidx.compose.foundation.combinedClickable
 import io.github.roggzuay.ondalune.ui.components.ArtworkImage
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
@@ -524,6 +527,7 @@ fun TopArtistsShelf(shelves: HomeShelves, header: @Composable () -> Unit) {
     }
     if (top.isEmpty()) return
     val actions = LocalTrackActions.current
+    val hold = LocalHold.current
     Column {
         header()
         LazyRow(
@@ -537,7 +541,10 @@ fun TopArtistsShelf(shelves: HomeShelves, header: @Composable () -> Unit) {
                     modifier = Modifier
                         .width(104.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable { actions?.openArtist(track) }
+                        .combinedClickable(
+                            onLongClick = hold?.let { { it(HoldTarget.Artist(track.artistId, track.artist, track.coverArtUrl)) } },
+                            onClick = { actions?.openArtist(track) }
+                        )
                         .testTag("top_artist_${track.artist}")
                 ) {
                     // Same picture as the Artists tab: the cover, or the artist's initials on generated art.
@@ -782,6 +789,7 @@ fun HomeLayoutSheet(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
+    val hold = LocalHold.current
     Column {
         ShelfHeader("Mixes for you", onMore = null)
         LazyRow(
@@ -793,7 +801,11 @@ fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
                     modifier = Modifier
                         .width(156.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .clickable(onClickLabel = "Play ${mix.title}") { onPlay(mix) }
+                        .combinedClickable(
+                            onClickLabel = "Play ${mix.title}",
+                            onLongClick = hold?.let { { it(HoldTarget.Songs(mix.title, mix.subtitle, mix.covers.firstOrNull().orEmpty(), mix.tracks)) } },
+                            onClick = { onPlay(mix) }
+                        )
                         // Room inside the rounded corner, so the clip never touches the text.
                         .padding(bottom = 12.dp)
                         .testTag("mix_${mix.key}")

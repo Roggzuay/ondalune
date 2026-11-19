@@ -150,6 +150,9 @@ import io.github.roggzuay.ondalune.ui.components.PullSyncIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveNavItem
 import io.github.roggzuay.ondalune.ui.components.ExpressiveNavigationDock
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
+import io.github.roggzuay.ondalune.ui.components.LocalHold
+import io.github.roggzuay.ondalune.ui.components.HoldTarget
+import io.github.roggzuay.ondalune.ui.components.CollectionOptionsSheet
 import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
 import io.github.roggzuay.ondalune.ui.components.rememberHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
@@ -365,6 +368,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     BackHandler(enabled = trackSelection.active) { trackSelection.clear() }
     val allPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
     val currentPlaylists by rememberUpdatedState(allPlaylists)
+    val currentLibrary by rememberUpdatedState(allServerTracks)
+    val currentArtists by rememberUpdatedState(allArtists)
+    var held by remember { mutableStateOf<HoldTarget?>(null) }
     val trackActions = remember(viewModel) {
         object : TrackActions {
             override val playlists get() = currentPlaylists
@@ -385,6 +391,32 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             override fun originalOf(track: SubsonicTrack) = viewModel.originalOf(track)
             override fun saveDetails(track: SubsonicTrack, title: String, artist: String, genre: String, year: Int) =
                 viewModel.saveTrackDetails(track, title, artist, genre, year)
+            override fun tracksOf(target: HoldTarget): List<SubsonicTrack> = when (target) {
+                is HoldTarget.Song -> listOf(target.track)
+                is HoldTarget.Album -> currentLibrary.filter { it.albumId == target.album.id }
+                is HoldTarget.Artist -> currentLibrary.filter {
+                    (target.id.isNotBlank() && it.artistId == target.id) || it.artist.equals(target.name, ignoreCase = true)
+                }
+                is HoldTarget.Playlist -> currentLibrary.associateBy { it.id }.let { byId -> target.playlist.trackIds.mapNotNull(byId::get) }
+                is HoldTarget.Songs -> target.tracks
+            }
+            override fun play(target: HoldTarget, shuffle: Boolean) {
+                val tracks = tracksOf(target)
+                when {
+                    tracks.isEmpty() -> Unit
+                    shuffle -> viewModel.playback.startSmartShuffleSession(tracks)
+                    target is HoldTarget.Playlist -> viewModel.playback.playPlaylist(target.playlist)
+                    else -> viewModel.playback.playInOrder(tracks)
+                }
+            }
+            private fun artistOf(id: String, name: String) =
+                currentArtists.firstOrNull { it.id == id } ?: currentArtists.firstOrNull { it.name.equals(name, ignoreCase = true) }
+            override fun isFavouriteArtist(id: String, name: String) =
+                artistOf(id, name)?.let { it.id in viewModel.favouriteArtistIds.value }
+            override fun toggleFavouriteArtist(id: String, name: String) {
+                artistOf(id, name)?.let(viewModel::toggleFavouriteArtist)
+            }
+            override fun deletePlaylist(playlist: SubsonicPlaylist) = viewModel.deletePlaylist(playlist.id)
         }
     }
     val favouriteArtistIds by viewModel.favouriteArtistIds.collectAsStateWithLifecycle()
@@ -531,6 +563,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     CompositionLocalProvider(
         LocalHapticFeedbackManager provides hapticManager,
         LocalTrackActions provides trackActions,
+        LocalHold provides { target: HoldTarget -> hapticManager.performSubtleTick(); held = target },
         LocalTrackSelection provides trackSelection,
         LocalDownloads provides downloadsMap,
         LocalArtistExtras provides artistExtras
@@ -1378,6 +1411,17 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }
                     )
+                }
+
+                when (val target = held) {
+                    null -> Unit
+                    is HoldTarget.Song -> TrackOptionsSheet(
+                        tracks = listOf(target.track),
+                        downloads = downloadsMap,
+                        onSelect = null,
+                        onDismiss = { held = null }
+                    )
+                    else -> CollectionOptionsSheet(target, downloadsMap, onDismiss = { held = null })
                 }
 
                 if (selectionSheetOpen && trackSelection.active) {

@@ -220,6 +220,21 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Plays what a voice request asked for ("" plays Your Mix), from the screen or the car. */
     fun playFromSearch(query: String) = bridgePlaySearch(query)
 
+    /** An app-icon shortcut (see QuickPlayActivity); on a cold start it waits for the library. */
+    fun playShortcut(kind: String) {
+        viewModelScope.launch {
+            val library = withTimeoutOrNull(CAR_LIBRARY_WAIT_MS) { allServerTracks.first { it.isNotEmpty() } } ?: return@launch
+            when (kind) {
+                io.github.roggzuay.ondalune.QuickPlayActivity.SHORTCUT_FAVOURITES -> {
+                    val favourites = library.filter { it.starred }
+                    if (favourites.isEmpty()) _statusBanner.value = "No favourite songs yet" else playback.startSmartShuffleSession(favourites)
+                }
+                io.github.roggzuay.ondalune.QuickPlayActivity.SHORTCUT_ALL -> playback.startSmartShuffleSession(library)
+                else -> playYourMix()
+            }
+        }
+    }
+
     private val bridgePlaySearch: (String) -> Unit = { query ->
         if (query.isNotBlank()) playFromCar { it.search(query) } else viewModelScope.launch {
             withTimeoutOrNull(CAR_LIBRARY_WAIT_MS) { allServerTracks.first { it.isNotEmpty() } } ?: return@launch

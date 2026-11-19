@@ -74,6 +74,13 @@ import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.SubsonicDownloadEntity
 import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.data.model.SubsonicAlbum
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 
 /**
  * Everything a track row (or the multi-select bar) can do to tracks. Provided once by the shell
@@ -100,9 +107,29 @@ interface TrackActions {
     fun originalOf(track: SubsonicTrack): SubsonicTrack
     /** Saves details edited in the app (kept on the phone, never sent to the server). */
     fun saveDetails(track: SubsonicTrack, title: String, artist: String, genre: String, year: Int)
+    /** The songs a held album, artist or playlist stands for, in their own order. */
+    fun tracksOf(target: HoldTarget): List<SubsonicTrack>
+    fun play(target: HoldTarget, shuffle: Boolean)
+    /** Whether the artist is a favourite; null when the library doesn't list the artist. */
+    fun isFavouriteArtist(id: String, name: String): Boolean?
+    fun toggleFavouriteArtist(id: String, name: String)
+    fun deletePlaylist(playlist: SubsonicPlaylist)
 }
 
 val LocalTrackActions = staticCompositionLocalOf<TrackActions?> { null }
+
+/** What a held card stands for. The shell shows one sheet for all of them. */
+sealed interface HoldTarget {
+    data class Song(val track: SubsonicTrack) : HoldTarget
+    data class Album(val album: SubsonicAlbum) : HoldTarget
+    data class Artist(val id: String, val name: String, val coverArtUrl: String) : HoldTarget
+    data class Playlist(val playlist: SubsonicPlaylist) : HoldTarget
+    /** A mix, genre or folder: a named set of songs. */
+    data class Songs(val title: String, val subtitle: String, val coverArtUrl: String, val tracks: List<SubsonicTrack>) : HoldTarget
+}
+
+/** Opens the hold sheet for a card; null outside the shell (previews, tests). */
+val LocalHold = staticCompositionLocalOf<((HoldTarget) -> Unit)?> { null }
 
 /** Download state per track id, so any row anywhere can show its progress bar. */
 val LocalDownloads = compositionLocalOf<Map<String, SubsonicDownloadEntity>> { emptyMap() }
@@ -153,7 +180,6 @@ fun TrackOptionsSheet(
 ) {
     val actions = LocalTrackActions.current ?: return
     val single = tracks.singleOrNull()
-    var showPlaylists by remember { mutableStateOf(false) }
     var newPlaylistDialog by remember { mutableStateOf(false) }
     var editDialog by remember { mutableStateOf(false) }
     val allFavourite = tracks.all { it.starred }
@@ -213,18 +239,7 @@ fun TrackOptionsSheet(
                     run { actions.download(tracks) }
                 }
             }
-            SheetItem(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", "option_add_playlist") { showPlaylists = !showPlaylists }
-            AnimatedVisibility(visible = showPlaylists) {
-                Column(modifier = Modifier.padding(start = 24.dp)) {
-                    SheetItem(Icons.Filled.Add, "New playlist…", "option_new_playlist") { newPlaylistDialog = true }
-                    // Playlists shared with you by others are read-only.
-                    actions.playlists.filterNot { it.readOnly }.forEach { playlist ->
-                        SheetItem(Icons.AutoMirrored.Filled.QueueMusic, playlist.name, "option_playlist_${playlist.id}") {
-                            run { actions.addToPlaylist(tracks, playlist) }
-                        }
-                    }
-                }
-            }
+            PlaylistItems(actions, tracks, onNew = { newPlaylistDialog = true }, run = ::run)
             if (single != null) {
                 SheetItem(Icons.Filled.Edit, "Edit details", "option_edit_details") { editDialog = true }
                 SheetItem(Icons.Filled.Album, "Go to album", "option_go_album") { run { actions.openAlbum(single) } }
@@ -249,20 +264,164 @@ fun TrackOptionsSheet(
     }
 
     if (newPlaylistDialog) {
-        var name by remember { mutableStateOf("") }
+        NewPlaylistDialog("", onCreate = { name ->
+            newPlaylistDialog = false
+            run { actions.createPlaylist(name, tracks) }
+        }, onDismiss = { newPlaylistDialog = false })
+    }
+}
+
+/** "Add to playlist", opening in place to "New playlist…" and the playlists you can change. */
+@Composable
+private fun PlaylistItems(actions: TrackActions, tracks: List<SubsonicTrack>, onNew: () -> Unit, run: (() -> Unit) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    SheetItem(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", "option_add_playlist") { open = !open }
+    AnimatedVisibility(visible = open) {
+        Column(modifier = Modifier.padding(start = 24.dp)) {
+            SheetItem(Icons.Filled.Add, "New playlist…", "option_new_playlist", onNew)
+            // Playlists shared with you by others are read-only.
+            actions.playlists.filterNot { it.readOnly }.forEach { playlist ->
+                SheetItem(Icons.AutoMirrored.Filled.QueueMusic, playlist.name, "option_playlist_${playlist.id}") {
+                    run { actions.addToPlaylist(tracks, playlist) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewPlaylistDialog(suggested: String, onCreate: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(suggested) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New playlist") },
+        text = {
+            OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") })
+        },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onCreate(name.trim()) }) { Text("Create") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/**
+ * Hold sheet for an album, artist, playlist, mix, genre or folder: play or shuffle it, line it
+ * up, download it, put it in a playlist, and the actions that belong to its kind.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CollectionOptionsSheet(
+    target: HoldTarget,
+    downloads: Map<String, SubsonicDownloadEntity>,
+    onDismiss: () -> Unit
+) {
+    val actions = LocalTrackActions.current ?: return
+    val tracks = remember(target) { actions.tracksOf(target) }
+    var newPlaylistDialog by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    fun run(action: () -> Unit) {
+        action()
+        onDismiss()
+    }
+    val title: String
+    val subtitle: String
+    val cover: String
+    when (target) {
+        is HoldTarget.Album -> { title = target.album.name; subtitle = target.album.artist; cover = target.album.coverArtUrl }
+        is HoldTarget.Artist -> { title = target.name; subtitle = countOf(tracks.size, "song"); cover = target.coverArtUrl }
+        is HoldTarget.Playlist -> { title = target.playlist.name; subtitle = countOf(tracks.size, "song"); cover = target.playlist.coverArtUrl.ifBlank { tracks.firstOrNull()?.coverArtUrl.orEmpty() } }
+        is HoldTarget.Songs -> { title = target.title; subtitle = target.subtitle; cover = target.coverArtUrl }
+        is HoldTarget.Song -> { title = target.track.title; subtitle = target.track.artist; cover = target.track.coverArtUrl }
+    }
+    val round = target is HoldTarget.Artist
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ExpressiveArtwork(
+                    seedHex = "#7C4DFF",
+                    accentHex = "#70F5FF",
+                    artStyleIndex = title.length % 5,
+                    coverArtUrl = cover,
+                    monogramText = if (round) title else "",
+                    modifier = Modifier.size(52.dp).then(if (round) Modifier.clip(CircleShape) else Modifier)
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (tracks.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(onClick = { run { actions.play(target, shuffle = false) } }, modifier = Modifier.weight(1f).testTag("hold_play")) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Play")
+                    }
+                    FilledTonalButton(onClick = { run { actions.play(target, shuffle = true) } }, modifier = Modifier.weight(1f).testTag("hold_shuffle")) {
+                        Icon(Icons.Filled.Shuffle, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Shuffle")
+                    }
+                }
+                HorizontalDivider()
+                SheetItem(Icons.Filled.PlaylistPlay, "Play next", "option_play_next") { run { actions.playNext(tracks) } }
+                SheetItem(Icons.AutoMirrored.Filled.QueueMusic, "Add to queue", "option_add_queue") { run { actions.addToQueue(tracks) } }
+            }
+            if (target is HoldTarget.Artist) {
+                actions.isFavouriteArtist(target.id, target.name)?.let { favourite ->
+                    SheetItem(
+                        if (favourite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        if (favourite) "Remove from favourites" else "Add to favourites",
+                        "option_favourite"
+                    ) { run { actions.toggleFavouriteArtist(target.id, target.name) } }
+                }
+            }
+            if (tracks.isNotEmpty()) {
+                val allDownloaded = tracks.all { downloads[it.id]?.isCompleted == true }
+                if (allDownloaded) {
+                    SheetItem(Icons.Filled.DeleteOutline, "Remove downloads", "option_remove_download") { run { actions.removeDownloads(tracks) } }
+                } else {
+                    SheetItem(Icons.Filled.CloudDownload, "Download ${countOf(tracks.size, "song")}", "option_download") { run { actions.download(tracks) } }
+                }
+                PlaylistItems(actions, tracks, onNew = { newPlaylistDialog = true }, run = ::run)
+            }
+            if (target is HoldTarget.Album) {
+                SheetItem(Icons.Filled.Person, "Go to artist", "option_go_artist") {
+                    run { actions.openArtist(target.album.artistId, target.album.artist) }
+                }
+            }
+            if (target is HoldTarget.Playlist && !target.playlist.readOnly) {
+                SheetItem(Icons.Filled.DeleteOutline, "Delete playlist", "option_delete_playlist") { confirmDelete = true }
+            }
+        }
+    }
+
+    if (newPlaylistDialog) {
+        NewPlaylistDialog(if (target is HoldTarget.Playlist) "" else title, onCreate = { name ->
+            newPlaylistDialog = false
+            run { actions.createPlaylist(name, tracks) }
+        }, onDismiss = { newPlaylistDialog = false })
+    }
+    if (confirmDelete && target is HoldTarget.Playlist) {
         AlertDialog(
-            onDismissRequest = { newPlaylistDialog = false },
-            title = { Text("New playlist") },
-            text = {
-                OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Name") })
-            },
-            confirmButton = {
-                TextButton(enabled = name.isNotBlank(), onClick = {
-                    newPlaylistDialog = false
-                    run { actions.createPlaylist(name.trim(), tracks) }
-                }) { Text("Create") }
-            },
-            dismissButton = { TextButton(onClick = { newPlaylistDialog = false }) { Text("Cancel") } }
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete \"${target.playlist.name}\"?") },
+            text = { Text("The playlist goes; its songs stay in your library.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; run { actions.deletePlaylist(target.playlist) } }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
         )
     }
 }

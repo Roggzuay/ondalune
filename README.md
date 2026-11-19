@@ -19,6 +19,11 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 [Report a bug](https://github.com/Roggzuay/ondalune/issues/new/choose) ·
 [Support on Ko-fi](https://ko-fi.com/roggzuay)
 
+<a href="https://github.com/Roggzuay/ondalune/releases/download/v1.8.0/Ondalune-launch-film.mp4"><img src="docs/launch-film.jpg" width="640" alt="A still from the Ondalune launch film: the player taking its colours from the cover. Opens the one-minute film." /></a>
+
+**[Watch the launch film](https://github.com/Roggzuay/ondalune/releases/download/v1.8.0/Ondalune-launch-film.mp4)** (1 min) ·
+[vertical cut](https://github.com/Roggzuay/ondalune/releases/download/v1.8.0/Ondalune-launch-film-vertical.mp4)
+
 <img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
 
 <img src="docs/screenshots/home.jpg" width="200" alt="Home with the Your Mix hero and its artwork collage" />
@@ -237,6 +242,10 @@ Ondalune is free software, released under the [GNU General Public License v3.0 o
 Bundled fonts are under the SIL Open Font License 1.1, and the libraries it uses are under the
 Apache 2.0 or MIT licences. Full notices are in [NOTICE.md](NOTICE.md) and inside the app under
 **Settings → About & licences**.
+
+The launch film uses "Mountains" by Aquatone, from [*Synthetic Clouds*](https://archive.org/details/aquatone-synthetic-clouds),
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), trimmed with fades. Album covers in the
+film and screenshots come from Creative Commons netlabel releases (CC BY / CC0).
 
 Subsonic, OpenSubsonic, Navidrome, Gonic and Airsonic are trademarks or names of their
 respective owners. Ondalune is an independent project and isn't affiliated with or endorsed by

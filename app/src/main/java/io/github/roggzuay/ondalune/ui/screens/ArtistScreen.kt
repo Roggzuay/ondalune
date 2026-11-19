@@ -1,5 +1,8 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.LocalHold
+import io.github.roggzuay.ondalune.ui.components.HoldTarget
+import androidx.compose.foundation.combinedClickable
 import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import android.content.Intent
@@ -442,6 +445,7 @@ private fun LazyListScope.artistSections(
     if (related.isNotEmpty()) {
         item(key = "related") {
             SectionTitle("Similar artists")
+            val hold = LocalHold.current
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -452,7 +456,10 @@ private fun LazyListScope.artistSections(
                         modifier = Modifier
                             .width(104.dp)
                             .clip(MaterialTheme.shapes.large)
-                            .clickable { onOpenArtist(other.id) }
+                            .combinedClickable(
+                                onLongClick = hold?.let { { it(HoldTarget.Artist(other.id, other.name, other.coverArtUrl)) } },
+                                onClick = { onOpenArtist(other.id) }
+                            )
                     ) {
                         ExpressiveArtwork(
                             seedHex = other.paletteSeedHex,

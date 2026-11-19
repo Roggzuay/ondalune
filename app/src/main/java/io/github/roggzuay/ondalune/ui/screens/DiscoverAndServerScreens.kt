@@ -2,6 +2,7 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.LocalHold
 import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -258,6 +259,7 @@ fun FavouritesCollectionScreen(
     onToggleSortDirection: () -> Unit = {},
     scrollToTopSignal: Int = 0
 ) {
+    val hold = LocalHold.current
     val activeAlbum = remember(albums, selectedAlbumId) {
         if (selectedAlbumId == null) null else albums.find { it.id == selectedAlbumId }
     }
@@ -367,7 +369,7 @@ fun FavouritesCollectionScreen(
             } else if ((activeFilter == FavouritesFilterTab.ALL || activeFilter == FavouritesFilterTab.ALBUMS) && starredAlbums.isNotEmpty()) {
                 item(key = "fav_albums_title") { Text("Albums", style = MaterialTheme.typography.titleLarge) }
                 collectionEntries(
-                    starredAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }) },
+                    starredAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }, hold = hold) },
                     viewMode, columns
                 )
             }

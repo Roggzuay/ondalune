@@ -240,7 +240,7 @@ class OndaluneMediaButtonReceiver : BroadcastReceiver() {
         }
         when {
             OndaluneMediaBridge.onCommand != null -> OndaluneMediaBridge.dispatchCommand(context, command)
-            command == MediaBridgeCommand.PLAY || command == MediaBridgeCommand.TOGGLE_PLAY_PAUSE -> OndaluneMediaBridge.playWithoutScreen(context, "")
+            command == MediaBridgeCommand.PLAY || command == MediaBridgeCommand.TOGGLE_PLAY_PAUSE -> OndaluneMediaBridge.playWithoutScreen(context) { it.playFromSearch("") }
         }
     }
 }
@@ -456,24 +456,30 @@ object OndaluneMediaBridge {
         refreshAllWidgets(context.applicationContext)
     }
 
-    /** The player taken by a voice request or play button with Ondalune closed; [closePlayer] gives it back. */
+    /** The player taken by [playWithoutScreen] with Ondalune closed; [closePlayer] gives it back. */
     private var heldPlayer: io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel? = null
 
     /**
-     * Plays what a voice request asked for, or Your Mix for "" (a play button), whether or not
-     * Ondalune is open. The service goes foreground at once, while the request still allows it,
-     * and leaves the foreground again if nothing has started playing (no server reachable, say).
+     * Runs [play] on the player whether or not Ondalune is open: a voice request, an app-icon
+     * shortcut, or a play button. With Ondalune closed the service goes foreground at once, while
+     * the request still allows it, and leaves the foreground again if nothing has started playing
+     * (no server reachable, say).
      */
     @androidx.annotation.MainThread
-    fun playWithoutScreen(context: Context, query: String) {
+    fun playWithoutScreen(context: Context, play: (io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel) -> Unit) {
         val app = context.applicationContext as io.github.roggzuay.ondalune.OndaluneApp
-        onPlayFromSearch?.let { return it(query) }
+        if (onCommand != null) {
+            // The screen or a car already holds the player: borrow it for the call.
+            play(app.player.acquire())
+            app.player.release()
+            return
+        }
         runCatching {
             androidx.core.content.ContextCompat.startForegroundService(
                 app, Intent(app, OndalunePlaybackService::class.java).setAction(ACTION_SERVICE_START_FOREGROUND)
             )
         }
-        (heldPlayer ?: app.player.acquire().also { heldPlayer = it }).playFromSearch(query)
+        play(heldPlayer ?: app.player.acquire().also { heldPlayer = it })
         foregroundStopHandler.postDelayed({
             if (!lastIsPlaying) runCatching {
                 app.startService(Intent(app, OndalunePlaybackService::class.java).setAction(ACTION_SERVICE_STOP_FOREGROUND))

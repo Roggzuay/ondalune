@@ -10,6 +10,11 @@ import io.github.roggzuay.ondalune.ui.viewmodel.SharedPlayer
 class OndaluneApp : Application(), ImageLoaderFactory {
     val player = SharedPlayer(this)
 
+    override fun onCreate() {
+        super.onCreate()
+        QuickPlayActivity.publishShortcuts(this)
+    }
+
     /**
      * Artwork-friendly Coil setup: a large disk cache that ignores the no-cache headers many
      * Subsonic servers send for getCoverArt, so covers load once and then come from disk. It sits

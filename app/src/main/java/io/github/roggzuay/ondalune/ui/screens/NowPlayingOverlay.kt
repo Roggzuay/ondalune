@@ -2,6 +2,8 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.expandHorizontally
 import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.lyrics.LyricsSearch
 import io.github.roggzuay.ondalune.data.lyrics.LyricsSource
@@ -1417,6 +1419,20 @@ private fun PlayerControls(
         ) {
             val haptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
             val queueOpen = activeTab == NowPlayingSheetTab.QUEUE
+            // The transport folds away with the lyrics up; play/pause stays reachable here.
+            AnimatedVisibility(
+                visible = lyricsOpen,
+                enter = expandHorizontally(tween(320)) + fadeIn(tween(240, delayMillis = 80)),
+                exit = shrinkHorizontally(tween(320)) + fadeOut(tween(160)),
+                modifier = Modifier.weight(1f)
+            ) {
+                FilledIconButton(onClick = onTogglePlay, modifier = Modifier.testTag("lyrics_play_pause")) {
+                    Icon(
+                        if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play"
+                    )
+                }
+            }
             PlayerToggle(
                 checked = lyricsOpen,
                 onToggle = { onSelectTab(if (lyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },

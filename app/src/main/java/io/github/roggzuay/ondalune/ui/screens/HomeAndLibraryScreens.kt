@@ -2,6 +2,8 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.LocalHold
+import io.github.roggzuay.ondalune.ui.components.HoldTarget
 import io.github.roggzuay.ondalune.data.model.countOf
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import androidx.compose.runtime.LaunchedEffect
@@ -411,9 +413,11 @@ fun FeaturedAlbumHeroCard(
 ) {
     val spec = LocalStyleSpec.current
     val standard = !spec.artBorder
+    val hold = LocalHold.current
 
     SpringPressableSurface(
         onClick = onOpenAlbum,
+        onLongClick = hold?.let { { it(HoldTarget.Album(album)) } },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
@@ -613,6 +617,7 @@ private fun TrackShelf(
     onPlayTrack: (SubsonicTrack, List<SubsonicTrack>) -> Unit,
     onMore: () -> Unit
 ) {
+    val hold = LocalHold.current
     Column {
         ShelfHeader(title, onMore, onPlayAll = tracks.firstOrNull()?.let { first -> { onPlayTrack(first, tracks) } })
         LazyRow(
@@ -623,6 +628,7 @@ private fun TrackShelf(
                 val isCurrent = track.id == currentTrackId
                 SpringPressableSurface(
                     onClick = { onPlayTrack(track, tracks) },
+                    onLongClick = hold?.let { { it(HoldTarget.Song(track)) } },
                     color = Color.Transparent,
                     modifier = Modifier
                         .width(132.dp)
@@ -673,8 +679,10 @@ fun AlbumExpressiveCard(
     fillWidth: Boolean = false
 ) {
     val standard = !LocalStyleSpec.current.cardTiles
+    val hold = LocalHold.current
     SpringPressableSurface(
         onClick = onClick,
+        onLongClick = hold?.let { { it(HoldTarget.Album(album)) } },
         color = if (standard) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
         cornerRadius = 26.dp,
         modifier = Modifier
@@ -1028,7 +1036,12 @@ private fun TrackSwipeBackground(direction: SwipeToDismissBoxValue, starred: Boo
 }
 
 /** [offline]: (downloaded, total) for an album only partly downloaded, shown while filtering to downloads. */
-internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit, offline: Pair<Int, Int>? = null) = CollectionEntry(
+internal fun SubsonicAlbum.toEntry(
+    onOpen: () -> Unit,
+    onPlay: () -> Unit,
+    offline: Pair<Int, Int>? = null,
+    hold: ((HoldTarget) -> Unit)? = null
+) = CollectionEntry(
     key = "alb_$id",
     title = name,
     subtitle = artist,
@@ -1039,12 +1052,13 @@ internal fun SubsonicAlbum.toEntry(onOpen: () -> Unit, onPlay: () -> Unit, offli
     accentHex = accentHex,
     artStyleIndex = artStyleIndex,
     onClick = onOpen,
-    onPlay = onPlay
+    onPlay = onPlay,
+    onLongClick = hold?.let { { it(HoldTarget.Album(this)) } }
 )
 
 /**
- * Playlists show the server's cover, else their first track's; delete is in the row's menu and on
- * long-press. The subtitle says where the playlist lives: on the server (and whose, when it was
+ * Playlists show the server's cover, else their first track's; delete is in the row's menu and in
+ * the hold sheet. The subtitle says where the playlist lives: on the server (and whose, when it was
  * shared with you) or in Ondalune.
  */
 internal fun SubsonicPlaylist.toEntry(
@@ -1052,7 +1066,8 @@ internal fun SubsonicPlaylist.toEntry(
     serverName: String,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
-    onDelete: (() -> Unit)?
+    onDelete: (() -> Unit)?,
+    hold: ((HoldTarget) -> Unit)? = null
 ) = CollectionEntry(
     key = "pl_$id",
     title = name,
@@ -1066,7 +1081,7 @@ internal fun SubsonicPlaylist.toEntry(
     artStyleIndex = name.length % 5,
     onClick = onOpen,
     onPlay = onPlay,
-    onLongClick = onDelete,
+    onLongClick = hold?.let { { it(HoldTarget.Playlist(this)) } } ?: onDelete,
     trailing = onDelete?.let { delete ->
         {
             // Delete lives in a menu, away from Play; it still asks before deleting.
@@ -1227,6 +1242,7 @@ fun LibraryCollectionScreen(
     onPlayTrackNext: (SubsonicTrack) -> Unit = {},
     onAddTrackToQueue: (SubsonicTrack) -> Unit = {}
 ) {
+    val hold = LocalHold.current
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var optionsTrack by remember { mutableStateOf<SubsonicTrack?>(null) }
     var pendingDelete by remember { mutableStateOf<SubsonicPlaylist?>(null) }
@@ -1476,7 +1492,7 @@ fun LibraryCollectionScreen(
 
         when (activeTab) {
             LibraryFilterTab.ALBUMS -> collectionEntries(
-                sortedAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }, partialAlbums[album.id]) },
+                sortedAlbums.map { album -> album.toEntry({ onOpenAlbum(album.id) }, { onPlayAlbum(album.id, false) }, partialAlbums[album.id], hold) },
                 effectiveViewMode, gridCols
             )
 
@@ -1496,7 +1512,8 @@ fun LibraryCollectionScreen(
                         artStyleIndex = artist.artStyleIndex,
                         monogram = artist.name,
                         round = true,
-                        onClick = { onOpenArtist(artist.id) }
+                        onClick = { onOpenArtist(artist.id) },
+                        onLongClick = hold?.let { h -> { h(HoldTarget.Artist(artist.id, artist.name, artist.coverArtUrl.ifBlank { fallbackUrl })) } }
                     )
                 },
                 effectiveViewMode, gridCols
@@ -1552,7 +1569,8 @@ fun LibraryCollectionScreen(
                             serverName,
                             onOpen = { onPlayPlaylist(pl) },
                             onPlay = { onPlayPlaylist(pl) },
-                            onDelete = if (pl.readOnly) null else ({ pendingDelete = pl })
+                            onDelete = if (pl.readOnly) null else ({ pendingDelete = pl }),
+                            hold = hold
                         )
                     },
                     effectiveViewMode, gridCols
@@ -1573,6 +1591,11 @@ fun LibraryCollectionScreen(
                         onPlay = {
                             val genreTracks = tracks.filter { it.hasGenre(genre.name) }
                             genreTracks.firstOrNull()?.let { onPlayTrack(it, genreTracks) }
+                        },
+                        onLongClick = hold?.let { h ->
+                            {
+                                h(HoldTarget.Songs(genre.name, "Genre", genreCovers[genre.name.lowercase()].orEmpty(), tracks.filter { it.hasGenre(genre.name) }))
+                            }
                         }
                     )
                 },
@@ -1590,7 +1613,10 @@ fun LibraryCollectionScreen(
                         accentHex = folder.accentHex,
                         coverArtUrl = folder.tracks.firstOrNull()?.coverArtUrl.orEmpty(),
                         onClick = { onOpenFolder(folder.path) },
-                        onPlay = { folder.tracks.firstOrNull()?.let { onPlayTrack(it, folder.tracks) } }
+                        onPlay = { folder.tracks.firstOrNull()?.let { onPlayTrack(it, folder.tracks) } },
+                        onLongClick = hold?.let { h ->
+                            { h(HoldTarget.Songs(folder.displayName, "Folder", folder.tracks.firstOrNull()?.coverArtUrl.orEmpty(), folder.tracks)) }
+                        }
                     )
                 },
                 effectiveViewMode, gridCols
@@ -1925,6 +1951,7 @@ fun PlaylistsCollectionScreen(
     onSetViewMode: (LibraryViewMode) -> Unit = {},
     scrollToTopSignal: Int = 0
 ) {
+    val hold = LocalHold.current
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<SubsonicPlaylist?>(null) }
     val trackMap = remember(tracks) { tracks.associateBy { it.id } }
@@ -2001,7 +2028,8 @@ fun PlaylistsCollectionScreen(
                         serverName,
                         onOpen = { onOpenPlaylist(pl.id) },
                         onPlay = { onPlayPlaylist(pl, null) },
-                        onDelete = if (pl.readOnly) null else ({ pendingDelete = pl })
+                        onDelete = if (pl.readOnly) null else ({ pendingDelete = pl }),
+                        hold = hold
                     )
                 },
                 viewMode, columns
@@ -2076,6 +2104,7 @@ fun SmartDynamicSearchScreen(
     onOpenFolder: (String?) -> Unit,
     onPlayPlaylist: (SubsonicPlaylist) -> Unit
 ) {
+    val searchHold = LocalHold.current
     // Support drill-down into Album, Artist, Genre, or Folder directly from Search Results
     val detailAlbum = allAlbums.find { it.id == selectedAlbumId }
     if (detailAlbum != null) {
@@ -2455,6 +2484,7 @@ fun SmartDynamicSearchScreen(
                 items(matchedArtists, key = { "search_art_${it.id}" }) { artist ->
                     SpringPressableSurface(
                         onClick = { onOpenArtist(artist.id) },
+                        onLongClick = searchHold?.let { { it(HoldTarget.Artist(artist.id, artist.name, artist.coverArtUrl)) } },
                         color = MaterialTheme.colorScheme.surfaceContainer,
                         cornerRadius = 22.dp,
                         modifier = Modifier.fillMaxWidth()
