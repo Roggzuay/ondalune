@@ -233,10 +233,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
 
     val currentTrack by viewModel.playback.currentTrack.collectAsStateWithLifecycle()
     val playbackQueue by viewModel.playback.playbackQueue.collectAsStateWithLifecycle()
-    val currentLyrics by viewModel.currentLyrics.collectAsStateWithLifecycle()
-    val currentLyricsResult by viewModel.currentLyricsResult.collectAsStateWithLifecycle()
-    val lyricsSource by viewModel.lyricsSource.collectAsStateWithLifecycle()
-    val lyricsSearch by viewModel.lyricsSearch.collectAsStateWithLifecycle()
+    val currentLyrics by viewModel.lyrics.currentLyrics.collectAsStateWithLifecycle()
+    val currentLyricsResult by viewModel.lyrics.currentLyricsResult.collectAsStateWithLifecycle()
+    val lyricsSource by viewModel.lyrics.lyricsSource.collectAsStateWithLifecycle()
+    val lyricsSearch by viewModel.lyrics.lyricsSearch.collectAsStateWithLifecycle()
 
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val isBuffering by viewModel.isBuffering.collectAsStateWithLifecycle()
@@ -1273,10 +1273,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 lyricsResult = currentLyricsResult,
                                 lyricsSource = lyricsSource,
                                 lyricsSearch = lyricsSearch,
-                                onSearchLyrics = viewModel::searchLyrics,
-                                onChooseLyrics = viewModel::chooseLyrics,
-                                onUseServerLyrics = viewModel::useServerLyrics,
-                                onRestoreLyrics = viewModel::restorePreviousLyrics,
+                                onSearchLyrics = viewModel.lyrics::searchLyrics,
+                                onChooseLyrics = viewModel.lyrics::chooseLyrics,
+                                onUseServerLyrics = viewModel.lyrics::useServerLyrics,
+                                onRestoreLyrics = viewModel.lyrics::restorePreviousLyrics,
                                 download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
                                     PlayerDownload(
                                         state = downloadsMap[activeTrack.id],
