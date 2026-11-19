@@ -262,6 +262,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Speed, pitch, reverb and EQ (see SoundController). */
     val sound = SoundController(prefs, audioEngine) { _statusBanner.value = it }
 
+    /** Music folders on this phone (see FolderController). */
+    val musicFolders = FolderController(application, repository, viewModelScope) { _statusBanner.value = it }
+
     /** Every library row: the servers and, when it is on, this phone's music. */
     private val sources: StateFlow<List<SubsonicServerConfig>> = repository.serversFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -947,7 +950,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 _statusBanner.value = "Music on this phone now comes from folders you pick: add them in Settings → Music sources"
             }
             // Songs added, changed or removed while the app was closed.
-            if (settings.customization.value.rescanFoldersOnLaunch) scanFolders(repository.localFolders())
+            if (settings.customization.value.rescanFoldersOnLaunch) musicFolders.scanFolders(repository.localFolders())
         }
         viewModelScope.launch {
             tracks.collect { list ->
@@ -1923,89 +1926,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ---- Music folders on this phone -----------------------------------------------------
-
-    /** Folders picked in Settings → Music sources; only their music joins the library. */
-    val localFolders: StateFlow<List<LocalFolder>> = repository.observeLocalFolders()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
-    /** A folder scan under way: which folder, how many songs found and read. */
-    data class FolderScan(val folderName: String, val found: Int, val read: Int)
-
-    private val _folderScan = MutableStateFlow<FolderScan?>(null)
-    val folderScan: StateFlow<FolderScan?> = _folderScan.asStateFlow()
-    private var folderScanJob: Job? = null
-    private val folderReader by lazy { FolderReader(getApplication()) }
-    private val folderPermissions by lazy { FolderPermissions(getApplication()) }
-
-    /** Adds a folder picked in Android's folder picker, keeps access to it, and reads its music. */
-    fun addMusicFolder(treeUri: Uri) {
-        viewModelScope.launch {
-            if (runCatching { folderPermissions.take(treeUri) }.isFailure) {
-                _statusBanner.value = "Ondalune couldn't keep access to that folder"
-                return@launch
-            }
-            val docId = DocumentsContract.getTreeDocumentId(treeUri)
-            val name = docId.substringAfter(':').substringAfterLast('/').ifBlank { folderLocation(docId).substringAfterLast(" › ") }
-            val alreadyPicked = localFolders.value.any { it.treeUri == treeUri.toString() }
-            when (repository.addLocalFolder(treeUri.toString(), docId, name)) {
-                OndaluneRepository.FolderAdd.ALREADY_INCLUDED -> {
-                    if (!alreadyPicked) folderPermissions.release(treeUri.toString())
-                    _statusBanner.value = "\"$name\" is already in your music folders"
-                }
-                OndaluneRepository.FolderAdd.REPLACED_INNER -> {
-                    _statusBanner.value = "\"$name\" replaces the folders inside it"
-                    scanFolders(repository.localFolders().filter { it.treeUri == treeUri.toString() })
-                }
-                OndaluneRepository.FolderAdd.ADDED ->
-                    scanFolders(repository.localFolders().filter { it.treeUri == treeUri.toString() })
-            }
-        }
-    }
-
-    /** Forgets a folder and its songs; the files stay on the phone. */
-    fun removeMusicFolder(folder: LocalFolder) {
-        viewModelScope.launch {
-            if (_folderScan.value?.folderName == folder.name) folderScanJob?.cancel()
-            repository.removeLocalFolder(folder)
-        }
-    }
-
-    fun rescanMusicFolder(folder: LocalFolder) = scanFolders(listOf(folder))
-
-    fun rescanAllMusicFolders() = scanFolders(localFolders.value)
-
-    fun cancelFolderScan() {
-        folderScanJob?.cancel()
-    }
-
     fun setRescanFoldersOnLaunch(enabled: Boolean) = settings.setRescanFoldersOnLaunch(enabled)
 
     fun setLibrarySyncHours(hours: Int) {
         settings.setLibrarySyncHours(hours)
         LibrarySyncWorker.schedule(getApplication(), hours, restart = true)
-    }
-
-    /** Scans [folders] one after another, after any scan already running; never on the main thread. */
-    private fun scanFolders(folders: List<LocalFolder>) {
-        if (folders.isEmpty()) return
-        val before = folderScanJob
-        folderScanJob = viewModelScope.launch(Dispatchers.IO) {
-            before?.join()
-            try {
-                for (folder in folders) {
-                    _folderScan.value = FolderScan(folder.name, 0, 0)
-                    val result = repository.scanLocalFolder(folder, folderReader) { found, read ->
-                        _folderScan.value = FolderScan(folder.name, found, read)
-                    }
-                    if (!result.accessible) {
-                        _statusBanner.value = "Can't open \"${folder.name}\". Its songs stay; allow it again in Settings → Music sources"
-                    }
-                }
-            } finally {
-                _folderScan.value = null
-            }
-        }
     }
 
     fun dismissBanner() {

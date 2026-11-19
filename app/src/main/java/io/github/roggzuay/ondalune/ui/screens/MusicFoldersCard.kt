@@ -44,7 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.LocalFolder
 import io.github.roggzuay.ondalune.data.source.SupportedAudio
-import io.github.roggzuay.ondalune.ui.viewmodel.OndaluneViewModel.FolderScan
+import io.github.roggzuay.ondalune.ui.viewmodel.FolderController.FolderScan
 
 /** What Settings shows about the picked music folders, and what it can do with them. */
 class MusicFolders(

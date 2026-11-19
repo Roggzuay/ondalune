@@ -295,8 +295,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val eqPreset by viewModel.sound.equalizerPreset.collectAsStateWithLifecycle()
     val customEqBands by viewModel.sound.customEqBands.collectAsStateWithLifecycle()
     val customizationSettings by viewModel.customizationSettings.collectAsStateWithLifecycle()
-    val localFolders by viewModel.localFolders.collectAsStateWithLifecycle()
-    val folderScan by viewModel.folderScan.collectAsStateWithLifecycle()
+    val localFolders by viewModel.musicFolders.localFolders.collectAsStateWithLifecycle()
+    val folderScan by viewModel.musicFolders.folderScan.collectAsStateWithLifecycle()
 
     val selectedAlbumId by viewModel.selectedAlbumDetailId.collectAsStateWithLifecycle()
     val selectedArtistId by viewModel.selectedArtistDetailId.collectAsStateWithLifecycle()
@@ -1087,11 +1087,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                                 folders = localFolders,
                                                 scan = folderScan,
                                                 rescanOnLaunch = customizationSettings.rescanFoldersOnLaunch,
-                                                onAdd = viewModel::addMusicFolder,
-                                                onRemove = viewModel::removeMusicFolder,
-                                                onRescan = viewModel::rescanMusicFolder,
-                                                onRescanAll = viewModel::rescanAllMusicFolders,
-                                                onCancelScan = viewModel::cancelFolderScan,
+                                                onAdd = viewModel.musicFolders::addMusicFolder,
+                                                onRemove = viewModel.musicFolders::removeMusicFolder,
+                                                onRescan = viewModel.musicFolders::rescanMusicFolder,
+                                                onRescanAll = viewModel.musicFolders::rescanAllMusicFolders,
+                                                onCancelScan = viewModel.musicFolders::cancelFolderScan,
                                                 onSetRescanOnLaunch = viewModel::setRescanFoldersOnLaunch,
                                                 backgroundScanHours = customizationSettings.librarySyncHours,
                                                 onSetBackgroundScanHours = viewModel::setLibrarySyncHours
