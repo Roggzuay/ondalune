@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Merged into release builds made with -Pondalune.selfUpdate=false (F-Droid): no installer
-     permission and no provider for downloaded updates. -->
+<!-- Merged into release builds made with -Pondalune.selfUpdate=false (F-Droid): no installer or
+     uninstall permission and no provider for downloaded updates. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.REQUEST_DELETE_PACKAGES"
         tools:node="remove" />
 
     <application>

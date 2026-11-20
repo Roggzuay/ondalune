@@ -17,6 +17,7 @@ import io.github.roggzuay.ondalune.data.model.streamQuality
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlaybackSettingsRow
 import io.github.roggzuay.ondalune.ui.components.SupportDeveloperCard
 import io.github.roggzuay.ondalune.ui.components.AboutLicencesRow
+import io.github.roggzuay.ondalune.ui.components.PrivacyPolicyRow
 import io.github.roggzuay.ondalune.ui.components.UpdatesCard
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.BuildConfig
@@ -2128,6 +2129,8 @@ fun SettingsCustomizationScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             AboutLicencesRow()
+            Spacer(modifier = Modifier.height(12.dp))
+            PrivacyPolicyRow()
         }
 
         // Restore Default Appearance & DSP Settings (Preserves Servers & Library)

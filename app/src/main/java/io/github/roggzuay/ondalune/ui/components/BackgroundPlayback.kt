@@ -1,8 +1,10 @@
 package io.github.roggzuay.ondalune.ui.components
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 
 /**
@@ -53,9 +56,15 @@ object BackgroundPlayback {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ASKED, true).apply()
     }
 
-    /** Opens the system "allow unrestricted battery use" dialog, or the settings list as a fallback. */
+    /**
+     * Opens the system "allow unrestricted battery use" dialog, or the settings list as a fallback.
+     * Google Play builds don't declare the permission, so they open the app's own info page.
+     */
     @SuppressLint("BatteryLife") // a music player is an accepted use of this request
     fun requestExemption(context: Context) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return openAppBatterySettings(context)
         val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(direct) }.onFailure {

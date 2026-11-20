@@ -1,7 +1,12 @@
 import java.util.Properties
 
+// Google Play builds pass -Pondalune.playStore=true: Play delivers updates, so no GitHub update
+// check or APK installer, and none of the permissions Play only grants to other kinds of apps.
+val playStore: Boolean = providers.gradleProperty("ondalune.playStore").orNull?.toBoolean() ?: false
+
 // F-Droid builds pass -Pondalune.selfUpdate=false: no GitHub update check and no APK installer.
-val selfUpdate: Boolean = providers.gradleProperty("ondalune.selfUpdate").orNull?.toBoolean() ?: true
+val selfUpdate: Boolean = !playStore &&
+  (providers.gradleProperty("ondalune.selfUpdate").orNull?.toBoolean() ?: true)
 
 /**
  * Release signing, never committed. Locally it comes from `keystore.properties` in the project
@@ -43,6 +48,7 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     buildConfigField("boolean", "SELF_UPDATE", selfUpdate.toString())
+    buildConfigField("boolean", "PLAY_STORE", playStore.toString())
   }
 
   signingConfigs {
@@ -88,7 +94,10 @@ android {
   // version of the database. Debug builds only; release builds never carry them.
   sourceSets {
     getByName("debug").assets.srcDir("$projectDir/schemas")
-    if (!selfUpdate) getByName("release").manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
+    when {
+      playStore -> getByName("release").manifest.srcFile("src/playStore/AndroidManifest.xml")
+      !selfUpdate -> getByName("release").manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
+    }
   }
   // No Google-encrypted dependency blob in the APK (F-Droid and IzzyOnDroid require this).
   dependenciesInfo {
