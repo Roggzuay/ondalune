@@ -142,6 +142,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -334,7 +336,9 @@ fun DefaultNowPlayingOverlay(
         ) {
             val availWidth = maxWidth
             val availHeight = maxHeight
-            val isWideOrLandscape = availWidth >= 680.dp || availWidth > availHeight * 1.08f
+            // Side by side only when the screen is wider than tall: a portrait tablet stacks like a
+            // phone, with room to spare, instead of splitting into two thin halves.
+            val isWideOrLandscape = availWidth > availHeight * 1.08f
             val isUltraTallPortrait = !isWideOrLandscape && (availHeight / availWidth.coerceAtLeast(1.dp)) >= 1.92f
 
             Box(
@@ -380,7 +384,123 @@ fun DefaultNowPlayingOverlay(
 
                 Spacer(modifier = Modifier.height(if (isUltraTallPortrait) 18.dp else 10.dp))
 
-                if (isWideOrLandscape) {
+                val stage: @Composable (NowPlayingSheetTab, Dp) -> Unit = { tab, maxArt ->
+                    NowPlayingCenterStage(
+                        sheet = sheet,
+                        quality = audioQuality,
+                        onShowQuality = { showAudioDetails = true },
+                        activeTab = tab,
+                        track = track,
+                        artworkShapeMode = artworkShapeMode,
+                        isPlaying = isPlaying,
+                        maxArtworkSize = maxArt,
+                        artworkPulse = artworkPulse.value,
+                        lyrics = lyrics,
+                        lyricsResult = lyricsResult,
+                        positionMs = positionMs,
+                        queue = queue,
+                        shuffleMode = shuffleMode,
+                        onTriggerPulseAndCycleShape = {
+                            scope.launch {
+                                artworkPulse.snapTo(1.06f)
+                                artworkPulse.animateTo(
+                                    1f,
+                                    spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)
+                                )
+                            }
+                            onCycleArtworkShape()
+                        },
+                        onSwipeDownDelta = onSwipeDownDelta,
+                        onSwipeDownFinish = onSwipeDownFinish,
+                        onSkipNext = onSkipNext,
+                        onSkipPrevious = onSwipePrevious,
+                        onSeek = onSeek,
+                        onPlayQueueTrack = onPlayQueueTrack
+                    )
+                }
+                val controls: @Composable (Boolean, Boolean) -> Unit = { ultraTall, keepDetails ->
+                    NowPlayingControlsColumn(
+                        track = track,
+                        isPlaying = isPlaying,
+                        isBuffering = isBuffering,
+                        positionMs = positionMs,
+                        durationMs = durationMs,
+                        speedPitchState = speedPitchState,
+                        reverbState = reverbState,
+                        reverbProcessingMode = reverbProcessingMode,
+                        isPlayingOfflineFile = isPlayingOfflineFile,
+                        download = download,
+                        sleepTimerState = sleepTimerState,
+                        shuffleEnabled = shuffleEnabled,
+                        shuffleMode = shuffleMode,
+                        repeatOneEnabled = repeatOneEnabled,
+                        animatedWaveEnabled = animatedWaveEnabled,
+                        showRemainingTime = showRemainingTime,
+                        showPlayerStarButton = showPlayerStarButton,
+                        activeTab = activeTab,
+                        isUltraTallPortrait = ultraTall,
+                        onSelectTab = onSelectTab,
+                        onTogglePlay = onTogglePlay,
+                        onSkipPrevious = onSkipPrevious,
+                        onSkipNext = onSkipNext,
+                        onSeek = onSeek,
+                        onToggleShuffle = onToggleShuffle,
+                        onToggleRepeatOne = onToggleRepeatOne,
+                        onToggleStar = onToggleStar,
+                        onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
+                        onResetSpeedPitch = onResetSpeedPitch,
+                        showSpeedResetHint = showSpeedResetHint,
+                        onSpeedResetHintShown = onSpeedResetHintShown,
+                        onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                        onOpenArtist = onOpenArtist,
+                        keepDetails = keepDetails
+                    )
+                }
+
+                if (isWideOrLandscape && availWidth >= TabletMinWidthDp.dp) {
+                    // Tablet landscape: the cover and its controls stay one centred column, the way
+                    // a record sleeve sits on a shelf; lyrics open beside it instead of over it.
+                    val lyricsBeside = activeTab == NowPlayingSheetTab.LYRICS
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(56.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .width(minOf(availWidth * 0.4f, 500.dp))
+                                .fillMaxHeight()
+                                .padding(bottom = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            BoxWithConstraints(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                stage(NowPlayingSheetTab.COVER, minOf(maxWidth, maxHeight))
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Box(openingContent) { controls(false, true) }
+                        }
+                        AnimatedVisibility(
+                            visible = lyricsBeside,
+                            enter = fadeIn() + expandHorizontally(),
+                            exit = fadeOut() + shrinkHorizontally(),
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight()
+                                    .then(openingContent)
+                            ) { stage(NowPlayingSheetTab.LYRICS, 0.dp) }
+                        }
+                    }
+                } else if (isWideOrLandscape) {
                     Row(
                         modifier = Modifier
                             .weight(1f)
@@ -394,38 +514,7 @@ fun DefaultNowPlayingOverlay(
                                 .fillMaxHeight(),
                             contentAlignment = Alignment.Center
                         ) {
-                            NowPlayingCenterStage(
-                                sheet = sheet,
-                                quality = audioQuality,
-                                onShowQuality = { showAudioDetails = true },
-                                activeTab = activeTab,
-                                track = track,
-                                artworkShapeMode = artworkShapeMode,
-                                isPlaying = isPlaying,
-                                maxArtworkSize = minOf(availWidth * 0.42f, availHeight * 0.68f),
-                                artworkPulse = artworkPulse.value,
-                                lyrics = lyrics,
-                                lyricsResult = lyricsResult,
-                                positionMs = positionMs,
-                                queue = queue,
-                                shuffleMode = shuffleMode,
-                                onTriggerPulseAndCycleShape = {
-                                    scope.launch {
-                                        artworkPulse.snapTo(1.06f)
-                                        artworkPulse.animateTo(
-                                            1f,
-                                            spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)
-                                        )
-                                    }
-                                    onCycleArtworkShape()
-                                },
-                                onSwipeDownDelta = onSwipeDownDelta,
-                                onSwipeDownFinish = onSwipeDownFinish,
-                                onSkipNext = onSkipNext,
-                                onSkipPrevious = onSwipePrevious,
-                                onSeek = onSeek,
-                                onPlayQueueTrack = onPlayQueueTrack
-                            )
+                            stage(activeTab, minOf(availWidth * 0.42f, availHeight * 0.68f))
                         }
 
                         Column(
@@ -436,41 +525,7 @@ fun DefaultNowPlayingOverlay(
                             verticalArrangement = Arrangement.SpaceEvenly,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            NowPlayingControlsColumn(
-                                track = track,
-                                isPlaying = isPlaying,
-                                isBuffering = isBuffering,
-                                positionMs = positionMs,
-                                durationMs = durationMs,
-                                speedPitchState = speedPitchState,
-                                reverbState = reverbState,
-                                reverbProcessingMode = reverbProcessingMode,
-                                isPlayingOfflineFile = isPlayingOfflineFile,
-                                download = download,
-                                sleepTimerState = sleepTimerState,
-                                shuffleEnabled = shuffleEnabled,
-                                shuffleMode = shuffleMode,
-                                repeatOneEnabled = repeatOneEnabled,
-                                animatedWaveEnabled = animatedWaveEnabled,
-                                showRemainingTime = showRemainingTime,
-                                showPlayerStarButton = showPlayerStarButton,
-                                activeTab = activeTab,
-                                isUltraTallPortrait = false,
-                                onSelectTab = onSelectTab,
-                                onTogglePlay = onTogglePlay,
-                                onSkipPrevious = onSkipPrevious,
-                                onSkipNext = onSkipNext,
-                                onSeek = onSeek,
-                                onToggleShuffle = onToggleShuffle,
-                                onToggleRepeatOne = onToggleRepeatOne,
-                                onToggleStar = onToggleStar,
-                                onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
-                                onResetSpeedPitch = onResetSpeedPitch,
-                                showSpeedResetHint = showSpeedResetHint,
-                                onSpeedResetHintShown = onSpeedResetHintShown,
-                                onOpenSleepTimerSheet = onOpenSleepTimerSheet,
-                                onOpenArtist = onOpenArtist
-                            )
+                            controls(false, false)
                         }
                     }
                 } else {
@@ -482,78 +537,13 @@ fun DefaultNowPlayingOverlay(
                             .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        NowPlayingCenterStage(
-                            sheet = sheet,
-                            quality = audioQuality,
-                            onShowQuality = { showAudioDetails = true },
-                            activeTab = activeTab,
-                            track = track,
-                            artworkShapeMode = artworkShapeMode,
-                            isPlaying = isPlaying,
-                            maxArtworkSize = portraitArtSize,
-                            artworkPulse = artworkPulse.value,
-                            lyrics = lyrics,
-                            lyricsResult = lyricsResult,
-                            positionMs = positionMs,
-                            queue = queue,
-                            shuffleMode = shuffleMode,
-                            onTriggerPulseAndCycleShape = {
-                                scope.launch {
-                                    artworkPulse.snapTo(1.06f)
-                                    artworkPulse.animateTo(
-                                        1f,
-                                        spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow)
-                                    )
-                                }
-                                onCycleArtworkShape()
-                            },
-                            onSwipeDownDelta = onSwipeDownDelta,
-                            onSwipeDownFinish = onSwipeDownFinish,
-                            onSkipNext = onSkipNext,
-                            onSkipPrevious = onSwipePrevious,
-                            onSeek = onSeek,
-                            onPlayQueueTrack = onPlayQueueTrack
-                        )
+                        stage(activeTab, portraitArtSize)
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Box(openingContent) {
-                        NowPlayingControlsColumn(
-                            track = track,
-                            isPlaying = isPlaying,
-                            isBuffering = isBuffering,
-                            positionMs = positionMs,
-                            durationMs = durationMs,
-                            speedPitchState = speedPitchState,
-                            reverbState = reverbState,
-                            reverbProcessingMode = reverbProcessingMode,
-                            isPlayingOfflineFile = isPlayingOfflineFile,
-                            download = download,
-                            sleepTimerState = sleepTimerState,
-                            shuffleEnabled = shuffleEnabled,
-                            shuffleMode = shuffleMode,
-                            repeatOneEnabled = repeatOneEnabled,
-                            animatedWaveEnabled = animatedWaveEnabled,
-                            showRemainingTime = showRemainingTime,
-                            showPlayerStarButton = showPlayerStarButton,
-                            activeTab = activeTab,
-                            isUltraTallPortrait = isUltraTallPortrait,
-                            onSelectTab = onSelectTab,
-                            onTogglePlay = onTogglePlay,
-                            onSkipPrevious = onSkipPrevious,
-                            onSkipNext = onSkipNext,
-                            onSeek = onSeek,
-                            onToggleShuffle = onToggleShuffle,
-                            onToggleRepeatOne = onToggleRepeatOne,
-                            onToggleStar = onToggleStar,
-                            onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
-                            onResetSpeedPitch = onResetSpeedPitch,
-                            showSpeedResetHint = showSpeedResetHint,
-                            onSpeedResetHintShown = onSpeedResetHintShown,
-                            onOpenSleepTimerSheet = onOpenSleepTimerSheet,
-                            onOpenArtist = onOpenArtist
-                        )
+                        controls(isUltraTallPortrait, false)
                     }
                 }
             }
@@ -1048,11 +1038,13 @@ private fun NowPlayingControlsColumn(
     showSpeedResetHint: Boolean,
     onSpeedResetHintShown: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
-    onOpenArtist: () -> Unit = {}
+    onOpenArtist: () -> Unit = {},
+    keepDetails: Boolean = false
 ) {
     val verticalGap = if (isUltraTallPortrait) 10.dp else 7.dp
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
-    val isLyricsMode = activeTab == NowPlayingSheetTab.LYRICS
+    // keepDetails: lyrics are shown beside the cover (tablet), so the title and extras stay.
+    val isLyricsMode = activeTab == NowPlayingSheetTab.LYRICS && !keepDetails
 
     Column(
         modifier = Modifier.fillMaxWidth(),

@@ -189,6 +189,44 @@ internal class OpenedAudio(val extractor: MediaExtractor, val format: MediaForma
     }
 }
 
+/**
+ * A stream the server converts while sending it (Opus, MP3) has no byte offsets to jump to: seeking
+ * inside it reads past what was sent and looks like the song's end, so the next song started. A seek
+ * opens it again from that second instead ([reopen] asks the server for a time offset), and song
+ * positions count from there. If it can't be reopened, the plain seek is tried.
+ */
+internal class ReopeningStreamSource(
+    private var inner: PcmSource,
+    private val songDurationMs: Long,
+    private val reopen: (offsetSec: Long) -> PcmSource?
+) : PcmSource {
+    private var baseFrames = 0L
+    override val sampleRate get() = inner.sampleRate
+    override val stream get() = inner.stream
+    override val durationFrames: Long
+        get() = if (songDurationMs > 0L) songDurationMs * sampleRate / 1000L
+        else inner.durationFrames.takeIf { it > 0L }?.plus(baseFrames) ?: 0L
+    override val positionFrames get() = baseFrames + inner.positionFrames
+
+    override fun read(dst: FloatArray, offset: Int, frames: Int) = inner.read(dst, offset, frames)
+
+    override fun seekTo(ms: Long) {
+        val sec = ms.coerceAtLeast(0L) / 1000L
+        val fresh = runCatching { reopen(sec) }.getOrNull()
+        if (fresh == null || fresh.sampleRate != inner.sampleRate) {
+            fresh?.release()
+            baseFrames = 0L
+            inner.seekTo(ms)
+            return
+        }
+        inner.release()
+        inner = fresh
+        baseFrames = sec * fresh.sampleRate
+    }
+
+    override fun release() = inner.release()
+}
+
 /** This phone has no decoder for a Dolby stream; the song is reported instead of handed to MediaPlayer. */
 internal class NoDecoderException(val mime: String) : Exception("No decoder for $mime")
 

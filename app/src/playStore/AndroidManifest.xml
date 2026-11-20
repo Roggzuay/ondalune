@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Merged into release builds made with -Pondalune.playStore=true: Google Play delivers updates,
-     so no installer or uninstall permission and no provider for downloaded updates. Play only
-     grants the battery-optimisation request to apps that cannot work without it, so the app opens
-     the system battery settings instead (see BackgroundPlayback). -->
+     so no installer or uninstall permission and no provider for downloaded updates. The
+     battery-optimisation request stays: on many phones music stops on the lock screen without it. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -11,9 +10,6 @@
         tools:node="remove" />
     <uses-permission
         android:name="android.permission.REQUEST_DELETE_PACKAGES"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:node="remove" />
 
     <application>

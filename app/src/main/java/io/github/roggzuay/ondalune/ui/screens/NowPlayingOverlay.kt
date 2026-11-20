@@ -596,6 +596,10 @@ fun NowPlayingStudioOverlay(
             val availWidth = maxWidth
             val availHeight = maxHeight
             val wide = availWidth > availHeight * 1.08f
+            // Tablets get a framed cover instead of one filling the screen (a phone-sized picture
+            // spread over a tablet came out soft and split the screen in two).
+            val tablet = minOf(availWidth, availHeight) >= 600.dp
+            val lyricsBeside = tablet && availWidth > availHeight
             val sidePadding = if (availWidth < 380.dp) 16.dp else 22.dp
             val insets = WindowInsets.safeDrawing.asPaddingValues()
             // The controls' height and where their title row ends inside them, in pixels. Both are
@@ -640,7 +644,7 @@ fun NowPlayingStudioOverlay(
                     playbackSpeed = speedPitchState.speed,
                     themeColorsOnly = unifiedMaterialYouColor
                 )
-                if (coverFill && !wide) {
+                if (coverFill && !wide && !tablet) {
                     val palette = LocalArtworkPalette.current
                     val fill by animateColorAsState(palette.swatches.firstOrNull() ?: palette.seed, tween(600), label = "backdropFill")
                     val surface = MaterialTheme.colorScheme.surface
@@ -661,7 +665,7 @@ fun NowPlayingStudioOverlay(
                 }
             }
 
-            PlayerHero(
+            if (!tablet) PlayerHero(
                 sheet = sheet,
                 track = track,
                 queue = queue,
@@ -681,7 +685,7 @@ fun NowPlayingStudioOverlay(
             )
 
             val topIconColor by animateColorAsState(
-                targetValue = if (lyricsOpen) MaterialTheme.colorScheme.onSurface else Color.White,
+                targetValue = if (lyricsOpen || tablet) MaterialTheme.colorScheme.onSurface else Color.White,
                 animationSpec = tween(320),
                 label = "topIconColor"
             )
@@ -757,6 +761,7 @@ fun NowPlayingStudioOverlay(
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
                         onTitleRowBottom = { if (!lyricsOpen && lyricsShown.value == 0f) titleRowBottom = it },
+                        keepDetails = lyricsBeside,
                         modifier = openingContent
                     )
                 }
@@ -768,7 +773,58 @@ fun NowPlayingStudioOverlay(
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(horizontal = sidePadding, vertical = 10.dp)
             ) {
-                if (wide) {
+                if (tablet) {
+                    val cover = @Composable { area: Modifier ->
+                        BoxWithConstraints(area, contentAlignment = Alignment.Center) {
+                            TabletCoverCard(
+                                track = track,
+                                onSkipNext = onSkipNext,
+                                onSkipPrevious = onSwipePrevious,
+                                modifier = Modifier.size(minOf(maxWidth, maxHeight) - 8.dp)
+                            )
+                        }
+                    }
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        topBar()
+                        if (lyricsBeside) {
+                            // Landscape: cover and controls in one centred column, lyrics beside it.
+                            Row(
+                                Modifier.weight(1f).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(56.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    Modifier.width(minOf(availWidth * 0.42f, 520.dp)).fillMaxHeight(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    cover(Modifier.weight(1f).fillMaxWidth())
+                                    Spacer(Modifier.height(12.dp))
+                                    controls(Modifier.fillMaxWidth())
+                                }
+                                AnimatedVisibility(
+                                    visible = lyricsOpen,
+                                    enter = fadeIn(tween(320)) + expandHorizontally(tween(320)),
+                                    exit = fadeOut(tween(200)) + shrinkHorizontally(tween(320)),
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    lyricsSlot(Modifier.fillMaxSize())
+                                }
+                            }
+                        } else {
+                            // Portrait: the phone's order, at a width the picture can hold.
+                            Column(
+                                Modifier.weight(1f).widthIn(max = 580.dp).fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    if (!lyricsOpen) cover(Modifier.fillMaxSize())
+                                    lyricsSlot(Modifier.fillMaxSize())
+                                }
+                                controls(Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                } else if (wide) {
                     Row(Modifier.fillMaxSize()) {
                         Column(Modifier.width(heroWidth - sidePadding - insets.calculateStartPadding(LocalLayoutDirection.current))) {
                             topBar()
@@ -1320,7 +1376,9 @@ private fun PlayerControls(
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
     onTitleRowBottom: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Lyrics open beside the cover (tablet landscape): keep the title and transport. */
+    keepDetails: Boolean = false
 ) {
     val scroll = rememberScrollState()
     // The title and artist sit on the tail of the cover's fade: a soft halo in the surface colour
@@ -1335,7 +1393,7 @@ private fun PlayerControls(
     ) {
         // With the lyrics up only the progress bar and the row of buttons stay; the title and the
         // transport slip away downwards so the lyrics get the height, and come back when closed.
-        val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS
+        val lyricsOpen = activeTab == NowPlayingSheetTab.LYRICS && !keepDetails
         Column {
             // The cover reaches down behind this row; it needs to know where the row ends.
             AnimatedVisibility(

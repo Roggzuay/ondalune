@@ -90,7 +90,7 @@ private fun policySections(): List<PolicySection> = listOfNotNull(
         listOfNotNull(
             "Internet: your servers and the services above. Notifications: playback controls and download progress. " +
                 "Media playback service and wake lock: music with the screen off. Vibrate: haptic feedback.",
-            if (!BuildConfig.PLAY_STORE) "Battery optimisation: asked only if you agree, so battery savers don't stop music." else null,
+            "Battery optimisation: asked only if you agree, so battery savers don't stop music.",
             if (BuildConfig.SELF_UPDATE) {
                 "Install and delete apps: to install an update you downloaded, or go back a version, each time " +
                     "with your confirmation in Android's installer."

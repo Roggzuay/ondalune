@@ -67,6 +67,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -519,20 +520,14 @@ fun SettingsCustomizationScreen(
         )
     }
 
-    // Compact root list of categories; a tapped category opens as its own page.
-    BackHandler(enabled = openSection != null) { onOpenSection(null) }
+    // Phone: a compact root list of categories; a tapped category opens as its own page.
+    // Tablet: the list stays on the left and the chosen category fills the right.
+    val tablet = isTabletWidth()
+    val tabletDetail = openSection ?: SettingsExpandableSection.entries.first()
+    BackHandler(enabled = openSection != null && !tablet) { onOpenSection(null) }
 
-    AnimatedContent(
-        targetState = openSection,
-        transitionSpec = {
-            val forward = targetState != null
-            val slide = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-            (slideInHorizontally(slide) { if (forward) it / 8 else -it / 8 } + fadeIn(tween(210, delayMillis = 90)))
-                .togetherWith(slideOutHorizontally(slide) { if (forward) -it / 8 else it / 8 } + fadeOut(tween(90)))
-        },
-        label = "settingsPage"
-    ) { shownSection ->
-    CompositionLocalProvider(LocalSettingsPage provides SettingsPageState(shownSection, onOpenSection)) {
+    val settingsPage: @Composable (SettingsExpandableSection?) -> Unit = { shownSection ->
+    CompositionLocalProvider(LocalSettingsPage provides SettingsPageState(shownSection, onOpenSection, tabletDetail.takeIf { tablet })) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -2170,11 +2165,42 @@ fun SettingsCustomizationScreen(
     }
     }
     }
+
+    if (tablet) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(380.dp).fillMaxHeight()) { settingsPage(null) }
+            AnimatedContent(
+                targetState = tabletDetail,
+                transitionSpec = { fadeIn(tween(210, delayMillis = 60)).togetherWith(fadeOut(tween(90))) },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                contentAlignment = Alignment.TopCenter,
+                label = "settingsDetail"
+            ) { section ->
+                Box(Modifier.widthIn(max = 720.dp).fillMaxHeight()) { settingsPage(section) }
+            }
+        }
+    } else {
+        AnimatedContent(
+            targetState = openSection,
+            transitionSpec = {
+                val forward = targetState != null
+                val slide = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                (slideInHorizontally(slide) { if (forward) it / 8 else -it / 8 } + fadeIn(tween(210, delayMillis = 90)))
+                    .togetherWith(slideOutHorizontally(slide) { if (forward) -it / 8 else it / 8 } + fadeOut(tween(90)))
+            },
+            label = "settingsPage"
+        ) { shownSection -> settingsPage(shownSection) }
+    }
 }
 
-private class SettingsPageState(val open: SettingsExpandableSection?, val onOpen: (SettingsExpandableSection?) -> Unit)
+/** [selected]: on a tablet, the category shown beside the list, highlighted in it. */
+private class SettingsPageState(
+    val open: SettingsExpandableSection?,
+    val onOpen: (SettingsExpandableSection?) -> Unit,
+    val selected: SettingsExpandableSection? = null
+)
 
-private val LocalSettingsPage = compositionLocalOf { SettingsPageState(null) {} }
+private val LocalSettingsPage = compositionLocalOf { SettingsPageState(null, {}) }
 
 /**
  * Expandable List Section Card used in Settings:
@@ -2214,7 +2240,7 @@ private fun ExpandableSettingsSectionCard(
             topStart = if (first) big else small, topEnd = if (first) big else small,
             bottomStart = if (last) big else small, bottomEnd = if (last) big else small
         ),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (page.selected == section) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().testTag(testTag)
     ) {
         Row(

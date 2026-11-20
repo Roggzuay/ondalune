@@ -573,7 +573,16 @@ class OndaluneAudioEngine(
                 Playable.NoDecoder(mime)
             }
             PlayPath.DECODE -> try {
-                CodecPcmSource.from(audio)?.let { Playable.Pcm(it) } ?: Playable.None
+                CodecPcmSource.from(audio)?.let { source ->
+                    Playable.Pcm(
+                        if (converted && path.contains("/rest/stream.view")) {
+                            ReopeningStreamSource(source, track.durationSec * 1000L) { sec ->
+                                val from = if (sec > 0L) "$path&timeOffset=$sec" else path
+                                OpenedAudio.open(context, from)?.let { CodecPcmSource.from(it) }
+                            }
+                        } else source
+                    )
+                } ?: Playable.None
             } catch (e: NoDecoderException) {
                 Playable.NoDecoder(e.mime)
             }

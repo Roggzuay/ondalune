@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,8 +40,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
@@ -79,6 +76,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
@@ -189,23 +190,34 @@ internal fun ArtistDetailSubScreen(
     // No app bar here: the portrait runs up under the status bar, which its height includes.
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     BoxWithConstraints(Modifier.fillMaxSize().testTag("artist_page")) {
-        val wideHeader = minOf(maxWidth * 0.42f, maxHeight * 0.62f) + statusTop
         if (maxWidth >= 840.dp) {
-            // Tablets and unfolded foldables: portrait and actions on the left, the lists beside them.
-            Row(Modifier.fillMaxSize().background(pageColour)) {
-                Column(
-                    Modifier
-                        .weight(0.42f)
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    header(wideHeader) { 0f }
+            // Tablets and unfolded foldables: a full-width band washed in the photo's colours, a
+            // round portrait (sharp at any photo size, where a half-screen crop showed every
+            // pixel), and the lists in a centred column below instead of a split screen.
+            val side = ((maxWidth - 1040.dp) / 2).coerceAtLeast(32.dp)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(pageColour),
+                contentPadding = PaddingValues(horizontal = side)
+            ) {
+                item(key = "artist_header") {
+                    Column(
+                        Modifier.layout { measurable, constraints ->
+                            // The band runs edge to edge, through the side margins.
+                            val bleed = side.roundToPx()
+                            val width = constraints.maxWidth + bleed * 2
+                            val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+                            layout(constraints.maxWidth, placeable.height) { placeable.place(-bleed, 0) }
+                        }
+                    ) {
+                        ArtistHeroBand(artist, pageColour, statusTop, onBack)
+                        Box(Modifier.padding(horizontal = side)) {
+                            ArtistActions(artist, tracks, popular, onPlayTrack, onShuffle)
+                        }
+                    }
                 }
-                LazyColumn(
-                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                    contentPadding = PaddingValues(top = 16.dp + statusTop),
-                    content = sections
-                )
+                sections()
             }
         } else {
             val listState = rememberLazyListState()
@@ -224,6 +236,100 @@ internal fun ArtistDetailSubScreen(
                     Column { header(portraitHeight) { if (reduced) 0f else scrolled() * 0.45f } }
                 }
                 sections()
+            }
+        }
+    }
+}
+
+/** Tablet artist header: the photo blurred into a colour wash, with a sharp round portrait and the name. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ArtistHeroBand(artist: SubsonicArtist, pageColour: Color, statusTop: Dp, onBack: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(320.dp + statusTop)
+            .clip(androidx.compose.ui.graphics.RectangleShape)
+    ) {
+        if (artist.coverArtUrl.isNotBlank()) {
+            ArtworkImage(
+                url = artist.coverArtUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = 1.2f; scaleY = 1.2f; alpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 0.9f else 0.35f }
+                    .blur(48.dp)
+            )
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0f to pageColour.copy(alpha = 0.25f), 0.6f to pageColour.copy(alpha = 0.6f), 1f to pageColour))
+        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(16.dp)
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable(onClickLabel = "Back", role = Role.Button, onClick = onBack)
+                .testTag("artist_back")
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+        }
+        Row(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .widthIn(max = 1040.dp)
+                .padding(horizontal = 40.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(196.dp)
+                    .shadow(16.dp, CircleShape)
+                    .clip(CircleShape)
+            ) {
+                if (artist.coverArtUrl.isNotBlank()) {
+                    ArtworkImage(
+                        url = artist.coverArtUrl,
+                        contentDescription = "${artist.name} portrait",
+                        modifier = Modifier.fillMaxSize(),
+                        crossfadeMs = 250
+                    )
+                } else {
+                    ExpressiveArtwork(
+                        seedHex = artist.paletteSeedHex,
+                        accentHex = artist.accentHex,
+                        artStyleIndex = artist.artStyleIndex,
+                        monogramText = artist.name,
+                        shapeMode = ArtworkShapeMode.SQUIRCLE,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+            Spacer(Modifier.width(32.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = artist.name,
+                    style = MaterialTheme.typography.displayMediumEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = listOfNotNull(
+                        artist.genre.takeIf { it.isNotBlank() },
+                        "${artist.albumCount} ${if (artist.albumCount == 1) "album" else "albums"}",
+                        countOf(artist.trackCount, "song")
+                    ).joinToString(" • "),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

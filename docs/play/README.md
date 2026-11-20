@@ -13,8 +13,11 @@ built with one switch:
 - `BuildConfig.SELF_UPDATE = false`: no GitHub update check, no in-app installer, no "go back a
   version". R8 strips that code from the bundle. Play forbids apps that update themselves.
 - Merges `app/src/playStore/AndroidManifest.xml`, which removes `REQUEST_INSTALL_PACKAGES`,
-  `REQUEST_DELETE_PACKAGES`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` and the updates FileProvider.
-  "Allow background playback" then opens the app's info page instead of the system dialog.
+  `REQUEST_DELETE_PACKAGES` and the updates FileProvider.
+- Keeps `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: without the exemption, playback stops on the lock
+  screen on many phones. Play only allows it for apps whose core feature breaks
+  without it, so declare it with that reason in the Console. If review refuses it, remove it in
+  the Play manifest again: "Allow background playback" then opens the app's info page instead.
 - `BuildConfig.PLAY_STORE = true`: Settings → Privacy says updates come from Google Play.
 
 Check a bundle before uploading:
@@ -23,7 +26,7 @@ Check a bundle before uploading:
 unzip -p app-release.aab base/manifest/AndroidManifest.xml | strings | grep -o "android.permission.[A-Z_]*" | sort -u
 ```
 
-Expected: no `REQUEST_*` permission.
+Expected: `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` and no other `REQUEST_*` permission.
 
 ## Signing (decide once, can't be changed)
 

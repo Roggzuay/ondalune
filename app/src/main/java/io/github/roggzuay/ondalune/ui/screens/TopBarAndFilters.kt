@@ -159,7 +159,8 @@ fun OndaluneTopBar(
                             }
                         }
                     }
-                    if (isSettingsActive) {
+                    // A tablet has Settings in its sidebar.
+                    if (isTabletWidth()) Unit else if (isSettingsActive) {
                         FilledTonalIconButton(
                             onClick = onOpenSettings,
                             shapes = IconButtonDefaults.shapes(),

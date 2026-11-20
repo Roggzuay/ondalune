@@ -66,7 +66,7 @@ app says so when you enter one. Use `https://` for servers reached over the inte
 | Internet, network state | To reach your music server |
 | Notifications | Playback controls, download progress, and (if you leave it on) a quiet note when a new version is out |
 | Foreground service (media playback), wake lock | To keep music playing with the screen off |
-| Ignore battery optimisations | Only requested if you agree, so phone battery savers don't stop playback on the lock screen. Not in Google Play builds, where **Allow background playback** opens the app's info page instead |
+| Ignore battery optimisations | Only requested if you agree, so phone battery savers don't stop playback on the lock screen. |
 | Vibrate | Haptic feedback on gestures |
 | Install apps | Only after you tap **Update**: hands the downloaded update to Android's installer. Android asks you to allow this once and to confirm every update, and only accepts an update signed with the same key as your installed Ondalune. Not in builds from F-Droid or Google Play, which the store updates |
 | Delete apps | Only when you choose to go back to an earlier version: Android asks you to confirm removing the current one first. Not in F-Droid or Google Play builds |

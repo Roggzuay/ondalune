@@ -89,6 +89,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -599,6 +600,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 val isExpandedScreen = maxWidth >= 640.dp
+                val isTabletScreen = maxWidth >= TabletMinWidthDp.dp
 
                 Scaffold(
                     modifier = Modifier.graphicsLayer { scaleX = homeZoom; scaleY = homeZoom },
@@ -618,7 +620,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             SelectionTopBar(selection = trackSelection, onMore = { selectionSheetOpen = true })
                         } else {
                         OndaluneTopBar(
-                            title = settingsSection?.takeIf { currentDestination == PrimaryDestination.SETTINGS }?.title ?: currentDestination.label,
+                            title = settingsSection?.takeIf { currentDestination == PrimaryDestination.SETTINGS && !isTabletScreen }?.title ?: currentDestination.label,
                             searchQuery = searchQuery,
                             searchOpen = searchOpen,
                             statusBanner = statusBanner,
@@ -630,7 +632,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
                             onDismissBanner = viewModel::dismissBanner,
-                            onBack = if (currentDestination == PrimaryDestination.SETTINGS && settingsSection != null) {
+                            // On a tablet the open section sits beside the list: nothing to go back to.
+                            onBack = if (currentDestination == PrimaryDestination.SETTINGS && settingsSection != null && !isTabletWidth()) {
                                 { settingsSection = null }
                             } else {
                                 null
@@ -714,7 +717,18 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 layout(placeable.width, placeable.height + top) { placeable.place(0, top) }
                             }
                     ) {
-                        if (isExpandedScreen) {
+                        if (isTabletScreen) {
+                            // Pages without the top bar (an artist's) leave its room, so the tabs stay put.
+                            // 76 dp: the bar's own height under the status bar (OndaluneTopBar).
+                            val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                            TabletSidebar(
+                                destinations = navItems.map { it.id },
+                                current = currentDestination,
+                                icon = ::destinationIcon,
+                                onOpen = ::openTab,
+                                topGap = { (statusTop + 76.dp - innerPadding.calculateTopPadding()).coerceAtLeast(0.dp) }
+                            )
+                        } else if (isExpandedScreen) {
                             NavigationRail(
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.fillMaxHeight()
