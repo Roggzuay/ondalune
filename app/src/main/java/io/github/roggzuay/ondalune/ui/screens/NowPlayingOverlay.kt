@@ -1521,9 +1521,11 @@ private fun PlayerControls(
                     )
                 }
             }
+            // The tab itself, not lyricsOpen: with lyrics beside the cover the controls stay but it still closes.
+            val lyricsTab = activeTab == NowPlayingSheetTab.LYRICS
             PlayerToggle(
-                checked = lyricsOpen,
-                onToggle = { onSelectTab(if (lyricsOpen) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
+                checked = lyricsTab,
+                onToggle = { onSelectTab(if (lyricsTab) NowPlayingSheetTab.COVER else NowPlayingSheetTab.LYRICS) },
                 icon = Icons.Filled.Lyrics,
                 description = "Lyrics",
                 tag = "now_playing_tab_lyrics",

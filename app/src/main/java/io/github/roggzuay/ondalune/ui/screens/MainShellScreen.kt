@@ -721,11 +721,14 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             // Pages without the top bar (an artist's) leave its room, so the tabs stay put.
                             // 76 dp: the bar's own height under the status bar (OndaluneTopBar).
                             val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                            var sidebarExpanded by rememberSaveable { mutableStateOf(true) }
                             TabletSidebar(
                                 destinations = navItems.map { it.id },
                                 current = currentDestination,
                                 icon = ::destinationIcon,
                                 onOpen = ::openTab,
+                                expanded = sidebarExpanded,
+                                onExpandedChange = { sidebarExpanded = it },
                                 topGap = { (statusTop + 76.dp - innerPadding.calculateTopPadding()).coerceAtLeast(0.dp) }
                             )
                         } else if (isExpandedScreen) {

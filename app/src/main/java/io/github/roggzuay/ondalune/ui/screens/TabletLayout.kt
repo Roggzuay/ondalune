@@ -2,6 +2,15 @@ package io.github.roggzuay.ondalune.ui.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -71,6 +80,8 @@ const val TabletMinWidthDp = 840
 /**
  * Tablet sidebar: the five tabs with their names, the current one held in a filled pill, and
  * Settings apart at the bottom. Replaces the phone's bottom dock and the narrow icon rail.
+ * Swiping it left (or the button at its top) folds it to icons only, giving the page more room;
+ * swiping right opens it again. The tabs never disappear.
  */
 @Composable
 internal fun TabletSidebar(
@@ -78,13 +89,19 @@ internal fun TabletSidebar(
     current: PrimaryDestination,
     icon: (PrimaryDestination, Boolean) -> ImageVector,
     onOpen: (PrimaryDestination) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     /** Room for a top bar that is hidden right now, so the tabs never move. */
     topGap: () -> Dp = { 0.dp }
 ) {
+    val width by animateDpAsState(if (expanded) 232.dp else 88.dp, label = "sidebarWidth")
+    val threshold = with(LocalDensity.current) { 48.dp.toPx() }
+    val setExpanded by rememberUpdatedState(onExpandedChange)
+    val isExpanded by rememberUpdatedState(expanded)
     Column(
         modifier
-            .width(232.dp)
+            .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             // Laid out under the top bar, so only the side and bottom insets apply.
@@ -94,23 +111,47 @@ internal fun TabletSidebar(
                 val placeable = measurable.measure(constraints.offset(vertical = -gap))
                 layout(placeable.width, placeable.height + gap) { placeable.place(0, gap) }
             }
+            .pointerInput(Unit) {
+                var dragged = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragEnd = {
+                        if (dragged < -threshold && isExpanded) setExpanded(false)
+                        if (dragged > threshold && !isExpanded) setExpanded(true)
+                    }
+                ) { change, amount ->
+                    change.consume()
+                    dragged += amount
+                }
+            }
             .padding(horizontal = 12.dp)
             .testTag("tablet_sidebar"),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(4.dp))
+        IconButton(
+            onClick = { onExpandedChange(!expanded) },
+            modifier = Modifier.padding(start = 4.dp).testTag("sidebar_toggle")
+        ) {
+            Icon(
+                if (expanded) Icons.AutoMirrored.Filled.MenuOpen else Icons.Filled.Menu,
+                contentDescription = if (expanded) "Hide sidebar" else "Show sidebar",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(4.dp))
         destinations.forEach { dest ->
-            SidebarRow(dest.label, icon(dest, dest == current), dest == current, "sidebar_${dest.route}") { onOpen(dest) }
+            SidebarRow(dest.label, icon(dest, dest == current), dest == current, expanded, "sidebar_${dest.route}") { onOpen(dest) }
         }
         Spacer(Modifier.weight(1f))
         val settings = PrimaryDestination.SETTINGS
-        SidebarRow(settings.label, icon(settings, current == settings), current == settings, "sidebar_settings") { onOpen(settings) }
+        SidebarRow(settings.label, icon(settings, current == settings), current == settings, expanded, "sidebar_settings") { onOpen(settings) }
         Spacer(Modifier.height(12.dp))
     }
 }
 
 @Composable
-private fun SidebarRow(label: String, icon: ImageVector, selected: Boolean, tag: String, onClick: () -> Unit) {
+private fun SidebarRow(label: String, icon: ImageVector, selected: Boolean, showLabel: Boolean, tag: String, onClick: () -> Unit) {
     val container by animateColorAsState(
         if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "sidebarRow"
     )
@@ -122,19 +163,22 @@ private fun SidebarRow(label: String, icon: ImageVector, selected: Boolean, tag:
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .semantics { this.selected = selected; role = Role.Tab }
+            .semantics { this.selected = selected; role = Role.Tab; contentDescription = label }
             .testTag(tag)
     ) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = content)
-            Spacer(Modifier.width(16.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.titleSmall,
-                color = if (selected) content else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            AnimatedVisibility(showLabel, enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (selected) content else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.padding(start = 16.dp)
+                )
+            }
         }
     }
 }
