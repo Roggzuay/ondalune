@@ -45,14 +45,15 @@
         </activity>
 
         <!-- The launcher icons' target. It runs in a task of its own and opens MainActivity in the app's
-             task, so turning an alias off (an icon switch) can't close the app. -->
+             task, so turning an alias off (an icon switch) can't close the app. It draws nothing, so
+             the only splash and open animation are MainActivity's. -->
         <activity
             android:name=".LauncherActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity=""
-            android:theme="@style/Theme.MyApplication" />
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <!-- Voice requests ("Play … on Ondalune") and app-icon shortcuts: plays without opening a screen. -->
         <activity
