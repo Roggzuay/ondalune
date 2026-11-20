@@ -1,5 +1,6 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import androidx.compose.animation.core.tween
 import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.animation.AnimatedContent
@@ -195,12 +196,19 @@ fun OndaluneTopBar(
                         )
                         Spacer(Modifier.width(12.dp))
                     }
-                    Text(
-                        text = statusBanner.orEmpty(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
+                    // A new message fades over the old one instead of swapping in place.
+                    AnimatedContent(
+                        targetState = statusBanner.orEmpty(),
+                        transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                        label = "bannerText",
                         modifier = Modifier.weight(1f)
-                    )
+                    ) { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     Icon(
                         Icons.Filled.Clear,
                         contentDescription = "Dismiss",

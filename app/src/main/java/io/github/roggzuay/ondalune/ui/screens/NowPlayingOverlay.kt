@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -149,6 +150,7 @@ import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
+import io.github.roggzuay.ondalune.ui.components.FavouriteHeartIcon
 import io.github.roggzuay.ondalune.ui.components.ExpressiveSquigglySlider
 import io.github.roggzuay.ondalune.ui.components.ExpressiveTransportGroup
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
@@ -264,6 +266,14 @@ fun FloatingExpressiveMiniPlayer(
                 }
                 .pointerInput(sheet) {
                     var horizontal: Boolean? = null
+                    // Finger travel; the bar follows it 1:1 up to the skip point, then resists
+                    // (rubber band) so it's clear the skip is armed and the bar can't be flung off.
+                    var rawX = 0f
+                    fun banded(x: Float): Float {
+                        val excess = kotlin.math.abs(x) - swipeThreshold
+                        if (excess <= 0f) return x
+                        return kotlin.math.sign(x) * (swipeThreshold + excess / (1f + excess / swipeThreshold))
+                    }
                     val tracker = VelocityTracker()
                     fun open(velocityY: Float) {
                         if (sheet.release(swipeScope, velocityY, startedOpen = false)) latestExpand()
@@ -271,14 +281,15 @@ fun FloatingExpressiveMiniPlayer(
                     detectDragGestures(
                         onDragStart = {
                             horizontal = null
+                            rawX = dragX.value
                             tracker.resetTracking()
                         },
                         onDragEnd = {
                             if (horizontal == true) {
                                 val offset = dragX.value
                                 when {
-                                    offset < -swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestNext() }
-                                    offset > swipeThreshold -> { swipeHaptics?.performSubtleTick(); latestPrevious() }
+                                    offset < -swipeThreshold -> latestNext()
+                                    offset > swipeThreshold -> latestPrevious()
                                 }
                                 swipeScope.launch { dragX.animateTo(0f, spring(stiffness = Spring.StiffnessMedium)) }
                             } else open(tracker.calculateVelocity().y)
@@ -290,7 +301,12 @@ fun FloatingExpressiveMiniPlayer(
                         if (horizontal == null) horizontal = kotlin.math.abs(amount.x) > kotlin.math.abs(amount.y)
                         change.consume()
                         if (horizontal == true) {
-                            swipeScope.launch { dragX.snapTo(dragX.value + amount.x) }
+                            val before = kotlin.math.abs(rawX) > swipeThreshold
+                            rawX += amount.x
+                            // Tick the moment the skip arms or disarms, while the finger is still down.
+                            if (before != kotlin.math.abs(rawX) > swipeThreshold) swipeHaptics?.performSubtleTick()
+                            val target = banded(rawX)
+                            swipeScope.launch { dragX.snapTo(target) }
                         } else {
                             tracker.addPointerInputChange(change)
                             sheet.dragBy(amount.y)
@@ -365,19 +381,29 @@ fun FloatingExpressiveMiniPlayer(
                         label = "miniPlayCorner"
                     )
                     FilledIconButton(
-                        onClick = onTogglePlay,
+                        onClick = {
+                            swipeHaptics?.performPlayPauseTransition(isStartingPlay = !isPlaying)
+                            onTogglePlay()
+                        },
                         shape = RoundedCornerShape(playCorner),
                         modifier = Modifier
                             .size(width = 48.dp, height = 40.dp)
                             .testTag("mini_player_play_button")
                     ) {
-                        when {
-                            isBuffering -> LoadingIndicator(
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(26.dp)
-                            )
-                            isPlaying -> Icon(Icons.Filled.Pause, contentDescription = "Pause")
-                            else -> Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
+                        // Tapped often, so a quick crossfade rather than a swap or a flourish.
+                        Crossfade(
+                            targetState = if (isBuffering) 0 else if (isPlaying) 1 else 2,
+                            animationSpec = tween(120),
+                            label = "miniPlayIcon"
+                        ) { state ->
+                            when (state) {
+                                0 -> LoadingIndicator(
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                                1 -> Icon(Icons.Filled.Pause, contentDescription = "Pause")
+                                else -> Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
+                            }
                         }
                     }
 
@@ -596,7 +622,7 @@ fun NowPlayingStudioOverlay(
             // Read in layer and draw blocks only: it moves every frame of the change.
             val lyricsShown = animateFloatAsState(
                 targetValue = if (lyricsOpen) 1f else 0f,
-                animationSpec = tween(420, easing = FastOutSlowInEasing),
+                animationSpec = tween(320, easing = FastOutSlowInEasing),
                 label = "lyricsShown"
             )
 
@@ -656,7 +682,7 @@ fun NowPlayingStudioOverlay(
 
             val topIconColor by animateColorAsState(
                 targetValue = if (lyricsOpen) MaterialTheme.colorScheme.onSurface else Color.White,
-                animationSpec = tween(420),
+                animationSpec = tween(320),
                 label = "topIconColor"
             )
             val topBar = @Composable {
@@ -680,7 +706,7 @@ fun NowPlayingStudioOverlay(
                     AnimatedVisibility(
                         visible = lyricsOpen,
                         enter = fadeIn(tween(320, delayMillis = 80)) +
-                            slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it / 10 },
+                            slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it / 10 },
                         exit = fadeOut(tween(200))
                     ) {
                         SyncedLyricsPane(
@@ -1104,7 +1130,7 @@ private fun PlayerHero(
                         // the background never shows through between two covers.
                         // After a swipe the slide is the transition.
                         if (exitHidden[0]) EnterTransition.None togetherWith ExitTransition.None
-                        else fadeIn(tween(360)) + scaleIn(tween(520, easing = FastOutSlowInEasing), initialScale = 1.06f) togetherWith
+                        else fadeIn(tween(220)) + scaleIn(tween(320, easing = FastOutSlowInEasing), initialScale = 1.06f) togetherWith
                             ExitTransition.KeepUntilTransitionsFinished
                     },
                     label = "coverChange"
@@ -1314,8 +1340,8 @@ private fun PlayerControls(
             // The cover reaches down behind this row; it needs to know where the row ends.
             AnimatedVisibility(
                 visible = !lyricsOpen,
-                enter = expandVertically(tween(420, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(320, delayMillis = 100)),
-                exit = shrinkVertically(tween(420, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
+                enter = expandVertically(tween(320, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(320, delayMillis = 100)),
+                exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
             ) {
             Column {
             Row(
@@ -1365,16 +1391,20 @@ private fun PlayerControls(
                         )
                     }
                 }
+                val heartHaptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
                 if (showStarButton) {
                     Spacer(Modifier.width(12.dp))
                     IconToggleButton(
                         checked = track.starred,
-                        onCheckedChange = { onToggleStar() },
+                        onCheckedChange = { starred ->
+                            heartHaptics.performToggleOption(starred)
+                            onToggleStar()
+                        },
                         shapes = IconButtonDefaults.toggleableShapes(),
                         modifier = Modifier.size(56.dp).testTag("now_playing_star_button")
                     ) {
-                        Icon(
-                            imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        FavouriteHeartIcon(
+                            starred = track.starred,
                             contentDescription = "Star on OpenSubsonic Server"
                         )
                     }
@@ -1397,10 +1427,10 @@ private fun PlayerControls(
 
         AnimatedVisibility(
             visible = !lyricsOpen,
-            enter = expandVertically(tween(420, easing = FastOutSlowInEasing)) +
-                slideInVertically(tween(420, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(320, delayMillis = 100)),
-            exit = shrinkVertically(tween(420, easing = FastOutSlowInEasing)) +
-                slideOutVertically(tween(420, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(200))
+            enter = expandVertically(tween(320, easing = FastOutSlowInEasing)) +
+                slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(320, delayMillis = 100)),
+            exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing)) +
+                slideOutVertically(tween(320, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(200))
         ) {
             ExpressiveTransportGroup(
                 isPlaying = isPlaying,

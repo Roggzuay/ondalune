@@ -2,6 +2,9 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
+import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.LocalHold
 import io.github.roggzuay.ondalune.data.model.countOf
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -4246,11 +4249,24 @@ private fun OnboardingSyncPanel(state: OndaluneViewModel.OnboardingSync, serverN
                     CircularWavyProgressIndicator(progress = { animated }, modifier = Modifier.fillMaxSize())
                 }
                 if (phase == OndaluneViewModel.OnboardingSync.Phase.DONE) {
+                    // The end of setup is what people remember: the check springs in with a
+                    // confirming tap instead of just replacing the percentage.
+                    val landed = remember { Animatable(0f) }
+                    val doneHaptics = LocalHapticFeedbackManager.current
+                    LaunchedEffect(Unit) {
+                        doneHaptics?.performToggleOption(true)
+                        landed.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow))
+                    }
                     Icon(
                         Icons.Filled.CheckCircle,
                         contentDescription = "Sync complete",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier.size(56.dp).graphicsLayer {
+                            val s = 0.5f + 0.5f * landed.value
+                            scaleX = s
+                            scaleY = s
+                            alpha = landed.value.coerceIn(0f, 1f)
+                        }
                     )
                 } else {
                     Text(

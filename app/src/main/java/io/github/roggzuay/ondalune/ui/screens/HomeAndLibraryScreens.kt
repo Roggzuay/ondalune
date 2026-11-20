@@ -149,6 +149,7 @@ import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
+import io.github.roggzuay.ondalune.ui.components.FavouriteHeartIcon
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
 import io.github.roggzuay.ondalune.ui.components.formatDurationSec
@@ -944,8 +945,8 @@ fun TrackExpressiveRow(
                         containerColor = Color.Transparent,
                         contentColor = if (track.starred) accent else muted
                     ) {
-                        Icon(
-                            imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        FavouriteHeartIcon(
+                            starred = track.starred,
                             contentDescription = "Favourite",
                             modifier = Modifier.size(19.dp)
                         )
@@ -1131,7 +1132,8 @@ internal fun LazyListScope.trackCollection(
                 isPlaying = isPlaying,
                 onPlay = { onPlay(track) },
                 onToggleStar = { onToggleStar(track) },
-                compact = mode == LibraryViewMode.COMPACT_LIST
+                compact = mode == LibraryViewMode.COMPACT_LIST,
+                modifier = Modifier.animateItem()
             )
         }
         else -> collectionEntries(
@@ -1731,6 +1733,8 @@ private fun GenreOrFolderDetailSubScreen(
 
         items(tracks, key = { it.id }) { track ->
             TrackExpressiveRow(
+                // Rows that leave (an unfavourite) fade and the rest slide up instead of jumping.
+                modifier = Modifier.animateItem(),
                 track = track,
                 isCurrent = track.id == currentTrackId,
                 isPlaying = isPlaying,
@@ -1822,6 +1826,8 @@ fun AlbumDetailSubScreen(
 
         items(tracks, key = { it.id }) { track ->
             TrackExpressiveRow(
+                // Rows that leave (an unfavourite) fade and the rest slide up instead of jumping.
+                modifier = Modifier.animateItem(),
                 track = track,
                 isCurrent = track.id == currentTrackId,
                 isPlaying = isPlaying,

@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
+import io.github.roggzuay.ondalune.ui.theme.LocalReducedMotion
 import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
 
 /**
@@ -28,6 +29,7 @@ import io.github.roggzuay.ondalune.ui.theme.artworkCacheKey
  * with a thin bright streak in it, then a short rest before the next pass.
  */
 fun Modifier.mirrorShine(active: Boolean): Modifier = if (!active) this else composed {
+    if (LocalReducedMotion.current) return@composed this
     val sweep by rememberInfiniteTransition(label = "mirrorShine").animateFloat(
         initialValue = 0f,
         targetValue = 1f,

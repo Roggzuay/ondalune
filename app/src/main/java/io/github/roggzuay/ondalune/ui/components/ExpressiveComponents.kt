@@ -48,6 +48,9 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ButtonGroup
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -243,6 +246,38 @@ fun ExpressivePlayMorphButton(
 }
 
 /**
+ * The favourite heart. Favouriting pops it (1 → 1.25 → 1, overshooting as it settles) so the
+ * moment reads at a glance; unfavouriting just swaps the icon. Nothing moves on first show.
+ */
+@Composable
+fun FavouriteHeartIcon(
+    starred: Boolean,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    val pop = remember { Animatable(1f) }
+    var previous by remember { mutableStateOf(starred) }
+    val reducedMotion = LocalReducedMotion.current
+    LaunchedEffect(starred) {
+        if (starred && !previous && !reducedMotion) {
+            pop.animateTo(1.25f, tween(90, easing = FastOutLinearInEasing))
+            pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium))
+        } else {
+            pop.snapTo(1f)
+        }
+        previous = starred
+    }
+    Icon(
+        imageVector = if (starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+        contentDescription = contentDescription,
+        modifier = modifier.graphicsLayer {
+            scaleX = pop.value
+            scaleY = pop.value
+        }
+    )
+}
+
+/**
  * Tactile Material 3 Expressive Boxed Icon Button with elastic glue stretch and corner morphing.
  */
 @Composable
@@ -269,13 +304,14 @@ fun ExpressiveBounceIconButton(
     val hapticManager = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
 
     val scaleX by animateFloatAsState(
-        targetValue = if (isPressed) 1.14f else if (active) 1.04f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow),
+        // Pressed many times a session (row hearts, ⋮), so a short squash that settles quickly.
+        targetValue = if (isPressed) 1.06f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
         label = "iconScaleX"
     )
     val scaleY by animateFloatAsState(
-        targetValue = if (isPressed) 0.88f else if (active) 1.04f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow),
+        targetValue = if (isPressed) 0.94f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
         label = "iconScaleY"
     )
 
@@ -341,7 +377,8 @@ fun SpringPressableSurface(
         label = "cardScaleX"
     )
     val scaleY by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
+        // Same as X: full-width rows would look squeezed flat by a taller squash.
+        targetValue = if (isPressed) 0.97f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
         label = "cardScaleY"
     )
@@ -561,7 +598,8 @@ private fun <T> DockItems(
                 val underLens = index == lensIndex
                 val indicatorWidth by animateDpAsState(
                     targetValue = if (selected) (if (compact) 52.dp else 64.dp) else 32.dp,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                    // Tab switches are the most frequent tap: settle fast with barely any wobble.
+                    animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
                     label = "dockIndicator"
                 )
                 val indicator by animateColorAsState(
@@ -1381,7 +1419,7 @@ fun AnimatedAudioBarsIndicator(
     color: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier
 ) {
-    if (!isPlaying) {
+    if (!isPlaying || LocalReducedMotion.current) {
         Canvas(modifier.size(20.dp)) { drawBars(color, listOf(0.3f, 0.5f, 0.35f, 0.25f)) }
         return
     }

@@ -163,6 +163,7 @@ import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
+import io.github.roggzuay.ondalune.ui.components.FavouriteHeartIcon
 import io.github.roggzuay.ondalune.ui.components.ExpressiveSquigglySlider
 import io.github.roggzuay.ondalune.ui.components.ExpressiveTransportGroup
 import io.github.roggzuay.ondalune.ui.components.LocalHapticFeedbackManager
@@ -978,7 +979,7 @@ private fun NowPlayingCenterStage(
                                 transitionSpec = {
                                     val exit = if (exitHidden[0]) ExitTransition.None else
                                         fadeOut(tween(260)) + scaleOut(tween(320), targetScale = 0.96f)
-                                    fadeIn(tween(320, delayMillis = 60)) + scaleIn(tween(460, easing = FastOutSlowInEasing), initialScale = 0.9f) togetherWith exit
+                                    fadeIn(tween(220, delayMillis = 40)) + scaleIn(tween(320, easing = FastOutSlowInEasing), initialScale = 0.9f) togetherWith exit
                                 },
                                 label = "coverChange"
                             ) { shown ->
@@ -1150,19 +1151,23 @@ private fun NowPlayingControlsColumn(
                         }
                     }
 
+                    val heartHaptics = LocalHapticFeedbackManager.current ?: rememberHapticFeedbackManager()
                     if (showPlayerStarButton) {
                         Spacer(modifier = Modifier.width(12.dp))
 
                         IconToggleButton(
                             checked = track.starred,
-                            onCheckedChange = { onToggleStar() },
+                            onCheckedChange = { starred ->
+                                heartHaptics.performToggleOption(starred)
+                                onToggleStar()
+                            },
                             shapes = IconButtonDefaults.toggleableShapes(),
                             modifier = Modifier
                                 .size(56.dp)
                                 .testTag("now_playing_star_button")
                         ) {
-                            Icon(
-                                imageVector = if (track.starred) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            FavouriteHeartIcon(
+                                starred = track.starred,
                                 contentDescription = "Star on OpenSubsonic Server"
                             )
                         }
