@@ -38,8 +38,8 @@ android {
     minSdk = 24
     targetSdk = 36
     // Bumped in each release commit. F-Droid reads these two lines as written (no Gradle code runs).
-    versionCode = 466260
-    versionName = "1.8.0.4-preview"
+    versionCode = 466330
+    versionName = "1.8.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     buildConfigField("boolean", "SELF_UPDATE", selfUpdate.toString())

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.1 (2026-11-20)
+
+### New
+- Hold an album, artist, playlist or mix for quick options: play, shuffle, queue, download, add to a playlist and more.
+- App-icon shortcuts: hold the Ondalune icon to play Your Mix, shuffle your favourites or shuffle everything, without opening the app.
+- Ask your assistant to "Play … on Ondalune", and a headphone or car play button starts Your Mix even when the app is closed.
+- A play/pause button while lyrics are open, and the audio quality details show where the sound goes out.
+- Livelier, calmer motion: the heart pops when you favourite, the mini player resists once a swipe will skip, and lists slide instead of jumping.
+
+### Fixes & improvements
+- Switching between dark and light no longer closes the app when the icon follows the theme.
+- Opening the app shows one splash, without a sideways slide.
+- Faster transitions for things you do often, and Reduce animations is respected in more places.
+
 ## 1.8.0 (2026-11-18)
 
 ### New
