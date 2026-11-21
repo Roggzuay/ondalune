@@ -248,6 +248,7 @@ class OndaluneRepository(
     }
 
     suspend fun recordPlay(server: SubsonicServerConfig, track: SubsonicTrack) {
+        if (io.github.roggzuay.ondalune.data.source.OpenedFile.uriOf(track) != null) return // not in the library
         dao.incrementPlayCount(track.id)
         sourceFor(server).reportPlayed(server, track)
     }

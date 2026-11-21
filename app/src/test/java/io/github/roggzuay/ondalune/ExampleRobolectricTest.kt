@@ -7,7 +7,6 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
-import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
 import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
@@ -78,9 +77,7 @@ class ExampleRobolectricTest {
     fun `black and white artwork gives a grey scheme, not the coral fallback`() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val scheme = io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme(
-            context, seedHex = "#7A7A7A", isDark = true, isAmoled = false,
-            useMaterialYouDynamic = false, unifiedMaterialYouColor = false, harmonizeWithArtwork = true,
-            curatedPalette = CuratedColorPalette.DEFAULT_EXPRESSIVE
+            context, seedHex = "#7A7A7A", isDark = true, isAmoled = false
         )
         val hsv = FloatArray(3)
         listOf(scheme.primary, scheme.primaryContainer, scheme.secondaryContainer, scheme.surface).forEach {
@@ -90,12 +87,23 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `every theme defines a home layout and fonts resolve`() {
-        io.github.roggzuay.ondalune.data.model.InterfaceStyle.entries.forEach { style ->
-            val spec = io.github.roggzuay.ondalune.ui.theme.styleSpecFor(style)
-            assertTrue("$style has no home sections", spec.defaultHome.isNotEmpty())
-            assertEquals(spec.defaultHome.size, spec.defaultHome.distinct().size)
-        }
+    fun `app colours stay put while the player follows the cover`() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val build = { seed: String? -> io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme(context, seed, isDark = true, isAmoled = false) }
+        // No seed: the app's own scheme, the same whatever is playing.
+        assertEquals(build(null).primary, build(null).primary)
+        // A cover seed paints the player: different covers, different accents.
+        assertNotEquals(build("#2BB673").primary, build("#7B61FF").primary)
+        // Black theme blacks out the app's surfaces.
+        val black = io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme(context, null, isDark = true, isAmoled = true)
+        assertEquals(androidx.compose.ui.graphics.Color.Black, black.surface)
+    }
+
+    @Test
+    fun `the style defines a home layout and fonts resolve`() {
+        val spec = io.github.roggzuay.ondalune.ui.theme.OndaluneStyle
+        assertTrue(spec.defaultHome.isNotEmpty())
+        assertEquals(spec.defaultHome.size, spec.defaultHome.distinct().size)
         io.github.roggzuay.ondalune.data.model.AppFont.entries.forEach { font ->
             io.github.roggzuay.ondalune.ui.theme.appFontFamily(font, display = true)
             io.github.roggzuay.ondalune.ui.theme.appFontFamily(font, display = false)
@@ -111,9 +119,8 @@ class ExampleRobolectricTest {
         val defaultSettings = PlayerCustomizationSettings()
         assertEquals(io.github.roggzuay.ondalune.data.model.AppIconVariant.MOONLIGHT, defaultSettings.appIconVariant)
         assertEquals(PlayerBackgroundAnimationStyle.ARTWORK_GLOW, defaultSettings.playerBackgroundStyle)
-        assertEquals(CuratedColorPalette.DEFAULT_EXPRESSIVE, defaultSettings.curatedPalette)
+        assertEquals(io.github.roggzuay.ondalune.data.model.AppThemeMode.SYSTEM, defaultSettings.themeMode)
         assertEquals(CornerStylePreset.EXPRESSIVE_ROUNDED, defaultSettings.cornerStylePreset)
-        assertEquals(io.github.roggzuay.ondalune.data.model.InterfaceStyle.SIGNATURE, defaultSettings.interfaceStyle)
         io.github.roggzuay.ondalune.data.model.AppIconVariant.entries.forEach { variant ->
             val (bg, fg) = io.github.roggzuay.ondalune.ui.components.appIconLayers(variant)
             assertTrue("Expected icon layers for $variant", bg != 0 && fg != 0)
@@ -127,22 +134,10 @@ class ExampleRobolectricTest {
     @Test
     fun `dynamic surface palette and media bridge support widget layout and theme modes`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val songPalette = resolveDynamicSurfacePalette(
-            context = context,
-            seedHex = "#FF6B5B",
-            accentHex = "#70F5FF",
-            unifiedMaterialYouColor = false,
-            useMaterialYouDynamic = false,
-            curatedPalette = CuratedColorPalette.OCEAN_CYAN
-        )
-        val unifiedPalette = resolveDynamicSurfacePalette(
-            context = context,
-            seedHex = "#FF6B5B",
-            accentHex = "#70F5FF",
-            unifiedMaterialYouColor = true,
-            useMaterialYouDynamic = true
-        )
-        assertNotEquals(songPalette.primaryArgb, unifiedPalette.primaryArgb)
+        // The widget and notification follow the song: two covers, two palettes.
+        val warmSong = resolveDynamicSurfacePalette(context, seedHex = "#FF6B5B")
+        val coolSong = resolveDynamicSurfacePalette(context, seedHex = "#1E5AA8")
+        assertNotEquals(warmSong.primaryArgb, coolSong.primaryArgb)
 
         val tracks = DemoSubsonicCatalog.seedTracks(1L)
         for (layoutMode in WidgetLayoutMode.entries) {
@@ -152,7 +147,6 @@ class ExampleRobolectricTest {
                     track = tracks.first(),
                     isPlaying = true,
                     settings = PlayerCustomizationSettings(
-                        unifiedMaterialYouColor = false,
                         widgetLayoutMode = layoutMode,
                         widgetThemeMode = themeMode,
                         widgetShowArtwork = true,

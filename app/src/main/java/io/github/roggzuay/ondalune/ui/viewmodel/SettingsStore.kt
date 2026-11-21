@@ -6,11 +6,9 @@ import io.github.roggzuay.ondalune.data.repository.LibrarySyncWorker
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
-import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
 import io.github.roggzuay.ondalune.data.model.DockStyle
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.HomeSection
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.data.model.LibrarySortOption
 import io.github.roggzuay.ondalune.data.model.LibraryViewMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
@@ -71,21 +69,12 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(dockStyle = style) }
     }
 
-    fun setUseMaterialYouDynamicColor(enabled: Boolean) {
-        update { it.copy(useMaterialYouDynamicColor = enabled) }
-    }
-
-    fun setHarmonizePlayerWithArtwork(enabled: Boolean) {
-        update { it.copy(harmonizePlayerWithArtwork = enabled) }
-    }
-
     fun setHeaderFont(font: AppFont) = update { it.copy(headerFont = font) }
 
     fun setBodyFont(font: AppFont) = update { it.copy(bodyFont = font) }
 
     fun setArtworkCut(cut: io.github.roggzuay.ondalune.data.model.ArtworkCut) = update { it.copy(artworkCut = cut) }
 
-    fun setPlayerLook(look: io.github.roggzuay.ondalune.data.model.PlayerLook) = update { it.copy(playerLook = look) }
 
     /** Saves a custom Home order (visible sections only). */
     fun setHomeSections(sections: List<HomeSection>) = update { it.copy(homeSections = sections) }
@@ -203,19 +192,13 @@ class SettingsStore(private val prefs: SharedPreferences) {
             appIconVariant = AppIconVariant.entries.find { it.name == prefs.getString("cfg_app_icon_variant", defaults.appIconVariant.name) } ?: defaults.appIconVariant,
             dockStyle = DockStyle.entries.find { it.name == prefs.getString("cfg_dock_style", defaults.dockStyle.name) } ?: defaults.dockStyle,
             themeMode = AppThemeMode.entries.find { it.name == prefs.getString("cfg_theme_mode", defaults.themeMode.name) } ?: defaults.themeMode,
-            useMaterialYouDynamicColor = prefs.getBoolean("cfg_material_you", defaults.useMaterialYouDynamicColor),
-            unifiedMaterialYouColor = prefs.getBoolean("cfg_unified_material_you", defaults.unifiedMaterialYouColor),
-            curatedPalette = CuratedColorPalette.entries.find { it.name == prefs.getString("cfg_curated_palette", defaults.curatedPalette.name) } ?: defaults.curatedPalette,
             cornerStylePreset = CornerStylePreset.entries.find { it.name == prefs.getString("cfg_corner_preset", defaults.cornerStylePreset.name) } ?: defaults.cornerStylePreset,
-            interfaceStyle = InterfaceStyle.entries.find { it.name == prefs.getString("cfg_ui_style", defaults.interfaceStyle.name) } ?: defaults.interfaceStyle,
             headerFont = AppFont.entries.find { it.name == prefs.getString("cfg_header_font", null) } ?: defaults.headerFont,
             bodyFont = AppFont.entries.find { it.name == prefs.getString("cfg_body_font", null) } ?: defaults.bodyFont,
             artworkCut = io.github.roggzuay.ondalune.data.model.ArtworkCut.entries.find { it.name == prefs.getString("cfg_artwork_cut", null) } ?: defaults.artworkCut,
-            playerLook = io.github.roggzuay.ondalune.data.model.PlayerLook.entries.find { it.name == prefs.getString("cfg_player_look", null) } ?: defaults.playerLook,
             homeSections = prefs.getString("cfg_home_sections", "").orEmpty().split(',')
                 .mapNotNull { name -> HomeSection.entries.find { it.name == name } },
             iconFollowsTheme = prefs.getBoolean("cfg_icon_follows_theme", defaults.iconFollowsTheme),
-            harmonizePlayerWithArtwork = prefs.getBoolean("cfg_harmonize_artwork", defaults.harmonizePlayerWithArtwork),
             playerBackgroundStyle = PlayerBackgroundAnimationStyle.entries.find { it.name == prefs.getString("cfg_bg_style_v2", defaults.playerBackgroundStyle.name) } ?: defaults.playerBackgroundStyle,
             seekBarStyle = SeekBarStyle.entries.find { it.name == prefs.getString("cfg_seekbar_style", defaults.seekBarStyle.name) } ?: defaults.seekBarStyle,
             showRemainingTime = prefs.getBoolean("cfg_show_remaining_time", defaults.showRemainingTime),
@@ -264,18 +247,12 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putString("cfg_app_icon_variant", s.appIconVariant.name)
             .putString("cfg_dock_style", s.dockStyle.name)
             .putString("cfg_theme_mode", s.themeMode.name)
-            .putBoolean("cfg_material_you", s.useMaterialYouDynamicColor)
-            .putBoolean("cfg_unified_material_you", s.unifiedMaterialYouColor)
-            .putString("cfg_curated_palette", s.curatedPalette.name)
             .putString("cfg_corner_preset", s.cornerStylePreset.name)
-            .putString("cfg_ui_style", s.interfaceStyle.name)
             .putString("cfg_header_font", s.headerFont.name)
             .putString("cfg_body_font", s.bodyFont.name)
             .putString("cfg_artwork_cut", s.artworkCut.name)
-            .putString("cfg_player_look", s.playerLook.name)
             .putString("cfg_home_sections", s.homeSections.joinToString(",") { it.name })
             .putBoolean("cfg_icon_follows_theme", s.iconFollowsTheme)
-            .putBoolean("cfg_harmonize_artwork", s.harmonizePlayerWithArtwork)
             .putString("cfg_bg_style_v2", s.playerBackgroundStyle.name)
             .putString("cfg_seekbar_style", s.seekBarStyle.name)
             .putBoolean("cfg_show_remaining_time", s.showRemainingTime)

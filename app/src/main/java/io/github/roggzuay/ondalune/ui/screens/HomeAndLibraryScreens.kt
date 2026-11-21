@@ -2,6 +2,9 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.BlurredCoverHeader
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import io.github.roggzuay.ondalune.ui.components.LocalHold
 import io.github.roggzuay.ondalune.ui.components.HoldTarget
 import io.github.roggzuay.ondalune.data.model.countOf
@@ -27,6 +30,7 @@ import androidx.compose.material3.FilledTonalButton
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
+import io.github.roggzuay.ondalune.ui.theme.LocalSongScheme
 import io.github.roggzuay.ondalune.ui.components.ViewModeMenuButton
 import io.github.roggzuay.ondalune.ui.components.collectionEntries
 import io.github.roggzuay.ondalune.ui.components.CollectionEntry
@@ -554,7 +558,7 @@ internal fun ShelfHeader(title: String, onMore: (() -> Unit)?, onPlayAll: (() ->
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
-        // Bloom and Poster put a play pill next to the title; other themes keep the quiet link.
+        // A play pill beside the title when the style asks for one; otherwise the quiet link.
         if (onPlayAll != null && spec.shelfPlayButtons) {
             FilledTonalButton(
                 onClick = onPlayAll,
@@ -653,7 +657,7 @@ private fun TrackShelf(
                             text = track.title,
                             modifier = Modifier.padding(horizontal = 4.dp),
                             style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            color = if (isCurrent) (LocalSongScheme.current ?: MaterialTheme.colorScheme).primary else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -778,7 +782,8 @@ fun TrackExpressiveRow(
     val selected = selection.isSelected(track.id)
     var showOptions by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
-    val lit = LocalStyleSpec.current.nowPlayingRow.colors(scheme)
+    // The playing row wears the playing song's colours, a hint of its cover in the list.
+    val lit = LocalStyleSpec.current.nowPlayingRow.colors(LocalSongScheme.current ?: scheme)
     // One fraction drives every playing-row colour, so the highlight fades off the old row while
     // it fades onto the new one.
     val litFraction by animateFloatAsState(
@@ -1774,6 +1779,27 @@ fun AlbumDetailSubScreen(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         item {
+            // The header sits on the album's cover, zoomed and blurred like the player's
+            // background; it reaches past the list's padding to the page edges and melts into
+            // the page under the first songs.
+            Box {
+            BlurredCoverHeader(
+                seedHex = album.paletteSeedHex,
+                accentHex = album.accentHex,
+                artStyleIndex = album.artStyleIndex,
+                coverArtUrl = album.coverArtUrl,
+                modifier = Modifier
+                    .matchParentSize()
+                    .layout { measurable, constraints ->
+                        val side = 16.dp.roundToPx()
+                        val top = 12.dp.roundToPx()
+                        val placeable = measurable.measure(
+                            Constraints.fixed(constraints.maxWidth + side * 2, constraints.maxHeight + top + 48.dp.roundToPx())
+                        )
+                        layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(-side, -top) }
+                    }
+            )
+            Column {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1810,10 +1836,7 @@ fun AlbumDetailSubScreen(
                     ) { content() }
                 }
             }
-        }
-
-        item {
-            Box(Modifier.padding(top = 8.dp, bottom = 12.dp)) {
+            Box(Modifier.padding(top = 12.dp, bottom = 12.dp)) {
                 FeaturedAlbumHeroCard(
                     album = album,
                     featured = false,
@@ -1821,6 +1844,8 @@ fun AlbumDetailSubScreen(
                     onPlayAlbum = onPlayAll,
                     onShuffleAlbum = onShuffleAll
                 )
+            }
+            }
             }
         }
 

@@ -114,6 +114,14 @@ private val releaseNotes = mapOf(
         "Updates show up when you open the app, and the previous version is one tap away",
         "Empty Favourites and Playlists tell you how to fill them",
         "Fixes & improvements: switching between dark and light no longer restarts the app"
+    ),
+    "2.0" to listOf(
+        "Ondalune now wears your phone's colours, in light or dark",
+        "The player is painted from the cover: the picture, then the same cover blurred behind everything",
+        "The mini player and the playing song pick up the cover's colour, wherever you are",
+        "Album pages sit on their blurred cover too",
+        "Open song files from any app with Ondalune, and pick it as your music player",
+        "Fixes & improvements: Dolby Atmos songs play on tablets and phones without Dolby, and Ondalune stays in your recent apps after you leave it"
     )
 )
 

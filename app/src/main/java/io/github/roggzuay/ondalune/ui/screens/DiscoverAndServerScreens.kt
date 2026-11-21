@@ -22,7 +22,7 @@ import io.github.roggzuay.ondalune.ui.components.UpdatesCard
 import io.github.roggzuay.ondalune.data.network.AppUpdate
 import io.github.roggzuay.ondalune.BuildConfig
 import io.github.roggzuay.ondalune.data.network.UpdateCheckStatus
-import io.github.roggzuay.ondalune.ui.theme.styleSpecFor
+import io.github.roggzuay.ondalune.ui.theme.OndaluneStyle
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.LibraryViewMode
@@ -156,8 +156,6 @@ import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
-import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
 import io.github.roggzuay.ondalune.data.model.DockStyle
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
@@ -429,19 +427,12 @@ fun SettingsCustomizationScreen(
     onSetDockStyle: (DockStyle) -> Unit,
     onSetHideMiniPlayerOnScroll: (Boolean) -> Unit = {},
     onSetThemeMode: (AppThemeMode) -> Unit,
-    onSetUseMaterialYou: (Boolean) -> Unit,
-    onSetUnifiedMaterialYouColor: (Boolean) -> Unit = {},
-    onSetCuratedPalette: (CuratedColorPalette) -> Unit = {},
     onSetCornerStylePreset: (CornerStylePreset) -> Unit = {},
-    onSetInterfaceStyle: (InterfaceStyle) -> Unit = {},
     onSetHeaderFont: (AppFont) -> Unit = {},
     onSetBodyFont: (AppFont) -> Unit = {},
     onSetArtworkCut: (io.github.roggzuay.ondalune.data.model.ArtworkCut) -> Unit = {},
-    onSetPlayerLook: (io.github.roggzuay.ondalune.data.model.PlayerLook) -> Unit = {},
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
     onResetHomeSections: () -> Unit = {},
-    onSetHarmonizeArtwork: (Boolean) -> Unit,
-    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {},
     onSetAnimatedSquiggly: (Boolean) -> Unit,
     onSetHapticFeedback: (Boolean) -> Unit = {},
     onSetHighRefreshRate120Hz: (Boolean) -> Unit = {},
@@ -954,17 +945,12 @@ fun SettingsCustomizationScreen(
             }
         }
 
-        // 2. Expandable Section: Theme, Material You Unified Color & Player Background Animation
+        // 2. Expandable Section: light or dark, fonts, artwork, player and navigation
         if (shownSection == null || shownSection == SettingsExpandableSection.APPEARANCE_THEME) item {
             val isExpanded = expandedMap[SettingsExpandableSection.APPEARANCE_THEME] == true
-            val modeBadge = if (settings.unifiedMaterialYouColor) {
-                "Phone colours"
-            } else {
-                "Cover colours"
-            }
             ExpandableSettingsSectionCard(
                 section = SettingsExpandableSection.APPEARANCE_THEME,
-                badgeText = modeBadge,
+                badgeText = settings.themeMode.label,
                 isExpanded = isExpanded,
                 onToggleExpand = {
                     expandedMap[SettingsExpandableSection.APPEARANCE_THEME] = !isExpanded
@@ -973,11 +959,44 @@ fun SettingsCustomizationScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
-                        text = "Theme",
+                        text = "Light or dark",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    ThemeGallery(selected = settings.interfaceStyle, onSelect = onSetInterfaceStyle)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppThemeMode.entries.forEach { mode ->
+                            val selected = settings.themeMode == mode
+                            SpringPressableSurface(
+                                onClick = { onSetThemeMode(mode) },
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                cornerRadius = 16.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("theme_mode_${mode.name.lowercase()}")
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Text(
+                                        text = mode.label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = LocalContentColor.current
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = "The app follows your phone's colours. The player and the playing song's buttons take their colour from its cover.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     Text(
@@ -998,180 +1017,16 @@ fun SettingsCustomizationScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     Text(
-                        text = "Player",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    PlayerLookPicker(selected = settings.playerLook, onSelect = onSetPlayerLook)
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    Text(
                         text = "Home layout",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
                     HomeLayoutEditor(
-                        sections = settings.homeSections.ifEmpty { styleSpecFor(settings.interfaceStyle).defaultHome },
+                        sections = settings.homeSections.ifEmpty { OndaluneStyle.defaultHome },
                         isCustom = settings.homeSections.isNotEmpty(),
                         onChange = onSetHomeSections,
                         onReset = onResetHomeSections
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                    Text(
-                        text = "Colours for the app, player, notification and widget",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    // Option A: Material You Expressive (1 Unified Color from Phone Theme)
-                    SpringPressableSurface(
-                        onClick = { onSetUnifiedMaterialYouColor(true) },
-                        color = if (settings.unifiedMaterialYouColor) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                        cornerRadius = 20.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("palette_mode_unified_material_you")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Palette,
-                                contentDescription = null,
-                                tint = LocalContentColor.current
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Your phone's colours (Material You)",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = "Unifies the entire app, player, notification & widget into 1 cohesive color from your phone's current theme",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LocalContentColor.current.copy(alpha = 0.78f)
-                                )
-                            }
-                            if (settings.unifiedMaterialYouColor) {
-                                Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = "Selected",
-                                    tint = LocalContentColor.current
-                                )
-                            }
-                        }
-                    }
-
-                    // Option B: Dynamic Song Artwork Palette (Default)
-                    SpringPressableSurface(
-                        onClick = {
-                            onSetUnifiedMaterialYouColor(false)
-                            onSetHarmonizeArtwork(true)
-                        },
-                        color = if (!settings.unifiedMaterialYouColor) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                        cornerRadius = 20.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("palette_mode_song_artwork")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Palette,
-                                contentDescription = null,
-                                tint = LocalContentColor.current
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Colours from the playing cover",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = "Dynamically extracts and morphs app, notification & widget colors from the currently playing song",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LocalContentColor.current.copy(alpha = 0.78f)
-                                )
-                            }
-                            if (!settings.unifiedMaterialYouColor) {
-                                Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
-                                    contentDescription = "Selected",
-                                    tint = LocalContentColor.current
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                    // Player Background Animation Style Selector
-                    Text(
-                        text = "Player background",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    PlayerBackgroundAnimationStyle.entries.forEach { bgStyle ->
-                        val selected = settings.playerBackgroundStyle == bgStyle
-                        SpringPressableSurface(
-                            onClick = { onSetPlayerBackgroundStyle(bgStyle) },
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            cornerRadius = 18.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("player_bg_style_${bgStyle.name.lowercase()}")
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = bgStyle.label,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = bgStyle.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = LocalContentColor.current.copy(alpha = 0.78f)
-                                    )
-                                }
-                                if (selected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = "Selected",
-                                        tint = LocalContentColor.current,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
@@ -1237,84 +1092,6 @@ fun SettingsCustomizationScreen(
                         onCheckedChange = onSetHideMiniPlayerOnScroll,
                         testTag = "toggle_hide_mini_player"
                     )
-
-                    Text(
-                        text = "Light or dark",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AppThemeMode.entries.forEach { mode ->
-                            val selected = settings.themeMode == mode
-                            SpringPressableSurface(
-                                onClick = { onSetThemeMode(mode) },
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                cornerRadius = 16.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                                    .testTag("theme_mode_${mode.name.lowercase()}")
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Text(
-                                        text = mode.label.split(" ").last(),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = LocalContentColor.current
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    SettingsToggleRow(
-                        title = "Use your phone's colours (Android 12+)",
-                        subtitle = "Base the colours on your wallpaper",
-                        checked = settings.useMaterialYouDynamicColor,
-                        onCheckedChange = onSetUseMaterialYou,
-                        testTag = "toggle_material_you"
-                    )
-
-                    SettingsToggleRow(
-                        title = "Blend cover colours with the theme",
-                        subtitle = "Morph player & surface accents based on current song cover art",
-                        checked = settings.harmonizePlayerWithArtwork,
-                        onCheckedChange = onSetHarmonizeArtwork,
-                        testTag = "toggle_harmonize_artwork"
-                    )
-
-                    Text(
-                        text = "Accent colour (when phone colours are off)",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(CuratedColorPalette.entries) { palette ->
-                            val selected = !settings.useMaterialYouDynamicColor && !settings.unifiedMaterialYouColor && settings.curatedPalette == palette
-                            SpringPressableSurface(
-                                onClick = { onSetCuratedPalette(palette) },
-                                color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                cornerRadius = 16.dp,
-                                modifier = Modifier
-                                    .height(42.dp)
-                                    .testTag("curated_palette_${palette.name.lowercase()}")
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
-                                    Text(
-                                        text = palette.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     Text(
                         text = "Corner roundness",
@@ -1753,11 +1530,7 @@ fun SettingsCustomizationScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = if (settings.unifiedMaterialYouColor) {
-                            "Both your Notification Shade Player and Home Screen Widget are dynamically tinted with your phone's 1 Unified Material You color."
-                        } else {
-                            "Both your Notification Shade Player and Home Screen Widget dynamically change color to match the currently playing song's artwork."
-                        },
+                        text = "The notification player and the home screen widget take their colour from the playing song's cover.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

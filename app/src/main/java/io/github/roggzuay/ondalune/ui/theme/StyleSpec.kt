@@ -17,7 +17,6 @@ import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.toPath
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.HomeSection
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import com.materialkolor.PaletteStyle
 
 /**
@@ -47,12 +46,10 @@ private val MixedShapes = listOf(
 )
 
 /**
- * Everything a theme changes beyond colour: typefaces, palette character, corner family, how
- * artwork is cut, and whether lists are cards or flat rows. Screens read [LocalStyleSpec]
- * instead of switching on [InterfaceStyle] so each theme is a single table row.
+ * Everything the look sets beyond colour: typefaces, palette character, corner family, how
+ * artwork is cut, and whether lists are cards or flat rows. Screens read [LocalStyleSpec].
  */
 data class StyleSpec(
-    val style: InterfaceStyle,
     val headerFont: AppFont,
     val bodyFont: AppFont,
     val paletteStyle: PaletteStyle,
@@ -82,32 +79,20 @@ data class StyleSpec(
     val defaultHome: List<HomeSection>
 )
 
-val LocalStyleSpec = staticCompositionLocalOf { styleSpecFor(InterfaceStyle.SIGNATURE) }
+/** Ondalune's one look: wide atomic type, squircle artwork, the vivid playing-row tile. */
+val OndaluneStyle = StyleSpec(
+    AppFont.UNBOUNDED, AppFont.FIGTREE, PaletteStyle.Vibrant, 1f, false,
+    ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, nowPlayingRow = NowPlayingRow.FIXED,
+    cardTiles = true, artBorder = true,
+    monoBadges = true, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
+    defaultHome = listOf(
+        HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
+        HomeSection.FAVOURITE_TRACKS, HomeSection.MOST_PLAYED, HomeSection.TOP_ARTISTS,
+        HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER
+    )
+)
 
-fun styleSpecFor(style: InterfaceStyle): StyleSpec = when (style) {
-    InterfaceStyle.SIGNATURE -> StyleSpec(
-        style, AppFont.UNBOUNDED, AppFont.FIGTREE, PaletteStyle.Vibrant, 1f, false,
-        ArtShape.SQUIRCLE, ArtShape.SQUIRCLE, cardRows = false, nowPlayingRow = NowPlayingRow.FIXED,
-        cardTiles = true, artBorder = true,
-        monoBadges = true, eyebrows = false, pureBlack = false, shelfPlayButtons = false,
-        defaultHome = listOf(
-            HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
-            HomeSection.FAVOURITE_TRACKS, HomeSection.MOST_PLAYED, HomeSection.TOP_ARTISTS,
-            HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER
-        )
-    )
-    InterfaceStyle.BLOOM -> StyleSpec(
-        style, AppFont.FREDOKA, AppFont.FIGTREE, PaletteStyle.Expressive, 1.35f, false,
-        ArtShape.MIXED, ArtShape.MIXED, cardRows = false, nowPlayingRow = NowPlayingRow.TERTIARY,
-        cardTiles = true, artBorder = false,
-        monoBadges = false, eyebrows = false, pureBlack = false, shelfPlayButtons = true,
-        defaultHome = listOf(
-            HomeSection.RECENTLY_ADDED, HomeSection.MIXES, HomeSection.YOUR_MIX, HomeSection.JUMP_BACK_IN,
-            HomeSection.FAVOURITE_TRACKS, HomeSection.TOP_ARTISTS, HomeSection.MOST_PLAYED,
-            HomeSection.REDISCOVER
-        )
-    )
-}
+val LocalStyleSpec = staticCompositionLocalOf { OndaluneStyle }
 
 private val SquircleShape = RoundedCornerShape(percent = 15)
 private val RoundedArtShape = RoundedCornerShape(percent = 8)
@@ -139,7 +124,7 @@ fun artShape(shape: ArtShape, key: Int = 0): Shape = when (shape) {
 
 private val polygonShapes = HashMap<ArtShape, Shape>()
 
-/** The theme's spec with the user's artwork cut applied, if they chose one. */
+/** The spec with the user's artwork cut applied, if they chose one. */
 fun StyleSpec.withArtworkCut(cut: io.github.roggzuay.ondalune.data.model.ArtworkCut): StyleSpec =
     if (cut == io.github.roggzuay.ondalune.data.model.ArtworkCut.AUTO) this
     else ArtShape.valueOf(cut.name).let { copy(artShape = it, rowArtShape = it) }

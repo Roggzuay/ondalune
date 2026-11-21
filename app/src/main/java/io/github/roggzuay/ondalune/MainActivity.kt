@@ -1,6 +1,7 @@
 package io.github.roggzuay.ondalune
 
 import android.content.Context
+import androidx.activity.addCallback
 import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.os.Build
@@ -104,6 +105,8 @@ class MainActivity : ComponentActivity() {
     private var preferMaxRefreshRateFlag: Boolean = true
     /** Bumped when the widget's lyric lines are tapped; the shell then opens the player on Lyrics. */
     private val openLyricsRequests = androidx.compose.runtime.mutableIntStateOf(0)
+    /** A song file another app opened with Ondalune, waiting to play. */
+    private val openedFile = androidx.compose.runtime.mutableStateOf<android.net.Uri?>(null)
     // Taps on the "update available" notification.
     private val showUpdateRequests = androidx.compose.runtime.mutableIntStateOf(0)
     private var displayManager: DisplayManager? = null
@@ -132,7 +135,14 @@ class MainActivity : ComponentActivity() {
         displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
         displayManager?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         applyHighRefreshRatePreference(preferMaxRefreshRate = preferMaxRefreshRateFlag)
+        // Not again when the screen is rebuilt (the same intent comes back).
+        if (savedInstanceState == null) consumeOpenedFile(intent)
         consumeOpenLyrics(intent)
+        // Back on the last page sends Ondalune behind the home screen instead of closing it.
+        // Android does that by itself only for an activity with a launcher entry; ours belongs
+        // to the icon aliases, so a plain back finished the activity and its task dropped out of
+        // Recents. Registered before the content, so every in-app back handler still goes first.
+        onBackPressedDispatcher.addCallback(this) { moveTaskToBack(true) }
 
         setContent {
             val ondaluneViewModel = viewModel<PlayerLease>().player
@@ -156,13 +166,28 @@ class MainActivity : ComponentActivity() {
                 if (updateRequest > 0) ondaluneViewModel.updates.showUpdateDetails()
             }
 
+            val fileToPlay = openedFile.value
+            LaunchedEffect(fileToPlay) {
+                if (fileToPlay != null) {
+                    ondaluneViewModel.playOpenedFile(fileToPlay)
+                    openedFile.value = null
+                }
+            }
+
             OndaluneMainShell(viewModel = ondaluneViewModel)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        consumeOpenedFile(intent)
         consumeOpenLyrics(intent)
+    }
+
+    private fun consumeOpenedFile(intent: Intent?) {
+        // Reopened from Recents, the task hands back the intent that started it: that file played already.
+        if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        if (intent.action == Intent.ACTION_VIEW) intent.data?.let { openedFile.value = it }
     }
 
     private fun consumeOpenLyrics(intent: Intent?) {

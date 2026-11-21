@@ -25,12 +25,11 @@ import io.github.roggzuay.ondalune.data.local.OndaluneDownloadManager
 import io.github.roggzuay.ondalune.data.model.AlbumListType
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChangedBy
-import io.github.roggzuay.ondalune.ui.theme.resolveDynamicSurfacePalette
+import io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme
+import androidx.compose.ui.graphics.toArgb
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.data.model.OfflineDownloadState
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
-import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.LibrarySortOption
@@ -219,6 +218,20 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     // "Play some music", with nothing named, is Your Mix.
     /** Plays what a voice request asked for ("" plays Your Mix), from the screen or the car. */
     fun playFromSearch(query: String) = bridgePlaySearch(query)
+
+    /** Plays a song file another app opened with Ondalune, on its own, and opens the player. */
+    fun playOpenedFile(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val phone = repository.phoneSource()
+            val track = withContext(Dispatchers.IO) {
+                // Access ends with the app that shared it; an old request can't be read any more.
+                if (!io.github.roggzuay.ondalune.data.source.OpenedFile.canRead(getApplication(), uri)) null
+                else io.github.roggzuay.ondalune.data.source.OpenedFile.track(getApplication(), uri, phone.id)
+            } ?: return@launch
+            playback.playInOrder(listOf(track))
+            setPlayerExpanded(true)
+        }
+    }
 
     /** An app-icon shortcut (see QuickPlayActivity); on a cold start it waits for the library. */
     fun playShortcut(kind: String) {
@@ -1444,37 +1457,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         followThemeIcon()
     }
 
-    fun setUnifiedMaterialYouColor(enabled: Boolean) {
-        settings.update {
-            it.copy(
-                unifiedMaterialYouColor = enabled,
-                useMaterialYouDynamicColor = if (enabled) true else it.useMaterialYouDynamicColor,
-                harmonizePlayerWithArtwork = !enabled
-            )
-        }
-        _statusBanner.value = if (enabled) {
-            "Material You Expressive Active — 1 unified color across app, player, notification & widget"
-        } else {
-            "Dynamic Song Artwork Palette Active — Colors adapt per track"
-        }
-    }
-
-    fun setCuratedColorPalette(palette: CuratedColorPalette) {
-        settings.update {
-            it.copy(
-                curatedPalette = palette,
-                useMaterialYouDynamicColor = false,
-                unifiedMaterialYouColor = false
-            )
-        }
-        followThemeIcon()
-    }
-
-    fun setInterfaceStyle(style: InterfaceStyle) {
-        settings.update { it.copy(interfaceStyle = style) }
-        followThemeIcon()
-    }
-
     fun setIconFollowsTheme(enabled: Boolean) {
         settings.update { it.copy(iconFollowsTheme = enabled) }
         followThemeIcon()
@@ -1488,13 +1470,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private fun followThemeIcon() {
         val s = settings.customization.value
         if (!s.iconFollowsTheme) return
-        val palette = resolveDynamicSurfacePalette(
-            getApplication(), s.curatedPalette.primarySeedHex, s.curatedPalette.accentSeedHex,
-            s.unifiedMaterialYouColor, s.useMaterialYouDynamicColor, harmonizeWithArtwork = false,
-            curatedPalette = s.curatedPalette
-        )
+        val primary = buildOndaluneColorScheme(getApplication(), null, isDark = true, isAmoled = false).primary
         val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(palette.primaryArgb, hsv)
+        android.graphics.Color.colorToHSV(primary.toArgb(), hsv)
         val target = when {
             s.themeMode == AppThemeMode.LIGHT -> AppIconVariant.PAPER
             hsv[1] < 0.18f -> AppIconVariant.GRAPHITE
@@ -1504,11 +1482,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             settings.update { it.copy(appIconVariant = target) }
             AppIconLauncherManager.applyLauncherIconVariant(getApplication(), target)
         }
-    }
-
-    fun setPlayerBackgroundStyle(style: PlayerBackgroundAnimationStyle) {
-        settings.update { it.copy(playerBackgroundStyle = style) }
-        _statusBanner.value = "Player Background Animation: ${style.label}"
     }
 
     fun setSongAnalysis(enabled: Boolean) {

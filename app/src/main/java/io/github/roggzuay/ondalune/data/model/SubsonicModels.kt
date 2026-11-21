@@ -426,29 +426,10 @@ enum class DockStyle(val label: String, val description: String) {
 }
 
 enum class AppThemeMode(val label: String) {
-    SYSTEM("Follow System"),
-    DARK("Expressive Dark"),
-    LIGHT("Expressive Light"),
-    AMOLED("Pitch Black AMOLED")
-}
-
-enum class CuratedColorPalette(
-    val label: String,
-    val primarySeedHex: String,
-    val accentSeedHex: String
-) {
-    DEFAULT_EXPRESSIVE("Ondalune Coral & Cyan", "#FF6B5B", "#70F5FF"),
-    OCEAN_CYAN("Abyssal Cyan & Azure", "#00D2FF", "#7B61FF"),
-    SUNSET_EMBER("Warm Analog Amber", "#FF8C42", "#FFD166"),
-    EMERALD_STUDIO("Mastering Studio Emerald", "#10B981", "#38BDF8"),
-    VIOLET_NEBULA("Midnight Nebula Violet", "#A855F7", "#EC4899"),
-    MONOCHROME_SLATE("Monochrome Titanium", "#94A3B8", "#E2E8F0")
-}
-
-/** Overall look: Ondalune's expressive signature, or its playful flower-cut Bloom. */
-enum class InterfaceStyle(val label: String, val description: String) {
-    SIGNATURE("Signature", "Wide atomic type, morphing squircles, vivid artwork colour"),
-    BLOOM("Bloom", "Rounded playful type, flower-cut artwork, tinted pill buttons")
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark"),
+    AMOLED("Black")
 }
 
 /** A typeface the user can assign to headings or to body text. AUTO follows the theme. */
@@ -467,15 +448,9 @@ enum class AppFont(val label: String) {
     MONO("Mono")
 }
 
-/** Which full player opens: the edge-to-edge one, or the framed 1.6.1 one. */
-enum class PlayerLook(val label: String, val description: String) {
-    IMMERSIVE("Immersive", "The cover fills the top of the player and melts into its colours"),
-    DEFAULT("Default", "The framed player with the cover on a card")
-}
-
 /** How artwork is cut everywhere in the app: the theme's own shape, or flower-cut. */
 enum class ArtworkCut(val label: String) {
-    AUTO("Signature"),
+    AUTO("Squircle"),
     FLOWER("Flower")
 }
 
@@ -685,7 +660,7 @@ data class SleepTimerState(
  * Selectable background animation styles for the full-screen Now Playing studio.
  */
 enum class PlayerBackgroundAnimationStyle(val label: String, val description: String) {
-    ARTWORK_GLOW("Living Artwork", "The cover, blurred and drifting, with its own colours flowing around it"),
+    ARTWORK_GLOW("Blurred cover", "The cover, zoomed in and blurred behind the whole player"),
     APPLE_GLITTER_GRAIN("Velvet Mesh", "A flowing mesh of the cover's colours with a soft sheen and film grain"),
     LIQUID_AURORA("Aurora", "Curtains of the cover's colours rippling across the screen"),
     VINYL_HALO_PULSE("Halo", "A turning ring of cover colours with pulses radiating outward"),
@@ -728,17 +703,11 @@ data class PlayerCustomizationSettings(
     /** Re-pick the launcher icon whose colour is closest to the theme whenever the theme changes. */
     val iconFollowsTheme: Boolean = false,
     val dockStyle: DockStyle = DockStyle.FLOATING,
-    val themeMode: AppThemeMode = AppThemeMode.DARK,
-    val useMaterialYouDynamicColor: Boolean = true,
-    val unifiedMaterialYouColor: Boolean = false,
-    val harmonizePlayerWithArtwork: Boolean = true,
-    val curatedPalette: CuratedColorPalette = CuratedColorPalette.DEFAULT_EXPRESSIVE,
+    val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val cornerStylePreset: CornerStylePreset = CornerStylePreset.EXPRESSIVE_ROUNDED,
-    val interfaceStyle: InterfaceStyle = InterfaceStyle.SIGNATURE,
     val headerFont: AppFont = AppFont.AUTO,
     val bodyFont: AppFont = AppFont.AUTO,
     val artworkCut: ArtworkCut = ArtworkCut.AUTO,
-    val playerLook: PlayerLook = PlayerLook.IMMERSIVE,
     /** Custom Home order (visible sections only); empty = follow the theme's default layout. */
     val homeSections: List<HomeSection> = emptyList(),
     val playerBackgroundStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.ARTWORK_GLOW,

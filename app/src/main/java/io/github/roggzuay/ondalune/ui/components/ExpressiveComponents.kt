@@ -383,7 +383,7 @@ fun SpringPressableSurface(
         label = "cardScaleY"
     )
 
-    // Capped so Poster/Bloom with the pill preset (up to ×2.2) never round past text sitting
+    // Capped so the pill preset (up to ×2.2) never round past text sitting
     // 12dp inside a card.
     val corner = (cornerRadius * LocalCornerScale.current).coerceAtMost(40.dp)
     val animatedCorner by animateDpAsState(

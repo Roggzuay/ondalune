@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.dp
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
-import io.github.roggzuay.ondalune.data.model.CuratedColorPalette
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
@@ -136,7 +134,8 @@ fun buildStandardShapes(preset: CornerStylePreset): Shapes {
     )
 }
 
-val LocalInterfaceStyle = staticCompositionLocalOf { InterfaceStyle.SIGNATURE }
+/** The playing song's colour scheme (see MainShellScreen); null outside the app shell. */
+val LocalSongScheme = compositionLocalOf<ColorScheme?> { null }
 
 /**
  * Multiplier applied to every hand-tuned corner radius in the UI ([cornerShape],
@@ -150,58 +149,36 @@ val LocalCornerScale = staticCompositionLocalOf { 1f }
 fun cornerShape(radius: Dp) = RoundedCornerShape(radius * LocalCornerScale.current)
 
 /**
- * Builds the full tonal scheme (every role, correct on-colors) from one seed using the
- * Material Color Utilities 2025 spec, the same pipeline Android uses for wallpaper color.
+ * Builds the full tonal scheme (every role, correct on-colors) using the Material Color Utilities
+ * 2025 spec, the same pipeline Android uses for wallpaper color.
  *
- * Priority: unified Material You > artwork harmonization > system dynamic color > curated palette.
+ * With no [seedHex] it is the app's own scheme: the phone's Material You colours (Ondalune's coral
+ * before Android 12). With one it is painted from a picture: the playing cover for the player, or
+ * an artist's portrait for their page.
  */
 fun buildOndaluneColorScheme(
     context: Context,
-    seedHex: String,
+    seedHex: String?,
     isDark: Boolean,
-    isAmoled: Boolean,
-    useMaterialYouDynamic: Boolean,
-    unifiedMaterialYouColor: Boolean,
-    harmonizeWithArtwork: Boolean,
-    curatedPalette: CuratedColorPalette,
-    interfaceStyle: InterfaceStyle = InterfaceStyle.SIGNATURE
+    isAmoled: Boolean
 ): ColorScheme {
-    // Each theme picks its palette character (Standard/Classic keep surfaces near-neutral).
-    val paletteStyle = styleSpecFor(interfaceStyle).paletteStyle
-    val system = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else null
-
-    // Pure Material You: hand the system palette through untouched (only AMOLED-blacked if asked).
-    if (system != null && (unifiedMaterialYouColor || (useMaterialYouDynamic && !harmonizeWithArtwork))) {
+    if (seedHex == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val system = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         return if (isAmoled) system.copy(background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black) else system
     }
-
-    val curatedSeed = parseHexColor(curatedPalette.primarySeedHex)
-    val curatedAccent = parseHexColor(curatedPalette.accentSeedHex)
-    return if (harmonizeWithArtwork) {
-        val artworkSeed = parseHexColor(seedHex, curatedSeed)
-        dynamicColorScheme(
-            seedColor = artworkSeed,
-            isDark = isDark,
-            isAmoled = isAmoled,
-            // A grey seed means black-and-white artwork: every style except Monochrome would
-            // invent a colour for it (grey's hue is 0, so it came out red/pink).
-            style = if (artworkSeed.isNeutral()) PaletteStyle.Monochrome else paletteStyle,
-            specVersion = ColorSpec.SpecVersion.SPEC_2025
-        )
-    } else {
-        // Curated palettes keep their signature accent as the tertiary family.
-        dynamicColorScheme(
-            seedColor = curatedSeed,
-            isDark = isDark,
-            isAmoled = isAmoled,
-            tertiary = curatedAccent,
-            style = paletteStyle,
-            specVersion = ColorSpec.SpecVersion.SPEC_2025
-        )
-    }
+    val seed = parseHexColor(seedHex ?: "", OndaluneCoral)
+    return dynamicColorScheme(
+        seedColor = seed,
+        isDark = isDark,
+        isAmoled = isAmoled,
+        // A grey seed means black-and-white artwork: every style except Monochrome would
+        // invent a colour for it (grey's hue is 0, so it came out red/pink).
+        style = if (seed.isNeutral()) PaletteStyle.Monochrome else OndaluneStyle.paletteStyle,
+        specVersion = ColorSpec.SpecVersion.SPEC_2025
+    )
 }
+
+private val OndaluneCoral = Color(0xFFFF6B5B)
 
 private fun Color.isNeutral(): Boolean {
     val hsv = FloatArray(3)
@@ -226,20 +203,9 @@ data class DynamicSurfacePalette(
 
 fun resolveDynamicSurfacePalette(
     context: Context,
-    seedHex: String,
-    accentHex: String,
-    unifiedMaterialYouColor: Boolean,
-    useMaterialYouDynamic: Boolean = true,
-    harmonizeWithArtwork: Boolean = true,
-    curatedPalette: CuratedColorPalette = CuratedColorPalette.DEFAULT_EXPRESSIVE
+    seedHex: String
 ): DynamicSurfacePalette {
-    val scheme = buildOndaluneColorScheme(
-        context, seedHex, isDark = true, isAmoled = false,
-        useMaterialYouDynamic = useMaterialYouDynamic,
-        unifiedMaterialYouColor = unifiedMaterialYouColor,
-        harmonizeWithArtwork = harmonizeWithArtwork,
-        curatedPalette = curatedPalette
-    )
+    val scheme = buildOndaluneColorScheme(context, seedHex, isDark = true, isAmoled = false)
     return DynamicSurfacePalette(
         primaryArgb = scheme.primary.toArgb(),
         accentArgb = scheme.tertiary.toArgb(),
@@ -255,7 +221,7 @@ fun resolveDynamicSurfacePalette(
 private fun colorToHex(color: Color): String = "#%06X".format(color.toArgb() and 0xFFFFFF)
 
 /**
- * Material 3 Expressive theme: tonal color from artwork / Material You / curated palette,
+ * Material 3 Expressive theme: Material You color for the app, a picture's color for the player and artist pages,
  * expressive spring motion (standard when the system asks for reduced motion), emphasized type,
  * and the expressive shape scale scaled by the corner preset.
  */
@@ -264,15 +230,10 @@ private fun colorToHex(color: Color): String = "#%06X".format(color.toArgb() and
 fun OndaluneExpressiveTheme(
     /** Changing this fades the colour scheme across; changing only the seed switches it at once. */
     transitionKey: String = "",
-    seedHex: String = "#FF6B5B",
-    @Suppress("UNUSED_PARAMETER") accentHex: String = "#70F5FF",
-    themeMode: AppThemeMode = AppThemeMode.DARK,
-    useMaterialYouDynamic: Boolean = true,
-    unifiedMaterialYouColor: Boolean = false,
-    harmonizeWithArtwork: Boolean = true,
-    curatedPalette: CuratedColorPalette = CuratedColorPalette.DEFAULT_EXPRESSIVE,
+    /** A picture's colour to paint the scheme from; null = the phone's Material You colours. */
+    seedHex: String? = null,
+    themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     cornerStylePreset: CornerStylePreset = CornerStylePreset.EXPRESSIVE_ROUNDED,
-    interfaceStyle: InterfaceStyle = InterfaceStyle.SIGNATURE,
     headerFont: AppFont = AppFont.AUTO,
     bodyFont: AppFont = AppFont.AUTO,
     artworkCut: io.github.roggzuay.ondalune.data.model.ArtworkCut = io.github.roggzuay.ondalune.data.model.ArtworkCut.AUTO,
@@ -285,18 +246,13 @@ fun OndaluneExpressiveTheme(
         AppThemeMode.DARK, AppThemeMode.AMOLED -> true
         AppThemeMode.LIGHT -> false
     }
-    val spec = remember(interfaceStyle, artworkCut) { styleSpecFor(interfaceStyle).withArtworkCut(artworkCut) }
+    val spec = remember(artworkCut) { OndaluneStyle.withArtworkCut(artworkCut) }
     val isAmoled = themeMode == AppThemeMode.AMOLED || (spec.pureBlack && isDark)
 
     val standard = spec.standardShapes
     // Applied instantly: animating the scheme recomposed every color reader on every frame of the
     // fade, which was the stutter on track change. The artwork crossfade carries the transition.
-    val targetScheme = remember(seedHex, isDark, isAmoled, useMaterialYouDynamic, unifiedMaterialYouColor, harmonizeWithArtwork, curatedPalette, interfaceStyle) {
-        buildOndaluneColorScheme(
-            context, seedHex, isDark, isAmoled,
-            useMaterialYouDynamic, unifiedMaterialYouColor, harmonizeWithArtwork, curatedPalette, interfaceStyle
-        )
-    }
+    val targetScheme = remember(seedHex, isDark, isAmoled) { buildOndaluneColorScheme(context, seedHex, isDark, isAmoled) }
     // Only a change of [transitionKey] (an artist page taking over the colours, or giving them
     // back) fades, for 380 ms; it happens without playback starting at the same time.
     val fade = remember { SchemeFade(targetScheme, transitionKey) }
@@ -348,7 +304,6 @@ fun OndaluneExpressiveTheme(
 
     CompositionLocalProvider(
         LocalReducedMotion provides reducedMotion,
-        LocalInterfaceStyle provides interfaceStyle,
         LocalStyleSpec provides spec,
         LocalCornerScale provides cornerScale
     ) {

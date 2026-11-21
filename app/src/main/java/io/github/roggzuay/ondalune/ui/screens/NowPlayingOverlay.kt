@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import io.github.roggzuay.ondalune.ui.theme.LocalArtworkPalette
+import io.github.roggzuay.ondalune.ui.theme.LocalSongScheme
 import io.github.roggzuay.ondalune.ui.components.PlayerBackdrop
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.filled.PlayArrow
@@ -211,7 +212,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 /**
  * Floating Pill/Squircle Mini-Player docked above the bottom navigation dock.
  * Clean, uncluttered layout without a redundant like button, centered on wide tablets.
- * Dynamically adapts its tint to either the Unified Material You phone color or the active song's artwork color.
+ * Wears the playing song's colours (LocalSongScheme), a hint of the cover on every page.
  */
 @Composable
 fun FloatingExpressiveMiniPlayer(
@@ -227,7 +228,7 @@ fun FloatingExpressiveMiniPlayer(
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
     sheet: PlayerSheetState
-) {
+) = MaterialTheme(colorScheme = LocalSongScheme.current ?: MaterialTheme.colorScheme) {
     // Swipe the bar: left = next track, right = previous. It follows the finger, then springs back.
     // Upwards it opens the player, which follows the finger too.
     val dragX = remember { Animatable(0f) }
@@ -511,8 +512,6 @@ fun NowPlayingStudioOverlay(
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
     backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
     /** Fill the room under the cover with its own colour, giving way to the surface by the title. */
-    coverFill: Boolean = false,
-    unifiedMaterialYouColor: Boolean = false,
     lyricsSource: LyricsSource = LyricsSource(),
     lyricsSearch: LyricsSearch = LyricsSearch(),
     onSearchLyrics: (String, String) -> Unit = { _, _ -> },
@@ -641,28 +640,8 @@ fun NowPlayingStudioOverlay(
                     palette = LocalArtworkPalette.current,
                     style = backgroundAnimationStyle,
                     isPlaying = isPlaying,
-                    playbackSpeed = speedPitchState.speed,
-                    themeColorsOnly = unifiedMaterialYouColor
+                    playbackSpeed = speedPitchState.speed
                 )
-                if (coverFill && !wide && !tablet) {
-                    val palette = LocalArtworkPalette.current
-                    val fill by animateColorAsState(palette.swatches.firstOrNull() ?: palette.seed, tween(600), label = "backdropFill")
-                    val surface = MaterialTheme.colorScheme.surface
-                    Box(
-                        Modifier.fillMaxSize().drawBehind {
-                            val bottom = heroHeight.toPx()
-                            val span = bottom * 0.3f
-                            drawRect(
-                                Brush.verticalGradient(
-                                    0f to fill,
-                                    1f to surface,
-                                    startY = bottom - span,
-                                    endY = bottom - span * 0.15f
-                                )
-                            )
-                        }
-                    )
-                }
             }
 
             if (!tablet) PlayerHero(
@@ -993,14 +972,6 @@ private fun PlayerHero(
     }
 
     val surface = MaterialTheme.colorScheme.surface
-    // Under the whole cover the hero is filled with the cover's own colours: its bottom edge
-    // carries on into its most prominent colour, so the picture never needs cropping.
-    val palette = LocalArtworkPalette.current
-    val edgeColor by animateColorAsState(
-        palette.regions.takeIf { it.size >= 4 }?.let { lerp(it[2], it[3], 0.5f) } ?: palette.seed,
-        tween(600), label = "coverEdge"
-    )
-    val fillColor by animateColorAsState(palette.swatches.firstOrNull() ?: palette.seed, tween(600), label = "coverFill")
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val topFade = with(LocalDensity.current) { topBarHeight.toPx() }
     // Blur needs Android 12; before it the cover behind the lyrics is dimmed harder instead.
@@ -1164,18 +1135,6 @@ private fun PlayerHero(
                     val zoom = 1f + 0.06f * lyricsShown()
                     scaleX = zoom
                     scaleY = zoom
-                }.drawBehind {
-                    val top = (size.height - frame.height) / 2f
-                    val coverBottom = top + min(frame.width, frame.height)
-                    drawRect(fillColor)
-                    drawRect(
-                        Brush.verticalGradient(
-                            0f to edgeColor,
-                            1f to fillColor,
-                            startY = coverBottom - frame.width * 0.2f,
-                            endY = coverBottom + (top + frame.height - coverBottom) * 0.7f
-                        )
-                    )
                 }
             ) {
                 AnimatedContent(
@@ -1196,7 +1155,7 @@ private fun PlayerHero(
                     val hidden = exitHidden[0] && transition.targetState == EnterExitState.PostExit
                     // The whole cover, as wide as the hero, at its top; while the player opens it
                     // starts as the whole square (the mini player's thumbnail) and settles there.
-                    // Its lower edge melts into the colour beneath.
+                    // Its lower edge melts into the blurred cover behind the player.
                     Box(
                         Modifier
                             .fillMaxSize()

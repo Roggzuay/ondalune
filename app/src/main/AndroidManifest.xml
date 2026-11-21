@@ -49,11 +49,27 @@
              the only splash and open animation are MainActivity's. -->
         <activity
             android:name=".LauncherActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity=""
-            android:theme="@android:style/Theme.NoDisplay" />
+            android:theme="@android:style/Theme.NoDisplay">
+            <!-- "Open the music player" (headset buttons, launchers, Samsung's media shortcuts). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MUSIC_PLAYER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- "Open with": song files from file managers, chats and downloads. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-flac" />
+            </intent-filter>
+        </activity>
 
         <!-- Voice requests ("Play … on Ondalune") and app-icon shortcuts: plays without opening a screen. -->
         <activity

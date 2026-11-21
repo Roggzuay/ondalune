@@ -4,7 +4,9 @@ package io.github.roggzuay.ondalune.ui.screens
 
 import androidx.compose.ui.graphics.luminance
 import io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme
-import io.github.roggzuay.ondalune.data.model.PlayerLook
+import io.github.roggzuay.ondalune.ui.theme.LocalSongScheme
+import io.github.roggzuay.ondalune.data.model.AppThemeMode
+import androidx.compose.foundation.isSystemInDarkTheme
 import io.github.roggzuay.ondalune.data.model.ArtworkCut
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.isOnDevice
@@ -577,19 +579,25 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             value = portraitUrl?.let { ArtworkPaletteCache.peek(it) ?: ArtworkPaletteCache.load(context, it) }
         }
         val portraitTheme = portraitPalette?.takeIf { portraitUrl != null && !isPlayerExpanded }
-        CompositionLocalProvider(LocalArtworkPalette provides artworkPalette) {
+        // The playing song's own scheme: the player, the mini player and the playing song's
+        // buttons wear it, so they hint at the cover; everything else keeps the app's colours.
+        val systemDark = isSystemInDarkTheme()
+        val appDark = when (customizationSettings.themeMode) {
+            AppThemeMode.SYSTEM -> systemDark
+            AppThemeMode.LIGHT -> false
+            AppThemeMode.DARK, AppThemeMode.AMOLED -> true
+        }
+        val songScheme = remember(artworkPalette.seedHex, appDark, customizationSettings.themeMode) {
+            buildOndaluneColorScheme(context, artworkPalette.seedHex, appDark, customizationSettings.themeMode == AppThemeMode.AMOLED)
+        }
+        CompositionLocalProvider(LocalArtworkPalette provides artworkPalette, LocalSongScheme provides songScheme) {
         OndaluneExpressiveTheme(
-            seedHex = portraitTheme?.seedHex ?: artworkPalette.seedHex,
-            // A change of where the colours come from fades; a new song on the same source doesn't.
-            transitionKey = if (portraitTheme != null) "artist:$portraitUrl" else "song",
-            accentHex = currentTrack?.accentHex ?: "#70F5FF",
+            // The phone's Material You colours, or the portrait's on an artist page.
+            seedHex = portraitTheme?.seedHex,
+            // A change of where the colours come from fades.
+            transitionKey = if (portraitTheme != null) "artist:$portraitUrl" else "app",
             themeMode = customizationSettings.themeMode,
-            useMaterialYouDynamic = customizationSettings.useMaterialYouDynamicColor,
-            harmonizeWithArtwork = customizationSettings.harmonizePlayerWithArtwork,
-            unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
-            curatedPalette = customizationSettings.curatedPalette,
             cornerStylePreset = customizationSettings.cornerStylePreset,
-            interfaceStyle = customizationSettings.interfaceStyle,
             headerFont = customizationSettings.headerFont,
             bodyFont = customizationSettings.bodyFont,
             artworkCut = customizationSettings.artworkCut
@@ -1034,19 +1042,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetDockStyle = viewModel.settings::setDockStyle,
                                             onSetHideMiniPlayerOnScroll = viewModel.settings::setHideMiniPlayerOnScroll,
                                             onSetThemeMode = viewModel::setThemeMode,
-                                            onSetUseMaterialYou = viewModel.settings::setUseMaterialYouDynamicColor,
-                                            onSetHarmonizeArtwork = viewModel.settings::setHarmonizePlayerWithArtwork,
-                                            onSetUnifiedMaterialYouColor = viewModel::setUnifiedMaterialYouColor,
-                                            onSetCuratedPalette = viewModel::setCuratedColorPalette,
                                             onSetCornerStylePreset = viewModel.settings::setCornerStylePreset,
-                                            onSetInterfaceStyle = viewModel::setInterfaceStyle,
                                             onSetHeaderFont = viewModel.settings::setHeaderFont,
                                             onSetBodyFont = viewModel.settings::setBodyFont,
                                             onSetArtworkCut = viewModel.settings::setArtworkCut,
-                                            onSetPlayerLook = viewModel.settings::setPlayerLook,
                                             onSetHomeSections = viewModel.settings::setHomeSections,
                                             onResetHomeSections = viewModel.settings::resetHomeSections,
-                                            onSetPlayerBackgroundStyle = viewModel::setPlayerBackgroundStyle,
                                             onSetAnimatedSquiggly = viewModel.settings::setAnimatedSquigglyWave,
                                             onSetHapticFeedback = viewModel.settings::setHapticFeedbackEnabled,
                                             onSetHighRefreshRate120Hz = viewModel::setHighRefreshRate120Hz,
@@ -1176,92 +1177,16 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                 if (playerShown) Box(Modifier.fillMaxSize().then(playerSheet.containerModifier())) {
                     val activeTrack = currentTrack
                     // Its colours follow each new cover with a fade; the rest of the app switches at once.
-                    // The Immersive player in the light theme follows its cover: on a dark one it
+                    // In the light theme the player follows its cover: on a dark one it
                     // turns dark, so the title sits on the cover's own colour, not on white.
                     val lightApp = MaterialTheme.colorScheme.surface.luminance() > 0.5f
-                    val immersiveLight = lightApp && customizationSettings.playerLook == PlayerLook.IMMERSIVE
                     val coverIsDark = (artworkPalette.swatches.firstOrNull() ?: artworkPalette.seed).luminance() < 0.4f
-                    val playerScheme = if (immersiveLight && coverIsDark) remember(artworkPalette.seedHex, customizationSettings) {
-                        buildOndaluneColorScheme(
-                            context, artworkPalette.seedHex, isDark = true, isAmoled = false,
-                            customizationSettings.useMaterialYouDynamicColor, customizationSettings.unifiedMaterialYouColor,
-                            customizationSettings.harmonizePlayerWithArtwork, customizationSettings.curatedPalette,
-                            customizationSettings.interfaceStyle
-                        )
-                    } else MaterialTheme.colorScheme
+                    val playerScheme = if (lightApp && coverIsDark) remember(artworkPalette.seedHex) {
+                        buildOndaluneColorScheme(context, artworkPalette.seedHex, isDark = true, isAmoled = false)
+                    } else songScheme
                     if (activeTrack != null) MaterialTheme(colorScheme = playerScheme) { FadingColors {
                         PlaybackPosition(viewModel) { positionMs, durationMs ->
-                            if (customizationSettings.playerLook == PlayerLook.DEFAULT) DefaultNowPlayingOverlay(
-                                sheet = playerSheet,
-                                audioQuality = audioQuality.takeIf { customizationSettings.showTechnicalFormatBadge },
-                                spatialAudio = viewModel::spatialAudioActive,
-                                dolbyDecoders = viewModel.dolbyDecoders,
-                                track = activeTrack,
-                                server = activeServer,
-                                isPlaying = isPlaying,
-                                isBuffering = isBuffering,
-                                positionMs = positionMs,
-                                durationMs = durationMs,
-                                speedPitchState = speedPitchState,
-                                reverbState = reverbState,
-                                sleepTimerState = sleepTimerState,
-                                shuffleEnabled = shuffleEnabled,
-                                shuffleMode = shuffleMode,
-                                smartShuffleProfile = customizationSettings.smartShuffleProfile,
-                                repeatOneEnabled = repeatOneEnabled,
-                                animatedWaveEnabled = customizationSettings.animatedSquigglyWave,
-                                showRemainingTime = customizationSettings.showRemainingTime,
-                                showPlayerStarButton = customizationSettings.showPlayerStarButton,
-                                unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
-                                backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,
-                                artworkShapeMode = if (customizationSettings.artworkCut == ArtworkCut.FLOWER) ArtworkShapeMode.COOKIE else ArtworkShapeMode.SQUIRCLE,
-                                onCycleArtworkShape = {
-                                    viewModel.settings.setArtworkCut(
-                                        if (customizationSettings.artworkCut == ArtworkCut.FLOWER) ArtworkCut.AUTO else ArtworkCut.FLOWER
-                                    )
-                                },
-                                reverbProcessingMode = reverbProcessingMode,
-                                isPlayingOfflineFile = isPlayingOfflineFile,
-                                activeTab = nowPlayingTab,
-                                lyrics = currentLyrics,
-                                lyricsResult = currentLyricsResult,
-                                download = if (activeTrack.isOnDevice) null else remember(activeTrack.id, downloadsMap[activeTrack.id]) {
-                                    PlayerDownload(
-                                        state = downloadsMap[activeTrack.id],
-                                        onDownload = { viewModel.downloadTrackForOffline(activeTrack) },
-                                        onCancel = { viewModel.cancelOfflineDownload(activeTrack.id) },
-                                        onResume = { viewModel.resumeOfflineDownloads(listOf(activeTrack.id)) },
-                                        onRemove = { viewModel.removeOfflineDownload(activeTrack.id) }
-                                    )
-                                },
-                                queue = playbackQueue,
-                                eqPreset = eqPreset,
-                                onCollapse = { viewModel.setPlayerExpanded(false) },
-                                onSelectTab = viewModel::selectNowPlayingTab,
-                                onTogglePlay = viewModel.playback::togglePlayPause,
-                                onSkipPrevious = viewModel.playback::skipPrevious,
-                                onSwipePrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
-                                onSkipNext = viewModel.playback::skipNext,
-                                onSeek = viewModel::seekTo,
-                                onToggleShuffle = viewModel.playback::toggleShuffle,
-                                onToggleRepeatOne = viewModel.playback::toggleRepeatOne,
-                                onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
-                                onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
-                                onResetSpeedPitch = {
-                                    viewModel.sound.resetSpeedAndPitch()
-                                    viewModel.sound.resetReverbToDry()
-                                },
-                                showSpeedResetHint = showSpeedResetHint,
-                                onSpeedResetHintShown = viewModel.sound::markSpeedResetHintShown,
-                                onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
-                                onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
-                                playingFromPlaylist = playingFromPlaylist?.takeIf { activeTrack.id in it.trackIds },
-                                onOpenPlaylist = viewModel::openPlaylistAnywhere,
-                                onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
-                                onPlayQueueTrack = { viewModel.playback.playFromQueue(it) },
-                                onRemoveQueueTrack = viewModel.playback::removeTrackFromQueue,
-                                onMoveQueueTrack = viewModel.playback::moveQueueTrack
-                            ) else NowPlayingStudioOverlay(
+                            NowPlayingStudioOverlay(
                                 sheet = playerSheet,
                                 audioQuality = audioQuality.takeIf { customizationSettings.showTechnicalFormatBadge },
                                 spatialAudio = viewModel::spatialAudioActive,
@@ -1282,9 +1207,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 animatedWaveEnabled = customizationSettings.animatedSquigglyWave,
                                 showRemainingTime = customizationSettings.showRemainingTime,
                                 showPlayerStarButton = customizationSettings.showPlayerStarButton,
-                                unifiedMaterialYouColor = customizationSettings.unifiedMaterialYouColor,
                                 backgroundAnimationStyle = customizationSettings.playerBackgroundStyle,
-                                coverFill = immersiveLight,
                                 activeTab = nowPlayingTab,
                                 lyrics = currentLyrics,
                                 lyricsResult = currentLyricsResult,

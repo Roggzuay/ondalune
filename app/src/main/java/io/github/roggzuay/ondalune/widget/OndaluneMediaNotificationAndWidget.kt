@@ -828,7 +828,6 @@ object OndaluneMediaBridge {
                 ?: renderExpressiveArtworkBitmap(
                     palette = palette,
                     track = track,
-                    unifiedMaterialYou = settings.unifiedMaterialYouColor,
                     sizePx = 512,
                     rounded = false
                 )
@@ -864,16 +863,8 @@ object OndaluneMediaBridge {
         track: SubsonicTrack?,
         settings: PlayerCustomizationSettings
     ): DynamicSurfacePalette {
-        val defaultSeed = settings.curatedPalette.primarySeedHex
-        val defaultAccent = settings.curatedPalette.accentSeedHex
-        return resolveDynamicSurfacePalette(
-            context = context,
-            seedHex = if (settings.harmonizePlayerWithArtwork && track != null) ArtworkPaletteCache.seedHexFor(track) else defaultSeed,
-            accentHex = if (settings.harmonizePlayerWithArtwork && track != null) track.accentHex else defaultAccent,
-            unifiedMaterialYouColor = settings.unifiedMaterialYouColor,
-            useMaterialYouDynamic = settings.useMaterialYouDynamicColor,
-            harmonizeWithArtwork = settings.harmonizePlayerWithArtwork
-        )
+        // The widget and notification are players: they wear the playing song's colours.
+        return resolveDynamicSurfacePalette(context, track?.let { ArtworkPaletteCache.seedHexFor(it) } ?: "#FF6B5B")
     }
 
     /**
@@ -944,7 +935,6 @@ object OndaluneMediaBridge {
             val artBitmap = renderExpressiveArtworkBitmap(
                 palette = palette,
                 track = track,
-                unifiedMaterialYou = settings.unifiedMaterialYouColor,
                 sizePx = 192
             )
             val wideButton = renderExpressivePlayButtonBitmap(palette, isPlaying, widthPx = 180, heightPx = 144)
@@ -1115,7 +1105,6 @@ object OndaluneMediaBridge {
             val largeIcon = renderExpressiveArtworkBitmap(
                 palette = palette,
                 track = track,
-                unifiedMaterialYou = settings.unifiedMaterialYouColor,
                 sizePx = 320
             )
 
@@ -1133,12 +1122,6 @@ object OndaluneMediaBridge {
             val playPending = buildControlPendingIntent(context, ACTION_TOGGLE_PLAY, 202)
             val nextPending = buildControlPendingIntent(context, ACTION_SKIP_NEXT, 203)
             val starPending = buildControlPendingIntent(context, ACTION_TOGGLE_STAR, 204)
-
-            val modeLabel = if (settings.unifiedMaterialYouColor) {
-                "Material You Unified"
-            } else {
-                "Dynamic Song Theme"
-            }
 
             val prevAction = Notification.Action.Builder(
                 Icon.createWithResource(context, android.R.drawable.ic_media_previous),
@@ -1188,7 +1171,7 @@ object OndaluneMediaBridge {
                 .setLargeIcon(largeIcon)
                 .setContentTitle(track.title)
                 .setContentText("${track.artist} — ${track.album}")
-                .setSubText("$modeLabel • ${track.suffix.uppercase()} ${track.bitRate}kbps")
+                .setSubText("${track.suffix.uppercase()} ${track.bitRate}kbps")
                 .setContentIntent(contentPendingIntent)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setCategory(Notification.CATEGORY_TRANSPORT)
@@ -1415,7 +1398,6 @@ object OndaluneMediaBridge {
     fun renderExpressiveArtworkBitmap(
         palette: DynamicSurfacePalette,
         track: SubsonicTrack?,
-        unifiedMaterialYou: Boolean,
         sizePx: Int = 192,
         rounded: Boolean = true
     ): Bitmap {
@@ -1425,7 +1407,7 @@ object OndaluneMediaBridge {
             null
         }
         val hasRemote = cachedRemote != null && !cachedRemote.isRecycled
-        val artKey = "${track?.serverId ?: 0}_${track?.id.orEmpty()}_${hasRemote}_${palette.primaryArgb}_${palette.accentArgb}_${unifiedMaterialYou}_${sizePx}_$rounded"
+        val artKey = "${track?.serverId ?: 0}_${track?.id.orEmpty()}_${hasRemote}_${palette.primaryArgb}_${palette.accentArgb}_${sizePx}_$rounded"
         val existingArt = renderedArtworkCache.get(artKey)
         if (existingArt != null && !existingArt.isRecycled) {
             return existingArt
@@ -1444,10 +1426,6 @@ object OndaluneMediaBridge {
             canvas.clipPath(clipPath)
             val srcRect = android.graphics.Rect(0, 0, cachedRemote.width, cachedRemote.height)
             val imgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-            if (unifiedMaterialYou) {
-                val tintOverlay = (palette.primaryArgb and 0x00FFFFFF) or (0x55 shl 24)
-                imgPaint.colorFilter = PorterDuffColorFilter(tintOverlay, PorterDuff.Mode.SRC_ATOP)
-            }
             canvas.drawBitmap(cachedRemote, srcRect, rect, imgPaint)
             canvas.restore()
             renderedArtworkCache.put(artKey, bitmap)

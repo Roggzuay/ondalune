@@ -49,113 +49,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.ArtworkCut
-import io.github.roggzuay.ondalune.data.model.PlayerLook
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import io.github.roggzuay.ondalune.ui.theme.colors
 import io.github.roggzuay.ondalune.ui.theme.ArtShape
 import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
 import io.github.roggzuay.ondalune.data.model.AppIconVariant
-import io.github.roggzuay.ondalune.data.model.InterfaceStyle
 import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
 import io.github.roggzuay.ondalune.ui.theme.appFontFamily
 import io.github.roggzuay.ondalune.ui.theme.artShape
-import io.github.roggzuay.ondalune.ui.theme.styleSpecFor
 
 /**
  * Theme gallery: one card per interface style, each a miniature drawn with that theme's own
  * heading font, artwork cut and list treatment, so the choice is visible before it is made.
  */
-@Composable
-fun ThemeGallery(selected: InterfaceStyle, onSelect: (InterfaceStyle) -> Unit) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 8.dp)) {
-        items(InterfaceStyle.entries) { style ->
-            ThemePreviewCard(style, style == selected) { onSelect(style) }
-        }
-    }
-    Text(
-        text = selected.description,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
-private fun ThemePreviewCard(style: InterfaceStyle, selected: Boolean, onClick: () -> Unit) {
-    val spec = remember(style) { styleSpecFor(style) }
-    val scheme = MaterialTheme.colorScheme
-    val canvas = if (spec.pureBlack) Color.Black else scheme.surfaceContainerLow
-    val corner = (14 * spec.cornerFactor).dp
-    val header = remember(style) { appFontFamily(spec.headerFont, display = true) }
-    val body = remember(style) { appFontFamily(spec.bodyFont, display = false) }
-    Column(
-        modifier = Modifier
-            .width(148.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .border(
-                width = if (selected) 3.dp else 1.dp,
-                color = if (selected) scheme.primary else scheme.outlineVariant,
-                shape = RoundedCornerShape(20.dp)
-            )
-            .clickable(onClick = onClick)
-            .background(canvas)
-            .padding(12.dp)
-            .testTag("interface_style_${style.name.lowercase()}")
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = style.label,
-                style = TextStyle(fontFamily = header, fontWeight = FontWeight.Bold, fontSize = 15.sp),
-                color = scheme.onSurface,
-                maxLines = 1,
-                modifier = Modifier.weight(1f)
-            )
-            if (selected) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = scheme.primary, modifier = Modifier.size(18.dp))
-        }
-        Spacer(Modifier.height(10.dp))
-        // Two artwork swatches in the theme's cut, then two list rows in its row style.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(scheme.primary to scheme.tertiary, scheme.secondary to scheme.primaryContainer).forEach { (a, b) ->
-                Box(
-                    Modifier
-                        .size(56.dp)
-                        .clip(artShape(spec.artShape, key = a.hashCode()))
-                        .background(Brush.linearGradient(listOf(a, b)))
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        // The first row is the playing track, lit the way this theme lights it.
-        val lit = spec.nowPlayingRow.colors(scheme)
-        repeat(2) { i ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp)
-                    .clip(RoundedCornerShape(corner))
-                    .background(if (i == 0) lit.container else Color.Transparent)
-                    .padding(4.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(20.dp)
-                        .clip(artShape(spec.rowArtShape, key = i))
-                        .background(if (i == 0) scheme.tertiary else scheme.secondary)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (i == 0) "Song title" else "Another one",
-                    style = TextStyle(fontFamily = body, fontSize = 11.sp, fontWeight = FontWeight.Medium),
-                    color = if (i == 0) lit.accent else scheme.onSurface,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-/** Every artwork cut, each previewed as a gradient tile in that shape. "Signature" follows the theme. */
+/** Every artwork cut, each previewed as a gradient tile in that shape. */
 @Composable
 fun ArtworkShapePicker(selected: ArtworkCut, onSelect: (ArtworkCut) -> Unit) {
     val scheme = MaterialTheme.colorScheme
@@ -184,81 +92,6 @@ fun ArtworkShapePicker(selected: ArtworkCut, onSelect: (ArtworkCut) -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
                     maxLines = 1
-                )
-            }
-        }
-    }
-}
-
-/** The two full players side by side, each drawn as a tiny phone. */
-@Composable
-fun PlayerLookPicker(selected: PlayerLook, onSelect: (PlayerLook) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().testTag("player_look_picker")) {
-        PlayerLook.entries.forEach { look ->
-            val isSelected = look == selected
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(if (isSelected) scheme.primaryContainer else scheme.surfaceContainerHigh)
-                    .clickable { onSelect(look) }
-                    .padding(10.dp)
-                    .testTag("player_look_${look.name.lowercase()}")
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(0.7f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(scheme.surface)
-                ) {
-                    val art = Brush.linearGradient(listOf(scheme.primary, scheme.tertiary))
-                    // The Immersive cover melts into its own colour, which darkens under the title.
-                    val immersive = look == PlayerLook.IMMERSIVE
-                    if (immersive) {
-                        Box(
-                            Modifier.fillMaxSize().background(
-                                Brush.verticalGradient(
-                                    0f to scheme.primary,
-                                    0.5f to scheme.tertiary,
-                                    0.85f to Color(0xFF160B12)
-                                )
-                            )
-                        )
-                    } else {
-                        Box(
-                            Modifier
-                                .padding(start = 14.dp, end = 14.dp, top = 18.dp)
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(art)
-                        )
-                    }
-                    val ink = if (immersive) Color.White else scheme.onSurface
-                    Column(
-                        Modifier.align(Alignment.BottomStart).padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Box(Modifier.width(48.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(ink.copy(alpha = 0.7f)))
-                        Box(Modifier.width(32.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(ink.copy(alpha = 0.35f)))
-                        Spacer(Modifier.height(4.dp))
-                        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.primary.copy(alpha = 0.6f)))
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    look.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurface
-                )
-                Text(
-                    look.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isSelected) scheme.onPrimaryContainer.copy(alpha = 0.8f) else scheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

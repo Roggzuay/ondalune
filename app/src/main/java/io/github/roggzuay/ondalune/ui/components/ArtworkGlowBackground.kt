@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -42,7 +43,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
-import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPalette
@@ -56,6 +56,8 @@ import kotlin.math.sin
  * region of the cover they sit in (top-left colour drifts around the top-left of the screen and
  * so on), so the background reads as the artwork spilling out rather than a generic tint.
  *
+ * Blurred cover (the default) is the cover itself, zoomed and blurred behind the whole player.
+ *
  * Motion runs on a clock that only ticks while music plays (scaled by playback speed), and every
  * animated value is read in the draw phase, so the scene moves at full frame rate without
  * recomposing; pausing freezes it in place.
@@ -67,13 +69,13 @@ fun PlayerBackdrop(
     style: PlayerBackgroundAnimationStyle,
     isPlaying: Boolean,
     playbackSpeed: Float,
-    modifier: Modifier = Modifier,
-    /** Material You unified mode: paint with the theme colours instead of the cover's. */
-    themeColorsOnly: Boolean = false
+    modifier: Modifier = Modifier
 ) {
     val reducedMotion = LocalReducedMotion.current
     val clock = remember { mutableFloatStateOf(0f) }
-    val animate = isPlaying && !reducedMotion && style != PlayerBackgroundAnimationStyle.MINIMAL_TONAL
+    val coverBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    // The blurred cover holds still, like the picture above it.
+    val animate = isPlaying && !reducedMotion && style != PlayerBackgroundAnimationStyle.MINIMAL_TONAL && !coverBlur
     LaunchedEffect(animate, playbackSpeed) {
         if (!animate) return@LaunchedEffect
         var last = withFrameNanos { it }
@@ -88,11 +90,7 @@ fun PlayerBackdrop(
     val scheme = MaterialTheme.colorScheme
     val base = scheme.surface
     val dark = base.luminance() < 0.5f
-    val source = if (themeColorsOnly) {
-        listOf(scheme.primary, scheme.tertiary, scheme.secondary, scheme.primaryContainer, scheme.tertiaryContainer)
-    } else {
-        palette.regions.ifEmpty { palette.swatches }
-    }
+    val source = palette.regions.ifEmpty { palette.swatches }
     fun pick(i: Int) = tune(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
     val c0 by animateColorAsState(pick(0), tween(1600), label = "bd0")
     val c1 by animateColorAsState(pick(1), tween(1600), label = "bd1")
@@ -103,13 +101,14 @@ fun PlayerBackdrop(
     val grain = remember { grainTexture() }
 
     BoxWithConstraints(modifier.fillMaxSize().background(base), contentAlignment = Alignment.Center) {
-        if (style == PlayerBackgroundAnimationStyle.ARTWORK_GLOW && !themeColorsOnly && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            BlurredCover(track, clock, max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.3f)
-        }
+        // The cover itself, zoomed past the screen's edges and blurred: the picture at the top of
+        // the player carries on, out of focus, behind everything below it.
+        if (coverBlur) BlurredCover(track, max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.08f)
         Canvas(Modifier.fillMaxSize()) {
             val t = clock.floatValue
             when (style) {
-                PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
+                // Before Android 12 there is no blur: the cover's colours stand in for it.
+                PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> if (!coverBlur) mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
                 PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
                     mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
                     sheen(t, colors.c4)
@@ -122,8 +121,13 @@ fun PlayerBackdrop(
                 )
             }
             // Legibility: the cover lies over the top; from the title down the colour settles.
+            // The blurred cover keeps more of itself, so it reads as the picture, not a tint.
             drawRect(
-                Brush.verticalGradient(
+                if (coverBlur) Brush.verticalGradient(
+                    0f to base.copy(alpha = 0.08f),
+                    0.45f to base.copy(alpha = if (dark) 0.3f else 0.4f),
+                    1f to base.copy(alpha = if (dark) 0.5f else 0.6f)
+                ) else Brush.verticalGradient(
                     0f to base.copy(alpha = 0.30f),
                     0.45f to base.copy(alpha = 0.56f),
                     1f to base.copy(alpha = 0.78f)
@@ -146,28 +150,68 @@ private fun tune(color: Color, dark: Boolean): Color {
     return Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
 }
 
+/**
+ * The player's backdrop for a page: [coverArtUrl] zoomed past the edges, blurred, and melting into
+ * the page's background at the bottom. Nothing before Android 12, which has no blur.
+ */
 @Composable
-private fun BlurredCover(track: SubsonicTrack, clock: State<Float>, fill: Float) {
+fun BlurredCoverHeader(
+    seedHex: String,
+    accentHex: String,
+    artStyleIndex: Int,
+    coverArtUrl: String,
+    modifier: Modifier = Modifier
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || coverArtUrl.isBlank()) return
+    val page = MaterialTheme.colorScheme.background
+    BoxWithConstraints(modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+        val fill = max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.08f
+        ExpressiveArtwork(
+            seedHex = seedHex,
+            accentHex = accentHex,
+            artStyleIndex = artStyleIndex,
+            coverArtUrl = coverArtUrl,
+            fullBleed = true,
+            modifier = Modifier
+                .requiredSize(CoverBox)
+                .graphicsLayer {
+                    scaleX = fill
+                    scaleY = fill
+                }
+                .blur(14.dp, BlurredEdgeTreatment.Rectangle)
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        // Comes out of the page above without an edge.
+                        0f to page,
+                        0.14f to page.copy(alpha = 0.4f),
+                        0.55f to page.copy(alpha = 0.55f),
+                        1f to page
+                    )
+                )
+        )
+    }
+}
+
+@Composable
+private fun BlurredCover(track: SubsonicTrack, fill: Float) {
     // Blurring a small box and scaling the cached result is far cheaper than blurring the screen.
-    // The motion transform wraps the crossfade so the box edge never shows on track change.
+    // The scale wraps the crossfade so the box edge never shows on track change.
     Box(
         Modifier
             .requiredSize(CoverBox)
             .graphicsLayer {
-                val t = clock.value
-                val breathe = 1f + 0.12f * sin(t * 0.31f)
-                scaleX = fill * breathe
-                scaleY = fill * breathe
-                rotationZ = 18f * sin(t * 0.09f) + t * 2.4f
-                translationX = 34.dp.toPx() * sin(t * 0.23f)
-                translationY = 46.dp.toPx() * cos(t * 0.19f)
-                alpha = 0.85f
+                scaleX = fill
+                scaleY = fill
             }
     ) {
         AnimatedContent(
             targetState = track,
-            contentKey = { it.id },
-            transitionSpec = { (fadeIn(tween(1200)) togetherWith fadeOut(tween(1200))).using(SizeTransform(clip = false)) },
+            contentKey = { it.coverArtUrl.ifBlank { it.id } },
+            transitionSpec = { (fadeIn(tween(900)) togetherWith fadeOut(tween(900))).using(SizeTransform(clip = false)) },
             label = "glowCover"
         ) { shown ->
             ExpressiveArtwork(
@@ -175,10 +219,10 @@ private fun BlurredCover(track: SubsonicTrack, clock: State<Float>, fill: Float)
                 accentHex = shown.accentHex,
                 artStyleIndex = shown.artStyleIndex,
                 coverArtUrl = shown.coverArtUrl,
-                shapeMode = ArtworkShapeMode.VINYL,
+                fullBleed = true,
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(24.dp, BlurredEdgeTreatment.Unbounded)
+                    .blur(14.dp, BlurredEdgeTreatment.Rectangle)
             )
         }
     }
