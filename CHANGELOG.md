@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.0 (2026-11-24)
+
+### New
+- A new look: the app wears your phone's colours, and the player is painted from the cover — the picture, then the same cover blurred behind everything.
+- The whole app can follow the playing cover's colours, or keep one steady palette. Settings → Appearance → Theme.
+- The repeat button now cycles off, repeat all, repeat one. Repeat off plays to the end of the queue and stops; repeat all starts it again.
+- The navigation bar and the mini player blend into the page over a soft blur, and that is the new default. A note on first launch says where to change it back.
+- The player has a volume slider under the transport, which follows the buttons on the side of the phone.
+- Moving album covers: an animated cover on your server, or a cover.mp4, cover.webm, animated cover.webp or cover.gif in a music folder on this phone. Settings explains it, and covers can be pre-loaded so none of them loads while you wait.
+- Open song files from any app with Ondalune, and pick it as your music player.
+
+### Changed
+- Appearance is rebuilt: theme, fonts, Home layout, navigation bar and corner roundness are collapsed groups that each show what they are set to, with previews drawn in the colours and shapes they produce.
+- The Home layout editor separates the rows shown on Home from the hidden ones, with counts and clearer drag handles.
+- Artwork shape is gone; covers use the theme's own shape.
+
+### Fixes & improvements
+- Repeat is remembered across restarts; it used to reset every launch.
+- Android 7 no longer inherits the launcher's hidden-from-Recents flags, so Ondalune stays in recent apps after you leave it.
+- Dolby Atmos songs play on tablets and phones without Dolby.
+
 ## 1.8.1 (2026-11-20)
 
 ### New
