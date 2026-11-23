@@ -63,6 +63,22 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
+import kotlin.math.abs
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -94,6 +110,8 @@ fun OndaluneTopBar(
     bannerBusy: Boolean = false,
     onQueryChange: (String) -> Unit,
     onSearchOpenChange: (Boolean) -> Unit,
+    /** The keyboard's search key. */
+    onSubmitSearch: () -> Unit,
     onOpenFilters: () -> Unit,
     onOpenSettings: () -> Unit,
     onDismissBanner: () -> Unit,
@@ -115,6 +133,7 @@ fun OndaluneTopBar(
                 SearchRow(
                     query = searchQuery,
                     onQueryChange = onQueryChange,
+                    onSubmit = onSubmitSearch,
                     onClose = {
                         onQueryChange("")
                         onSearchOpenChange(false)
@@ -224,7 +243,7 @@ fun OndaluneTopBar(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
+private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onSubmit: () -> Unit, onClose: () -> Unit) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -251,7 +270,7 @@ private fun SearchRow(query: String, onQueryChange: (String) -> Unit, onClose: (
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+            keyboardActions = KeyboardActions(onSearch = { onSubmit(); keyboard?.hide() }),
             shape = cornerShape(28.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -366,4 +385,91 @@ private fun FilterSwitchRow(title: String, subtitle: String, checked: Boolean, o
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.clickable { onChange(!checked) }
     )
+}
+
+/**
+ * Lets go of the search field, and so the keyboard, as soon as a list under it is dragged up or
+ * down: the results are what you want to see by then.
+ */
+@Composable
+internal fun Modifier.hideKeyboardOnScroll(): Modifier {
+    val focus = LocalFocusManager.current
+    val connection = remember(focus) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && abs(available.y) > abs(available.x)) focus.clearFocus()
+                return Offset.Zero
+            }
+        }
+    }
+    return nestedScroll(connection)
+}
+
+/**
+ * What the open search shows before anything is typed: the recent searches, newest first, each
+ * one tap from its results. With none yet it says what can be searched; dragging it then closes
+ * the search, as there is nothing under the field to look at.
+ */
+@Composable
+fun RecentSearchesPanel(
+    searches: List<String>,
+    onPick: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onClearAll: () -> Unit,
+    onClose: () -> Unit
+) {
+    if (searches.isEmpty()) {
+        val latestClose by rememberUpdatedState(onClose)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) { detectVerticalDragGestures { _, _ -> latestClose() } }
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .testTag("recent_searches_empty")
+        ) {
+            Text("Search your library", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Songs, albums, artists, genres and folders. What you search for shows up here next time.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .hideKeyboardOnScroll()
+            .testTag("recent_searches_list"),
+        contentPadding = PaddingValues(bottom = 120.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Recent searches", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onClearAll, modifier = Modifier.testTag("clear_recent_searches")) { Text("Clear") }
+            }
+        }
+        items(searches, key = { it }) { query ->
+            Row(
+                modifier = Modifier
+                    .animateItem()
+                    .fillMaxWidth()
+                    .clickable { onPick(query) }
+                    .padding(start = 24.dp, end = 8.dp)
+                    .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(20.dp))
+                Text(query, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onRemove(query) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Remove $query from recent searches", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
 }

@@ -48,7 +48,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.roggzuay.ondalune.data.model.AppFont
-import io.github.roggzuay.ondalune.data.model.ArtworkCut
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import io.github.roggzuay.ondalune.ui.theme.colors
@@ -58,45 +57,6 @@ import io.github.roggzuay.ondalune.data.model.AppIconVariant
 import io.github.roggzuay.ondalune.ui.components.OndaluneBrandEmblem
 import io.github.roggzuay.ondalune.ui.theme.appFontFamily
 import io.github.roggzuay.ondalune.ui.theme.artShape
-
-/**
- * Theme gallery: one card per interface style, each a miniature drawn with that theme's own
- * heading font, artwork cut and list treatment, so the choice is visible before it is made.
- */
-/** Every artwork cut, each previewed as a gradient tile in that shape. */
-@Composable
-fun ArtworkShapePicker(selected: ArtworkCut, onSelect: (ArtworkCut) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("artwork_cut_picker")) {
-        items(ArtworkCut.entries) { cut ->
-            val isSelected = cut == selected
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(72.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSelected) scheme.primaryContainer else scheme.surfaceContainerHigh)
-                    .clickable { onSelect(cut) }
-                    .padding(vertical = 10.dp)
-                    .testTag("artwork_cut_${cut.name.lowercase()}")
-            ) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(artShape(if (cut == ArtworkCut.AUTO) ArtShape.SQUIRCLE else ArtShape.valueOf(cut.name), key = 1))
-                        .background(Brush.linearGradient(listOf(scheme.primary, scheme.tertiary)))
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    cut.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
 
 /** A row of "Aa" chips, each set in its own typeface. */
 @Composable

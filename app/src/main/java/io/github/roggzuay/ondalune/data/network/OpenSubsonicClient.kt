@@ -143,6 +143,12 @@ class OpenSubsonicClient {
         )
     }
 
+    /** The cover file exactly as the server keeps it: with no size asked, nothing is resized or re-encoded. */
+    fun buildOriginalCoverArtUrl(server: SubsonicServerConfig, coverArtId: String): String {
+        if (server.isDemoServer || coverArtId.isBlank()) return ""
+        return buildEndpointUrl(server = server, endpoint = "getCoverArt", queryParams = mapOf("id" to coverArtId))
+    }
+
     /**
      * Pings the OpenSubsonic server and queries `getOpenSubsonicExtensions.view`.
      */

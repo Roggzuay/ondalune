@@ -2,18 +2,23 @@
 
 package io.github.roggzuay.ondalune.ui.screens
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import io.github.roggzuay.ondalune.ui.components.LocalMotionArtwork
+import io.github.roggzuay.ondalune.ui.components.MotionArtworkUi
 import androidx.compose.ui.graphics.luminance
 import io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme
 import io.github.roggzuay.ondalune.ui.theme.LocalSongScheme
+import io.github.roggzuay.ondalune.data.model.AppColorSource
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import androidx.compose.foundation.isSystemInDarkTheme
-import io.github.roggzuay.ondalune.data.model.ArtworkCut
 import io.github.roggzuay.ondalune.data.model.ArtworkShapeMode
 import io.github.roggzuay.ondalune.data.model.isOnDevice
 import io.github.roggzuay.ondalune.data.model.streamQuality
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import androidx.compose.runtime.withFrameNanos
+import io.github.roggzuay.ondalune.ui.components.blendedBar
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlayback
 import io.github.roggzuay.ondalune.ui.components.BackgroundPlaybackPrompt
 import io.github.roggzuay.ondalune.data.model.AppIconPreviewFrameShape
@@ -23,6 +28,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import androidx.compose.runtime.rememberUpdatedState
 import io.github.roggzuay.ondalune.ui.components.TrackOptionsSheet
+import io.github.roggzuay.ondalune.ui.components.NavBarIntroNote
 import io.github.roggzuay.ondalune.ui.components.WhatsNewDialog
 import io.github.roggzuay.ondalune.ui.components.RollbackDialog
 import io.github.roggzuay.ondalune.ui.components.UpdateDetailsSheet
@@ -177,6 +183,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.Box
 import io.github.roggzuay.ondalune.data.model.SourceType
 import io.github.roggzuay.ondalune.data.model.source
+import io.github.roggzuay.ondalune.data.model.RepeatMode
 
 /**
  * Process-scoped tracker ensuring the Ondalune Animated Launch Intro runs at most once per cold
@@ -233,6 +240,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val librarySortOption by viewModel.librarySortOption.collectAsStateWithLifecycle()
     val favouritesFilterTab by viewModel.favouritesFilterTab.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.items.collectAsStateWithLifecycle()
 
     val currentTrack by viewModel.playback.currentTrack.collectAsStateWithLifecycle()
     val playbackQueue by viewModel.playback.playbackQueue.collectAsStateWithLifecycle()
@@ -293,7 +301,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val nowPlayingTab by viewModel.nowPlayingTab.collectAsStateWithLifecycle()
     val shuffleMode by viewModel.playback.shuffleMode.collectAsStateWithLifecycle()
     val shuffleEnabled by viewModel.playback.shuffleEnabled.collectAsStateWithLifecycle()
-    val repeatOneEnabled by viewModel.playback.repeatOneEnabled.collectAsStateWithLifecycle()
+    val repeatMode by viewModel.playback.repeatMode.collectAsStateWithLifecycle()
 
     val eqPreset by viewModel.sound.equalizerPreset.collectAsStateWithLifecycle()
     val customEqBands by viewModel.sound.customEqBands.collectAsStateWithLifecycle()
@@ -466,6 +474,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
             viewModel.selectDestination(PrimaryDestination.HOME)
         }
     }
+    // Back from the recent searches closes the search; from results it is the results' own.
+    BackHandler(enabled = searchOpen && searchQuery.isBlank()) { searchOpen = false }
 
     // Primary bottom navigation: Home - Library - Favourites - Playlists - Artists (Settings lives in the top bar)
     val navItems = remember {
@@ -563,7 +573,13 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
         }
     }
 
+    val motionSettings = remember { derivedStateOf { customizationSettings.motionArtwork } }
+    val motionCacheBytes by viewModel.motionArtwork.cacheBytes.collectAsStateWithLifecycle()
+    val motionLibraryRun by viewModel.motionArtwork.libraryRun.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { viewModel.motionArtwork.measure() } }
+    val motionArtwork = remember(viewModel) { MotionArtworkUi(viewModel.motionArtwork, motionSettings) }
     CompositionLocalProvider(
+        LocalMotionArtwork provides motionArtwork,
         LocalHapticFeedbackManager provides hapticManager,
         LocalTrackActions provides trackActions,
         LocalHold provides { target: HoldTarget -> hapticManager.performSubtleTick(); held = target },
@@ -590,17 +606,25 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
         val songScheme = remember(artworkPalette.seedHex, appDark, customizationSettings.themeMode) {
             buildOndaluneColorScheme(context, artworkPalette.seedHex, appDark, customizationSettings.themeMode == AppThemeMode.AMOLED)
         }
+        // Follow the cover: every page is painted from the playing song, so the whole app shifts
+        // with the music. One steady colour: the app keeps the phone's palette and only the player
+        // and the playing song's buttons wear the cover. An artist page still wins over both.
+        val followsCover = customizationSettings.appColorSource == AppColorSource.COVER
+        val appSeedHex = portraitTheme?.seedHex ?: artworkPalette.seedHex.takeIf { followsCover }
         CompositionLocalProvider(LocalArtworkPalette provides artworkPalette, LocalSongScheme provides songScheme) {
         OndaluneExpressiveTheme(
-            // The phone's Material You colours, or the portrait's on an artist page.
-            seedHex = portraitTheme?.seedHex,
-            // A change of where the colours come from fades.
-            transitionKey = if (portraitTheme != null) "artist:$portraitUrl" else "app",
+            seedHex = appSeedHex,
+            // A change of where the colours come from fades; a new cover under "follow the cover"
+            // switches at once, so a track change never stutters the whole app.
+            transitionKey = when {
+                portraitTheme != null -> "artist:$portraitUrl"
+                followsCover -> "cover"
+                else -> "app"
+            },
             themeMode = customizationSettings.themeMode,
             cornerStylePreset = customizationSettings.cornerStylePreset,
             headerFont = customizationSettings.headerFont,
             bodyFont = customizationSettings.bodyFont,
-            artworkCut = customizationSettings.artworkCut
         ) {
             BoxWithConstraints(
                 modifier = Modifier
@@ -637,6 +661,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                             bannerBusy = isCutoutSyncActive,
                             onQueryChange = viewModel::updateSearchQuery,
                             onSearchOpenChange = { searchOpen = it },
+                            onSubmitSearch = viewModel::rememberSearch,
                             onOpenFilters = { filterSheetOpen = true },
                             onOpenSettings = { viewModel.selectDestination(PrimaryDestination.SETTINGS) },
                             onDismissBanner = viewModel::dismissBanner,
@@ -664,18 +689,34 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                     },
                     bottomBar = {
                         if (!isExpandedScreen) {
-                            val pageColor = MaterialTheme.colorScheme.background
+                            val blendedDock = customizationSettings.dockStyle == DockStyle.STATIC
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .then(
-                                        // Standard dock: no bar, just a soft fade so labels stay legible over content.
-                                        if (customizationSettings.dockStyle == DockStyle.STATIC) Modifier.background(
-                                            Brush.verticalGradient(0f to Color.Transparent, 0.3f to pageColor.copy(alpha = 0.55f), 0.55f to pageColor.copy(alpha = 0.9f), 1f to pageColor)
-                                        ) else Modifier
-                                    )
+                                    // Standard dock: the mini player and the bar share one lightly
+                                    // blurred ground, so the page passes under a single surface.
+                                    .then(if (blendedDock) Modifier.blendedBar(hazeState) else Modifier)
                                     .windowInsetsPadding(WindowInsets.navigationBars)
                             ) {
+                                // Said once, on the first launch, and standing on the bar it is
+                                // about. It waits for setup and any "What's new" to be out of the way.
+                                AnimatedVisibility(
+                                    visible = !customizationSettings.seenDockIntro &&
+                                        !showServerOnboarding && whatsNew == null && !isPlayerExpanded,
+                                    enter = expandVertically() + fadeIn(),
+                                    exit = shrinkVertically() + fadeOut()
+                                ) {
+                                    NavBarIntroNote(
+                                        onOpenAppearance = {
+                                            viewModel.settings.markDockIntroSeen()
+                                            openTab(PrimaryDestination.SETTINGS)
+                                            settingsSection = SettingsExpandableSection.APPEARANCE_THEME
+                                        },
+                                        onDismiss = viewModel.settings::markDockIntroSeen,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+
                                 AnimatedVisibility(
                                     visible = miniPlayerTrack != null &&
                                         !(customizationSettings.hideMiniPlayerOnScroll && miniPlayerScrolledAway),
@@ -695,6 +736,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSkipNext = viewModel.playback::skipNext,
                                             onSkipPrevious = { viewModel.playback.skipPrevious(restartIfPlayed = false) },
                                             onExpand = { viewModel.setPlayerExpanded(true) },
+                                            blended = blendedDock,
                                             sheet = playerSheet
                                         )
                                     }
@@ -814,14 +856,24 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                         selectedFolderPath = selectedFolderPath,
                                         onUpdateQuery = viewModel::updateSearchQuery,
                                         onClearSearch = { viewModel.updateSearchQuery("") },
-                                        onPlayTrack = { track, queueCtx -> viewModel.playback.playTrack(track, queueCtx) },
+                                        onCloseSearch = { viewModel.updateSearchQuery(""); searchOpen = false },
+                                        // Opening or playing a result is what puts the search on the recent list.
+                                        onPlayTrack = { track, queueCtx -> viewModel.rememberSearch(); viewModel.playback.playTrack(track, queueCtx) },
                                         onToggleStarTrack = viewModel::toggleStarTrack,
-                                        onOpenAlbum = viewModel::openAlbumDetail,
-                                        onPlayAlbum = viewModel.playback::playAlbum,
-                                        onOpenArtist = viewModel::openArtistDetail,
-                                        onOpenGenre = viewModel::openGenreDetail,
-                                        onOpenFolder = viewModel::openFolderDetail,
-                                        onPlayPlaylist = viewModel.playback::playPlaylist
+                                        onOpenAlbum = { if (it != null) viewModel.rememberSearch(); viewModel.openAlbumDetail(it) },
+                                        onPlayAlbum = { id, shuffle -> viewModel.rememberSearch(); viewModel.playback.playAlbum(id, shuffle) },
+                                        onOpenArtist = { if (it != null) viewModel.rememberSearch(); viewModel.openArtistDetail(it) },
+                                        onOpenGenre = { if (it != null) viewModel.rememberSearch(); viewModel.openGenreDetail(it) },
+                                        onOpenFolder = { if (it != null) viewModel.rememberSearch(); viewModel.openFolderDetail(it) },
+                                        onPlayPlaylist = { viewModel.rememberSearch(); viewModel.playback.playPlaylist(it) }
+                                    )
+                                } else if (searchOpen && destination != PrimaryDestination.SETTINGS) {
+                                    RecentSearchesPanel(
+                                        searches = recentSearches,
+                                        onPick = viewModel::updateSearchQuery,
+                                        onRemove = viewModel.recentSearches::remove,
+                                        onClearAll = viewModel.recentSearches::clear,
+                                        onClose = { searchOpen = false }
                                     )
                                 } else when (destination) {
                                     PrimaryDestination.HOME -> {
@@ -1045,7 +1097,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetCornerStylePreset = viewModel.settings::setCornerStylePreset,
                                             onSetHeaderFont = viewModel.settings::setHeaderFont,
                                             onSetBodyFont = viewModel.settings::setBodyFont,
-                                            onSetArtworkCut = viewModel.settings::setArtworkCut,
+                                            onSetAppColorSource = viewModel.settings::setAppColorSource,
                                             onSetHomeSections = viewModel.settings::setHomeSections,
                                             onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onSetAnimatedSquiggly = viewModel.settings::setAnimatedSquigglyWave,
@@ -1059,6 +1111,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetGapless = viewModel.settings::setGaplessPlayback,
                                             onSetAutoplay = viewModel.settings::setAutoplaySimilar,
                                             onSetFindLyricsOnline = viewModel.settings::setFindLyricsOnline,
+                                            motionCacheBytes = motionCacheBytes,
+                                            motionLibraryRun = motionLibraryRun,
+                                            onSetMotionArtwork = viewModel::setMotionArtwork,
+                                            onClearMotionArtwork = viewModel::clearMotionArtwork,
+                                            onLookForMotionArtwork = viewModel::lookForMotionArtworkNow,
                                             onSetDolbyPassthrough = viewModel.settings::setDolbyPassthrough,
                                             onSetSongAnalysis = viewModel::setSongAnalysis,
                                             songAnalysisStatus = "${songFeatures.size} of ${downloadsMap.values.count { it.isCompleted } + allServerTracks.count { it.isOnDevice }} songs on this phone analysed",
@@ -1203,7 +1260,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 shuffleEnabled = shuffleEnabled,
                                 shuffleMode = shuffleMode,
                                 smartShuffleProfile = customizationSettings.smartShuffleProfile,
-                                repeatOneEnabled = repeatOneEnabled,
+                                repeatMode = repeatMode,
                                 animatedWaveEnabled = customizationSettings.animatedSquigglyWave,
                                 showRemainingTime = customizationSettings.showRemainingTime,
                                 showPlayerStarButton = customizationSettings.showPlayerStarButton,
@@ -1236,7 +1293,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onSkipNext = viewModel.playback::skipNext,
                                 onSeek = viewModel::seekTo,
                                 onToggleShuffle = viewModel.playback::toggleShuffle,
-                                onToggleRepeatOne = viewModel.playback::toggleRepeatOne,
+                                onCycleRepeat = { viewModel.playback.cycleRepeatMode() },
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
                                 onResetSpeedPitch = {

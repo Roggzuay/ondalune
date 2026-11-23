@@ -7,6 +7,7 @@ import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.playback.PlaybackCoordinator
 import io.github.roggzuay.ondalune.playback.PlaybackEngine
+import io.github.roggzuay.ondalune.data.model.RepeatMode
 import io.github.roggzuay.ondalune.playback.PlaybackHost
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +70,8 @@ class PlaybackCoordinatorTest {
         override fun showBanner(message: String) { banners += message }
         override fun saveLastPlayed(trackId: String) { lastPlayed = trackId }
         override fun saveQueue(trackIds: List<String>) { savedQueue = trackIds }
+        var savedRepeat: RepeatMode? = null
+        override fun saveRepeatMode(mode: RepeatMode) { savedRepeat = mode }
     }
 
     private val scope = TestScope(UnconfinedTestDispatcher())
@@ -157,10 +160,39 @@ class PlaybackCoordinatorTest {
     @Test
     fun `repeat one replays the song when it ends`() {
         playback.playTrack(songs[0], songs)
-        playback.toggleRepeatOne()
+        repeat(2) { playback.cycleRepeatMode() }   // off -> all -> one
+        assertEquals(RepeatMode.ONE, playback.repeatMode.value)
         assertEquals("t1", engine.expectedNext)
         playback.onTrackEnded()
         assertEquals(listOf("t1", "t1"), engine.played)
+    }
+
+    @Test
+    fun `repeat all starts the queue again after the last song`() {
+        playback.playTrack(songs.last(), songs)
+        playback.cycleRepeatMode()                 // off -> all
+        assertEquals(RepeatMode.ALL, playback.repeatMode.value)
+        assertEquals(songs.first().id, playback.nextForEngine()?.first?.id)
+        playback.onTrackEnded()
+        assertEquals(songs.first().id, playback.currentTrack.value?.id)
+    }
+
+    @Test
+    fun `repeat off stops at the end of the queue`() {
+        playback.playTrack(songs.last(), songs)
+        assertEquals(RepeatMode.OFF, playback.repeatMode.value)
+        assertNull("nothing lined up past the last song", playback.nextForEngine())
+        playback.onTrackEnded()
+        assertTrue("playback paused at the end", engine.paused)
+        assertEquals(songs.last().id, playback.currentTrack.value?.id)
+    }
+
+    @Test
+    fun `cycling repeat goes off all one off and is saved each time`() {
+        assertEquals(RepeatMode.ALL, playback.cycleRepeatMode())
+        assertEquals(RepeatMode.ONE, playback.cycleRepeatMode())
+        assertEquals(RepeatMode.OFF, playback.cycleRepeatMode())
+        assertEquals(RepeatMode.OFF, host.savedRepeat)
     }
 
     @Test

@@ -102,6 +102,25 @@ pause.
 <img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in warm red, taken from the artist image" />
 </p>
 
+### 🎞️ Moving artwork
+When an album's cover moves, the player plays it. Ondalune never downloads artwork from a third
+party: it reads an animated `cover.webp`, `cover.gif`, `cover.mp4` or `cover.webm` sitting next to
+the songs in a music folder on this phone, or the album cover on your Subsonic server when that
+cover is animated. It asks the server for the cover at its original size and reads the first 4 KB
+to tell — a still cover costs four kilobytes and is dropped.
+
+Because it is your server handing the file over, **it depends on your server**: one that resizes
+or re-encodes covers flattens an animated one into a still frame before Ondalune sees it.
+Navidrome serves the original and is what this was built against.
+
+Covers load the first time you play an album unless you turn on **Settings → Motion artwork →
+Whole library, in the background**, which walks the library once a day (never on low battery) so a
+cover is ready before you press play. Still covers are already kept on the phone after every sync.
+
+**[How moving artwork works, and how to make it →](docs/motion-artwork.md)** — file names and
+formats, which servers work, pre-loading and storage, the tools for making your own, and whose
+responsibility the artwork is.
+
 ### 🎤 Synced lyrics
 Time-synced lyrics from your server scroll with the song, and you can tap any line to jump to it.
 Plain lyrics work too. Big home-screen widgets can show the current line.
@@ -113,7 +132,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 ### ✨ Make it yours
 - **Two interface styles**: Signature and Bloom. Each changes the type, shapes and buttons, not just the colours.
 - **Separate fonts** for headings and for song text, from nine typefaces.
-- **Artwork shapes**: squircle, circle, flower, cookie, clover, arch and more, or a mix.
+- **App colours from the cover**: every page can follow the playing song, or keep one steady palette.
 - **Home layout editor**: drag sections into the order you like and hide the ones you don't use.
 - **Four layouts** for every collection: Compact, Rows, Tiles and Cards.
 - **Material You**, light, dark and pure-black AMOLED themes.
@@ -122,7 +141,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 <p align="center">
 <img src="docs/demo/themes.gif" width="220" alt="Switching between interface styles in Appearance" />
 <img src="docs/demo/artwork-shapes.gif" width="220" alt="Tapping the cover to change its shape" />
-<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: interface style, fonts and artwork shape" />
+<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: interface style and fonts" />
 </p>
 
 ### 👆 Built for your thumbs

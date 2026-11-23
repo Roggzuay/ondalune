@@ -19,6 +19,8 @@ import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
 import io.github.roggzuay.ondalune.data.model.TabDisplayPreference
 import io.github.roggzuay.ondalune.data.model.WidgetLayoutMode
 import io.github.roggzuay.ondalune.data.model.WidgetThemeMode
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkPreferences
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +34,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class SettingsStore(private val prefs: SharedPreferences) {
     companion object {
         val CATEGORY_KEYS = listOf("ALBUMS", "ARTISTS", "PLAYLISTS", "GENRES", "FOLDERS", "SONGS", "FAVOURITES")
+        /** How many next songs may be saved ahead: 3, 5 or 10, or any custom count in here. */
+        val SAVE_AHEAD_RANGE = 1..100
     }
 
     private val _customization = MutableStateFlow(load())
@@ -73,7 +77,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
 
     fun setBodyFont(font: AppFont) = update { it.copy(bodyFont = font) }
 
-    fun setArtworkCut(cut: io.github.roggzuay.ondalune.data.model.ArtworkCut) = update { it.copy(artworkCut = cut) }
+    fun setAppColorSource(source: io.github.roggzuay.ondalune.data.model.AppColorSource) =
+        update { it.copy(appColorSource = source) }
+
+    fun markDockIntroSeen() = update { it.copy(seenDockIntro = true) }
 
 
     /** Saves a custom Home order (visible sections only). */
@@ -139,12 +146,15 @@ class SettingsStore(private val prefs: SharedPreferences) {
         }
     }
 
+    fun setMotionArtwork(transform: (MotionArtworkSettings) -> MotionArtworkSettings) =
+        update { it.copy(motionArtwork = transform(it.motionArtwork)) }
+
     fun setHapticFeedbackEnabled(enabled: Boolean) {
         update { it.copy(hapticWobbleButtons = enabled) }
     }
 
     fun setReadAheadBuffer(tracksCount: Int) {
-        update { it.copy(readAheadTrackBuffer = tracksCount) }
+        update { it.copy(readAheadTrackBuffer = tracksCount.coerceIn(SAVE_AHEAD_RANGE)) }
     }
 
     fun setWidgetShowArtwork(show: Boolean) {
@@ -195,7 +205,9 @@ class SettingsStore(private val prefs: SharedPreferences) {
             cornerStylePreset = CornerStylePreset.entries.find { it.name == prefs.getString("cfg_corner_preset", defaults.cornerStylePreset.name) } ?: defaults.cornerStylePreset,
             headerFont = AppFont.entries.find { it.name == prefs.getString("cfg_header_font", null) } ?: defaults.headerFont,
             bodyFont = AppFont.entries.find { it.name == prefs.getString("cfg_body_font", null) } ?: defaults.bodyFont,
-            artworkCut = io.github.roggzuay.ondalune.data.model.ArtworkCut.entries.find { it.name == prefs.getString("cfg_artwork_cut", null) } ?: defaults.artworkCut,
+            appColorSource = io.github.roggzuay.ondalune.data.model.AppColorSource.entries
+                .find { it.name == prefs.getString("cfg_app_color_source", null) } ?: defaults.appColorSource,
+            seenDockIntro = prefs.getBoolean("cfg_seen_dock_intro", defaults.seenDockIntro),
             homeSections = prefs.getString("cfg_home_sections", "").orEmpty().split(',')
                 .mapNotNull { name -> HomeSection.entries.find { it.name == name } },
             iconFollowsTheme = prefs.getBoolean("cfg_icon_follows_theme", defaults.iconFollowsTheme),
@@ -225,7 +237,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             highRefreshRate120Hz = prefs.getBoolean("cfg_120hz", defaults.highRefreshRate120Hz),
             smartShuffleProfile = SmartShuffleProfile.entries.find { it.name == prefs.getString("cfg_smart_shuffle", defaults.smartShuffleProfile.name) } ?: defaults.smartShuffleProfile,
             downloadSpeedLimit = DownloadSpeedLimit.entries.find { it.name == prefs.getString("cfg_dl_limit", defaults.downloadSpeedLimit.name) } ?: defaults.downloadSpeedLimit,
-            readAheadTrackBuffer = prefs.getInt("cfg_read_ahead", defaults.readAheadTrackBuffer),
+            readAheadTrackBuffer = prefs.getInt("cfg_read_ahead", defaults.readAheadTrackBuffer).coerceIn(SAVE_AHEAD_RANGE),
             wifiTranscodeFormat = prefs.getString("cfg_wifi_fmt", defaults.wifiTranscodeFormat) ?: defaults.wifiTranscodeFormat,
             wifiMaxBitRate = prefs.getInt("cfg_wifi_kbps", defaults.wifiMaxBitRate),
             mobileTranscodeFormat = prefs.getString("cfg_mobile_fmt", defaults.mobileTranscodeFormat) ?: defaults.mobileTranscodeFormat,
@@ -237,7 +249,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
             widgetShowLyrics = prefs.getBoolean("cfg_widget_lyrics", defaults.widgetShowLyrics),
             checkForUpdates = prefs.getBoolean("cfg_check_updates", defaults.checkForUpdates),
             updateNotifications = prefs.getBoolean("cfg_update_notifications", defaults.updateNotifications),
-            updatePrereleases = prefs.getBoolean("cfg_update_prereleases", defaults.updatePrereleases)
+            updatePrereleases = prefs.getBoolean("cfg_update_prereleases", defaults.updatePrereleases),
+            motionArtwork = MotionArtworkPreferences.read(prefs)
         )
     }
 
@@ -250,7 +263,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putString("cfg_corner_preset", s.cornerStylePreset.name)
             .putString("cfg_header_font", s.headerFont.name)
             .putString("cfg_body_font", s.bodyFont.name)
-            .putString("cfg_artwork_cut", s.artworkCut.name)
+            .putString("cfg_app_color_source", s.appColorSource.name)
+            .putBoolean("cfg_seen_dock_intro", s.seenDockIntro)
             .putString("cfg_home_sections", s.homeSections.joinToString(",") { it.name })
             .putBoolean("cfg_icon_follows_theme", s.iconFollowsTheme)
             .putString("cfg_bg_style_v2", s.playerBackgroundStyle.name)
@@ -292,6 +306,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_check_updates", s.checkForUpdates)
             .putBoolean("cfg_update_notifications", s.updateNotifications)
             .putBoolean("cfg_update_prereleases", s.updatePrereleases)
+            .let { MotionArtworkPreferences.write(it, s.motionArtwork) }
             .apply()
     }
 }

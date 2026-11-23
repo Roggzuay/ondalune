@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import io.github.roggzuay.ondalune.data.model.RepeatMode
 
 /**
  * The part of the audio engine the coordinator drives. The app adapts [OndaluneAudioEngine]
@@ -57,6 +58,8 @@ interface PlaybackHost {
     fun showBanner(message: String)
     fun saveLastPlayed(trackId: String)
     fun saveQueue(trackIds: List<String>)
+    /** Remember the repeat button across restarts. */
+    fun saveRepeatMode(mode: RepeatMode)
 }
 
 /**
@@ -69,7 +72,7 @@ class PlaybackCoordinator(
     private val host: PlaybackHost,
     private val scope: CoroutineScope,
     initialShuffleMode: ShuffleMode = ShuffleMode.OFF,
-    initialRepeatOne: Boolean = false
+    initialRepeatMode: RepeatMode = RepeatMode.OFF
 ) {
     private val _currentTrack = MutableStateFlow<SubsonicTrack?>(null)
     val currentTrack: StateFlow<SubsonicTrack?> = _currentTrack.asStateFlow()
@@ -87,8 +90,8 @@ class PlaybackCoordinator(
     private val _shuffleEnabled = MutableStateFlow(initialShuffleMode != ShuffleMode.OFF)
     val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled.asStateFlow()
 
-    private val _repeatOneEnabled = MutableStateFlow(initialRepeatOne)
-    val repeatOneEnabled: StateFlow<Boolean> = _repeatOneEnabled.asStateFlow()
+    private val _repeatMode = MutableStateFlow(initialRepeatMode)
+    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
 
     private val _sleepTimerState = MutableStateFlow(SleepTimerState())
     val sleepTimerState: StateFlow<SleepTimerState> = _sleepTimerState.asStateFlow()
@@ -100,7 +103,7 @@ class PlaybackCoordinator(
 
     init {
         scope.launch {
-            combine(_playbackQueue, _currentTrack, _repeatOneEnabled, _sleepTimerState) { _, _, _, _ ->
+            combine(_playbackQueue, _currentTrack, _repeatMode, _sleepTimerState) { _, _, _, _ ->
                 upcomingTrack(extendQueue = false)?.id
             }.distinctUntilChanged().collect { engine.expectNextTrack(it) }
         }
@@ -280,7 +283,7 @@ class PlaybackCoordinator(
      * what's playing: shared genres and sub-genres first, then same artist, then nearby years.
      */
     private fun extendQueueWithSuggestionsIfEnding() {
-        if (_repeatOneEnabled.value || !host.settings.autoplaySimilar) return
+        if (_repeatMode.value != RepeatMode.OFF || !host.settings.autoplaySimilar) return
         val current = _currentTrack.value ?: return
         val queue = _playbackQueue.value
         val idx = queue.indexOfFirst { it.id == current.id }
@@ -310,12 +313,14 @@ class PlaybackCoordinator(
         val current = _currentTrack.value ?: return null
         val sleep = _sleepTimerState.value
         if (sleep.isActive && (sleep.stopAtEndOfCurrentTrack || sleep.waitingForTrackEnd)) return null
-        if (_repeatOneEnabled.value) return current
+        if (_repeatMode.value == RepeatMode.ONE) return current
         if (extendQueue) extendQueueWithSuggestionsIfEnding()
         val queue = _playbackQueue.value.ifEmpty { host.library }
         if (queue.isEmpty()) return null
         val idx = queue.indexOfFirst { it.id == current.id }
-        return queue.getOrNull(idx + 1) ?: queue.first()
+        // Past the last song: start again on Repeat all, otherwise this is the end of the queue.
+        return queue.getOrNull(idx + 1)
+            ?: queue.firstOrNull().takeIf { _repeatMode.value == RepeatMode.ALL }
     }
 
     /** For gapless and crossfade: the song the engine should line up next, with its source. */
@@ -344,10 +349,19 @@ class PlaybackCoordinator(
             return
         }
 
-        if (_repeatOneEnabled.value) {
+        if (_repeatMode.value == RepeatMode.ONE) {
             engine.play(current, host.serverFor(current), host.equalizer)
+            return
+        }
+        // The song ran out on its own, so the queue's end is really the end: stop there unless
+        // Repeat all is on, or autoplay has put something after it. Pressing skip is different —
+        // that is a deliberate ask for another song, and still wraps.
+        val next = upcomingTrack(extendQueue = true)
+        if (next == null) {
+            engine.pause()
+            host.showBanner("End of the queue")
         } else {
-            skipNext()
+            startPlayback(next)
         }
     }
 
@@ -395,8 +409,13 @@ class PlaybackCoordinator(
         )
     }
 
-    fun toggleRepeatOne() {
-        _repeatOneEnabled.value = !_repeatOneEnabled.value
+    /** Steps the repeat button on: off, all, one, off. */
+    fun cycleRepeatMode(): RepeatMode {
+        val next = _repeatMode.value.next()
+        _repeatMode.value = next
+        host.saveRepeatMode(next)
+        host.showBanner(next.description)
+        return next
     }
 
     /** Re-deals a Smart Shuffle queue after favourites change what it favours. */

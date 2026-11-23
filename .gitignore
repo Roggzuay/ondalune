@@ -25,3 +25,7 @@ keystore.properties
 *.p12
 .env
 .env.*
+
+# Local tool state, not part of the app
+/.claude/
+/.unslopovich/

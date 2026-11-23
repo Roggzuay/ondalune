@@ -124,11 +124,6 @@ fun artShape(shape: ArtShape, key: Int = 0): Shape = when (shape) {
 
 private val polygonShapes = HashMap<ArtShape, Shape>()
 
-/** The spec with the user's artwork cut applied, if they chose one. */
-fun StyleSpec.withArtworkCut(cut: io.github.roggzuay.ondalune.data.model.ArtworkCut): StyleSpec =
-    if (cut == io.github.roggzuay.ondalune.data.model.ArtworkCut.AUTO) this
-    else ArtShape.valueOf(cut.name).let { copy(artShape = it, rowArtShape = it) }
-
 /** Clips to a normalized (0..1) Material shape polygon, scaled to the layout size. */
 class PolygonShape(private val polygon: RoundedPolygon) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {

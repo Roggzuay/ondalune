@@ -17,10 +17,15 @@ class LauncherActivity : Activity() {
         startActivity(
             Intent(intent)
                 .setClass(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 // This screen's own "hidden from Recents, no history" flags ride along in the copied
-                // intent; left on, Ondalune vanishes from Recents the moment you leave it.
-                .apply { removeFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or Intent.FLAG_ACTIVITY_NO_HISTORY) }
+                // intent; left on, Ondalune vanishes from Recents the moment you leave it. They are
+                // masked out here rather than with removeFlags, which only exists from API 26 and
+                // so would leave them set on Android 7.
+                .setFlags(
+                    (intent.flags and
+                        (Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or Intent.FLAG_ACTIVITY_NO_HISTORY).inv()) or
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
                 // An opened song file: pass the read access on, or it ends with this screen.
                 .apply { if (data != null) addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         )

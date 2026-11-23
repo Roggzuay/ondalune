@@ -293,6 +293,10 @@ interface OndaluneDao {
     @Query("SELECT folderUri FROM local_files WHERE trackId = :trackId")
     suspend fun folderOfTrack(trackId: String): String?
 
+    /** The albums of the songs right in one folder: ids matching [pattern] but not [deeper] (LIKE, escaped with \\). */
+    @Query("SELECT DISTINCT albumId FROM subsonic_tracks WHERE serverId = :serverId AND id LIKE :pattern ESCAPE '\\' AND id NOT LIKE :deeper ESCAPE '\\'")
+    suspend fun albumsInFolder(serverId: Long, pattern: String, deeper: String): List<String>
+
     @Query("SELECT * FROM subsonic_downloads WHERE serverId = :serverId ORDER BY updatedAtMs DESC")
     fun observeDownloadsForServer(serverId: Long): Flow<List<SubsonicDownloadEntity>>
 

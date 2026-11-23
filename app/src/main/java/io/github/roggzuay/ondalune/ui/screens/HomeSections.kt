@@ -117,6 +117,8 @@ import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelves
 import io.github.roggzuay.ondalune.ui.viewmodel.HomeShelfKind
 import kotlin.math.sin
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.DragIndicator
 
 /** Cover art and the artist line shown on the Your Mix hero: from the songs the mix plays. */
 private class MixArt(val covers: List<String>, val artists: String)
@@ -633,7 +635,8 @@ fun HomeLayoutEditor(
         }
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        HomeLayoutGroupLabel("Shown on Home", "${order.size}")
         order.forEach { section ->
             key(section) {
                 val lifted = dragging == section
@@ -652,29 +655,52 @@ fun HomeLayoutEditor(
                             translationY = if (lifted) dragOffset else 0f
                             scaleX = 1f + 0.03f * elevation
                             scaleY = scaleX
-                            shadowElevation = 12.dp.toPx() * elevation
-                            shape = RoundedCornerShape(16.dp)
+                            shadowElevation = 14.dp.toPx() * elevation
+                            shape = RoundedCornerShape(18.dp)
                             clip = elevation > 0f
                         }
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = elevation))
                 )
             }
         }
         if (hidden.isNotEmpty()) {
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text(
-                "Hidden",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-            )
+            Spacer(Modifier.height(4.dp))
+            HomeLayoutGroupLabel("Hidden", "${hidden.size}")
             hidden.forEach { section ->
-                HomeSectionRow(section, visible = false, drag = null, onToggle = { onChange(order + section) })
+                key(section) {
+                    HomeSectionRow(section, visible = false, drag = null, onToggle = { onChange(order + section) })
+                }
             }
         }
         TextButton(onClick = onReset, enabled = isCustom, modifier = Modifier.align(Alignment.End)) {
             Text("Use the theme's layout")
         }
+    }
+}
+
+/** "Shown on Home 8" — which list the rows under it belong to, and how many are in it. */
+@Composable
+private fun HomeLayoutGroupLabel(title: String, count: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = count,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerHighest,
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 7.dp, vertical = 1.dp)
+        )
     }
 }
 
@@ -709,12 +735,27 @@ private fun HomeSectionRow(
                     ) { change, amount -> change.consume(); currentDrag?.onDrag(amount.y) }
                 } else Modifier
             )
-            .padding(vertical = 4.dp)
+            // A shown row is a card you can pick up; a hidden one is a plain outline, so which
+            // list a row is in reads before its switch does.
+            .background(
+                if (visible) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                RoundedCornerShape(18.dp)
+            )
+            .then(
+                if (visible) Modifier
+                else Modifier.border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    RoundedCornerShape(18.dp)
+                )
+            )
+            .padding(vertical = 6.dp, horizontal = 4.dp)
             .testTag("home_section_${section.name.lowercase()}")
     ) {
         if (drag != null) {
+            // Two columns of dots read as "pick me up" where a single bar reads as a divider.
             Icon(
-                Icons.Filled.DragHandle,
+                Icons.Filled.DragIndicator,
                 contentDescription = "Drag to reorder ${section.label}",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -730,7 +771,7 @@ private fun HomeSectionRow(
                     .testTag("home_section_handle_${section.name.lowercase()}")
             )
         } else {
-            Spacer(Modifier.width(44.dp))
+            Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -742,11 +783,12 @@ private fun HomeSectionRow(
             Text(
                 section.description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (visible) 1f else 0.75f),
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(Modifier.width(8.dp))
         Switch(checked = visible, enabled = canToggle, onCheckedChange = { onToggle() })
     }
 }

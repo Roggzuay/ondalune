@@ -31,7 +31,7 @@ Ondalune plays your library from <b>Navidrome</b>, <b>Jellyfin</b> or any <b>Sub
 <li>The player grows out of the mini player, and covers and colours fade into the next song</li>
 <li>Colours read from the real cover; five animated backgrounds</li>
 <li>An honest quality line under the cover: the file's format, what actually plays, and what changes the sound</li>
-<li>Two interface styles, separate fonts, artwork shapes, Material You, light, dark and AMOLED themes</li>
+<li>Two interface styles, separate fonts, app colours from the cover, Material You, light, dark and AMOLED themes</li>
 </ul>
 
 <b>Everyday listening</b>

@@ -24,6 +24,10 @@ import io.github.roggzuay.ondalune.data.local.OndaluneDatabase
 import io.github.roggzuay.ondalune.data.local.OndaluneDownloadManager
 import io.github.roggzuay.ondalune.data.model.AlbumListType
 import kotlinx.coroutines.flow.collectLatest
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkService
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkSettings
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkWorker
+import io.github.roggzuay.ondalune.data.motion.MotionIdentity
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import io.github.roggzuay.ondalune.ui.theme.buildOndaluneColorScheme
 import androidx.compose.ui.graphics.toArgb
@@ -152,6 +156,7 @@ import io.github.roggzuay.ondalune.data.update.InstallSource
 import io.github.roggzuay.ondalune.data.update.installSourceOf
 import io.github.roggzuay.ondalune.data.update.UpdateCheckWorker
 import io.github.roggzuay.ondalune.data.update.updateChecksBuiltIn
+import io.github.roggzuay.ondalune.data.model.RepeatMode
 
 enum class PrimaryDestination(val index: Int, val route: String, val label: String) {
     HOME(0, "home", "Home"),
@@ -193,6 +198,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val prefs = application.getSharedPreferences("ondalune_prefs", android.content.Context.MODE_PRIVATE)
     /** Saved options; the plain ones are set on it directly (`viewModel.settings.setX`). */
     val settings = SettingsStore(prefs)
+    val recentSearches = RecentSearches(prefs)
     private val database = OndaluneDatabase.getInstance(application)
     private val client = OpenSubsonicClient()
     private val repository = OndaluneRepository.from(application, client)
@@ -220,6 +226,27 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun playFromSearch(query: String) = bridgePlaySearch(query)
 
     /** Plays a song file another app opened with Ondalune, on its own, and opens the player. */
+    /** Looks up, keeps and hands the player moving artwork (see Settings → Motion artwork). */
+    val motionArtwork = MotionArtworkService.get(application)
+
+    fun setMotionArtwork(transform: (MotionArtworkSettings) -> MotionArtworkSettings) = settings.setMotionArtwork(transform)
+
+    /**
+     * Looks again at albums that had no moving artwork: the song playing now at once, and with
+     * the whole-library setting every album, in the background.
+     */
+    fun lookForMotionArtworkNow() {
+        viewModelScope.launch {
+            motionArtwork.lookAgain()
+            MotionArtworkWorker.runNow(getApplication(), settings.customization.value.motionArtwork)
+            playback.currentTrack.value?.let { track -> runCatching { motionArtwork.resolve(track, serverFor(track)) } }
+        }
+    }
+
+    fun clearMotionArtwork() {
+        viewModelScope.launch { motionArtwork.clear() }
+    }
+
     fun playOpenedFile(uri: android.net.Uri) {
         viewModelScope.launch {
             val phone = repository.phoneSource()
@@ -854,11 +881,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             override fun showBanner(message: String) { _statusBanner.value = message }
             override fun saveLastPlayed(trackId: String) = prefs.edit().putString("last_played_track_id", trackId).apply()
             override fun saveQueue(trackIds: List<String>) = prefs.edit().putString("saved_queue_ids", trackIds.joinToString(",")).apply()
+            override fun saveRepeatMode(mode: RepeatMode) = prefs.edit().putString("repeat_mode", mode.name).apply()
         },
         scope = viewModelScope,
         initialShuffleMode = runCatching { ShuffleMode.valueOf(prefs.getString("shuffle_mode", ShuffleMode.OFF.name)!!) }
             .getOrDefault(ShuffleMode.OFF),
-        initialRepeatOne = prefs.getBoolean("repeat_one_enabled", false)
+        // "repeat_one_enabled" was the old boolean key: a true there starts on Repeat one.
+        initialRepeatMode = runCatching { RepeatMode.valueOf(prefs.getString("repeat_mode", null)!!) }
+            .getOrElse { if (prefs.getBoolean("repeat_one_enabled", false)) RepeatMode.ONE else RepeatMode.OFF }
     )
 
     val playingFromPlaylist: StateFlow<SubsonicPlaylist?> = combine(playback.queuePlaylistId, playlists) { id, all ->
@@ -867,6 +897,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     init {
         if (settings.customization.value.songAnalysis) startSongAnalysis()
+        // Motion artwork: each new album that plays is looked up (off the main thread, never in
+        // playback's way); the background library run follows the settings.
+        viewModelScope.launch {
+            playback.currentTrack.filterNotNull().distinctUntilChangedBy { MotionIdentity.of(it).releaseKey }.collectLatest { track ->
+                runCatching { motionArtwork.resolve(track, serverFor(track)) }
+            }
+        }
+        viewModelScope.launch {
+            settings.customization.map { it.motionArtwork }.distinctUntilChanged().collect { motion ->
+                MotionArtworkWorker.schedule(getApplication(), motion)
+                withContext(Dispatchers.IO) { motionArtwork.enforceLimit() }
+            }
+        }
         // Every cover and artist photo is kept on the phone, so browsing doesn't wait on them.
         viewModelScope.launch {
             allServerTracks.distinctUntilChangedBy { it.size }.collectLatest { tracks ->
@@ -1202,6 +1245,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun selectFavouritesFilterTab(tab: FavouritesFilterTab) {
         _favouritesFilterTab.value = tab
     }
+
+    /** The search in the field led somewhere: it goes on the recent list. */
+    fun rememberSearch() = recentSearches.add(_searchQuery.value)
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query

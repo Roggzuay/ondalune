@@ -2126,6 +2126,8 @@ fun SmartDynamicSearchScreen(
     selectedFolderPath: String?,
     onUpdateQuery: (String) -> Unit,
     onClearSearch: () -> Unit,
+    /** Back from the results: leaves search altogether. */
+    onCloseSearch: () -> Unit,
     onPlayTrack: (SubsonicTrack, List<SubsonicTrack>) -> Unit,
     onToggleStarTrack: (SubsonicTrack) -> Unit,
     onOpenAlbum: (String?) -> Unit,
@@ -2213,7 +2215,7 @@ fun SmartDynamicSearchScreen(
         return
     }
 
-    BackHandler { onClearSearch() }
+    BackHandler { onCloseSearch() }
 
     var activeScope by remember { mutableStateOf(SearchScopeTab.ALL) }
     val totalMatches = matchedTracks.size + matchedAlbums.size + matchedArtists.size +
@@ -2223,6 +2225,7 @@ fun SmartDynamicSearchScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .hideKeyboardOnScroll()
             .testTag("smart_dynamic_search_results_list"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)

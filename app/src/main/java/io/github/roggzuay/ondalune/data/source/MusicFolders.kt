@@ -189,6 +189,13 @@ class FolderReader(private val context: Context) {
         return found
     }
 
+    /** A file in a folder, as [filesIn] lists it. */
+    class FolderEntry(val id: String, val name: String, val mime: String, val size: Long)
+
+    /** The files directly in [dirId] (no subfolders); null when the folder can't be read. */
+    fun filesIn(treeUri: Uri, dirId: String): List<FolderEntry>? =
+        children(treeUri, dirId)?.filter { !it.isDir }?.map { FolderEntry(it.id, it.name, it.mime, it.size) }
+
     /** The tags of one song file; null when it can't be read as audio. */
     fun readTags(treeUri: Uri, documentId: String): Pair<SongTags, ByteArray?>? {
         val retriever = MediaMetadataRetriever()

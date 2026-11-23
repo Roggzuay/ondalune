@@ -125,6 +125,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkMode
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkSettings
+import io.github.roggzuay.ondalune.data.motion.MotionFetchScope
+import io.github.roggzuay.ondalune.ui.components.sizeLabel
+import io.github.roggzuay.ondalune.ui.viewmodel.SettingsStore
+import io.github.roggzuay.ondalune.data.motion.MotionArtworkRepository
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -133,6 +140,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -190,6 +198,7 @@ import kotlin.math.roundToInt
 import io.github.roggzuay.ondalune.data.model.TempoInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.LocalUriHandler
 
 /**
  * Expandable Settings Section IDs for the Accordion List view in Settings.
@@ -223,6 +232,11 @@ enum class SettingsExpandableSection(
         title = "Lyrics",
         subtitle = "Find lyrics online, change a song's lyrics",
         icon = Icons.Filled.Lyrics
+    ),
+    MOTION_ARTWORK(
+        title = "Motion artwork",
+        subtitle = "Moving covers in the player, when they're looked up, storage",
+        icon = Icons.Filled.Animation
     ),
     WIDGET_NOTIFICATION(
         title = "Widget & notification",
@@ -430,7 +444,7 @@ fun SettingsCustomizationScreen(
     onSetCornerStylePreset: (CornerStylePreset) -> Unit = {},
     onSetHeaderFont: (AppFont) -> Unit = {},
     onSetBodyFont: (AppFont) -> Unit = {},
-    onSetArtworkCut: (io.github.roggzuay.ondalune.data.model.ArtworkCut) -> Unit = {},
+    onSetAppColorSource: (io.github.roggzuay.ondalune.data.model.AppColorSource) -> Unit = {},
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
     onResetHomeSections: () -> Unit = {},
     onSetAnimatedSquiggly: (Boolean) -> Unit,
@@ -444,6 +458,12 @@ fun SettingsCustomizationScreen(
     onSetGapless: (Boolean) -> Unit,
     onSetAutoplay: (Boolean) -> Unit = {},
     onSetFindLyricsOnline: (Boolean) -> Unit = {},
+    /** Space the saved moving artwork takes, in bytes; -1 while unknown. */
+    motionCacheBytes: Long = -1L,
+    motionLibraryRun: MotionArtworkRepository.LibraryRun? = null,
+    onSetMotionArtwork: ((MotionArtworkSettings) -> MotionArtworkSettings) -> Unit = {},
+    onClearMotionArtwork: () -> Unit = {},
+    onLookForMotionArtwork: () -> Unit = {},
     onSetDolbyPassthrough: (Boolean) -> Unit = {},
     onSetSongAnalysis: (Boolean) -> Unit = {},
     /** "12 of 40 songs on this phone analysed", while song analysis is on. */
@@ -506,6 +526,7 @@ fun SettingsCustomizationScreen(
             SettingsExpandableSection.APPEARANCE_THEME to true,
             SettingsExpandableSection.PLAYBACK_DSP to false,
             SettingsExpandableSection.LYRICS to false,
+            SettingsExpandableSection.MOTION_ARTWORK to false,
             SettingsExpandableSection.WIDGET_NOTIFICATION to false,
             SettingsExpandableSection.SERVER_HUB to false
         )
@@ -857,12 +878,23 @@ fun SettingsCustomizationScreen(
                         label = { it.label },
                         onSelect = onSetDownloadSpeedLimit
                     )
+                    var customSaveAhead by remember { mutableStateOf(false) }
                     SettingChoiceRow(
                         title = "Save next songs",
                         choices = listOf(3, 5, 10),
                         selected = settings.readAheadTrackBuffer,
                         label = { "${countOf(it, "song")}" },
-                        onSelect = onSetReadAheadBuffer
+                        onSelect = onSetReadAheadBuffer,
+                        onCustom = { customSaveAhead = true }
+                    )
+                    if (customSaveAhead) CustomAmountDialog(
+                        title = "Save next songs",
+                        explanation = "Up to this many of the songs coming up are saved on the phone. " +
+                            "It's a most, not a target: only songs actually in the queue are saved.",
+                        unit = "songs",
+                        initial = settings.readAheadTrackBuffer,
+                        range = SettingsStore.SAVE_AHEAD_RANGE,
+                        onDone = { customSaveAhead = false; it?.let(onSetReadAheadBuffer) }
                     )
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -957,173 +989,18 @@ fun SettingsCustomizationScreen(
                 },
                 testTag = "settings_section_appearance"
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        text = "Light or dark",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AppThemeMode.entries.forEach { mode ->
-                            val selected = settings.themeMode == mode
-                            SpringPressableSurface(
-                                onClick = { onSetThemeMode(mode) },
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                cornerRadius = 16.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                                    .testTag("theme_mode_${mode.name.lowercase()}")
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Text(
-                                        text = mode.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = LocalContentColor.current
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Text(
-                        text = "The app follows your phone's colours. The player and the playing song's buttons take their colour from its cover.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    Text(
-                        text = "Fonts",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    FontPicker("Headings", settings.headerFont, display = true, onSelect = onSetHeaderFont, tag = "font_header")
-                    FontPicker("Songs & text", settings.bodyFont, display = false, onSelect = onSetBodyFont, tag = "font_body")
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    Text(
-                        text = "Artwork shape",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    ArtworkShapePicker(selected = settings.artworkCut, onSelect = onSetArtworkCut)
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                    Text(
-                        text = "Home layout",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    HomeLayoutEditor(
-                        sections = settings.homeSections.ifEmpty { OndaluneStyle.defaultHome },
-                        isCustom = settings.homeSections.isNotEmpty(),
-                        onChange = onSetHomeSections,
-                        onReset = onResetHomeSections
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                    Text(
-                        text = "Navigation bar",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        DockStyle.entries.forEach { style ->
-                            val selected = settings.dockStyle == style
-                            SpringPressableSurface(
-                                onClick = { onSetDockStyle(style) },
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                cornerRadius = 20.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("dock_style_${style.name.lowercase()}")
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = style.label,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (selected) {
-                                            Icon(
-                                                imageVector = Icons.Filled.CheckCircle,
-                                                contentDescription = null,
-                                                tint = LocalContentColor.current,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = style.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = LocalContentColor.current.copy(alpha = 0.78f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    SettingsToggleRow(
-                        title = "Hide mini player while scrolling",
-                        subtitle = "Slides away as you scroll down a list and comes back as soon as you scroll up",
-                        checked = settings.hideMiniPlayerOnScroll,
-                        onCheckedChange = onSetHideMiniPlayerOnScroll,
-                        testTag = "toggle_hide_mini_player"
-                    )
-
-                    Text(
-                        text = "Corner roundness",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CornerStylePreset.entries.forEach { preset ->
-                            val selected = settings.cornerStylePreset == preset
-                            SpringPressableSurface(
-                                onClick = { onSetCornerStylePreset(preset) },
-                                color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                cornerRadius = 16.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .testTag("corner_preset_${preset.name.lowercase()}")
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Text(
-                                        text = preset.label.split(" ").first(),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = LocalContentColor.current
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                AppearanceSettingsContent(
+                    settings = settings,
+                    onSetThemeMode = onSetThemeMode,
+                    onSetAppColorSource = onSetAppColorSource,
+                    onSetHeaderFont = onSetHeaderFont,
+                    onSetBodyFont = onSetBodyFont,
+                    onSetHomeSections = onSetHomeSections,
+                    onResetHomeSections = onResetHomeSections,
+                    onSetDockStyle = onSetDockStyle,
+                    onSetHideMiniPlayerOnScroll = onSetHideMiniPlayerOnScroll,
+                    onSetCornerStylePreset = onSetCornerStylePreset
+                )
             }
         }
 
@@ -1513,6 +1390,20 @@ fun SettingsCustomizationScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Motion artwork: what the player's cover does, when artwork is looked up, and storage.
+        if (shownSection == null || shownSection == SettingsExpandableSection.MOTION_ARTWORK) item {
+            val isExpanded = expandedMap[SettingsExpandableSection.MOTION_ARTWORK] == true
+            ExpandableSettingsSectionCard(
+                section = SettingsExpandableSection.MOTION_ARTWORK,
+                badgeText = settings.motionArtwork.mode.label,
+                isExpanded = isExpanded,
+                onToggleExpand = { expandedMap[SettingsExpandableSection.MOTION_ARTWORK] = !isExpanded },
+                testTag = "settings_section_motion_artwork"
+            ) {
+                MotionArtworkSettingsBody(settings.motionArtwork, motionCacheBytes, motionLibraryRun, onSetMotionArtwork, onClearMotionArtwork, onLookForMotionArtwork)
             }
         }
 
@@ -2057,7 +1948,7 @@ private fun SettingsStepRow(number: Int, text: String) {
 }
 
 @Composable
-private fun SettingsToggleRow(
+internal fun SettingsToggleRow(
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -4146,7 +4037,9 @@ private fun <T> SettingChoiceRow(
     selected: T,
     label: (T) -> String,
     onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Adds a "Custom…" choice at the end, for a value of the user's own. */
+    onCustom: (() -> Unit)? = null
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -4179,6 +4072,292 @@ private fun <T> SettingChoiceRow(
                     }
                 )
             }
+            if (onCustom != null) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Custom…") },
+                    onClick = {
+                        open = false
+                        onCustom()
+                    },
+                    trailingIcon = if (selected !in choices) {
+                        { Icon(Icons.Filled.Check, contentDescription = "Selected") }
+                    } else {
+                        null
+                    }
+                )
+            }
         }
     }
+}
+
+/**
+ * Asks for a number of the user's own within [range]; [onDone] gets it, or null when cancelled.
+ * Out-of-range or non-numeric input keeps the button off and says what fits.
+ */
+@Composable
+private fun CustomAmountDialog(
+    title: String,
+    explanation: String,
+    unit: String,
+    initial: Int,
+    range: IntRange,
+    onDone: (Int?) -> Unit
+) {
+    // Selected, so typing replaces the current number.
+    var text by remember {
+        val start = initial.toString()
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(start, androidx.compose.ui.text.TextRange(0, start.length)))
+    }
+    val value = text.text.trim().toIntOrNull()?.takeIf { it in range }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { onDone(null) },
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(explanation, style = MaterialTheme.typography.bodyMedium)
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { new -> text = new.copy(text = new.text.filter { it.isDigit() }.take(6)) },
+                    singleLine = true,
+                    suffix = { Text(unit) },
+                    isError = value == null,
+                    supportingText = { Text("From ${range.first} to ${range.last}") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("custom_amount_field")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onDone(value) }, enabled = value != null) { Text("Set") }
+        },
+        dismissButton = { TextButton(onClick = { onDone(null) }) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun MotionArtworkSettingsBody(
+    motion: MotionArtworkSettings,
+    cacheBytes: Long,
+    libraryRun: MotionArtworkRepository.LibraryRun?,
+    onSet: ((MotionArtworkSettings) -> MotionArtworkSettings) -> Unit,
+    onClear: () -> Unit,
+    onLookAgain: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "The player shows an album's moving cover when it has one: an animated WebP or GIF set as the album cover on your server, or a cover.mp4, cover.webm, animated cover.webp or cover.gif next to the songs in a music folder on this phone. Hold the cover in the player to see where it came from.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "Ondalune never fetches artwork from anywhere else: it only reads what is already in your library. Your server has to hand the cover over as it was stored — a server that resizes or re-encodes covers turns an animated one into a still picture.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        val uriHandler = LocalUriHandler.current
+        androidx.compose.material3.TextButton(
+            onClick = { uriHandler.openUri("https://github.com/Roggzuay/ondalune/blob/main/docs/motion-artwork.md") },
+            modifier = Modifier.testTag("settings_motion_guide_link")
+        ) {
+            Text("How moving artwork works, and how to make it", style = MaterialTheme.typography.labelMedium)
+        }
+        MotionChoiceList(
+            title = "In the player",
+            options = MotionArtworkMode.entries,
+            selected = motion.mode,
+            label = { it.label },
+            detail = { it.detail },
+            tag = { "motion_mode_${it.name.lowercase()}" },
+            onPick = { picked -> onSet { it.copy(mode = picked) } }
+        )
+        if (motion.mode != MotionArtworkMode.DISABLED) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            SettingsToggleRow(
+                title = "Look for moving artwork",
+                subtitle = "Checks your server's album covers by itself. Off: only artwork already saved, or kept in a music folder on this phone",
+                checked = motion.autoRetrieve,
+                onCheckedChange = { on -> onSet { it.copy(autoRetrieve = on) } },
+                testTag = "toggle_motion_auto_retrieve"
+            )
+            if (motion.autoRetrieve) {
+                // The setting below already does this; it is off by default and nothing says so,
+                // which is why the first play of an album is the one that waits.
+                if (motion.fetchScope == MotionFetchScope.WHEN_PLAYED) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth().testTag("motion_preload_tip")
+                    ) {
+                        Column(Modifier.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 6.dp)) {
+                            Text(
+                                "Covers load the first time you play an album",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                "Pre-load them instead and Ondalune goes through the whole library in the background, once a day and never on low battery, so a moving cover is ready before you press play.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                androidx.compose.material3.FilledTonalButton(
+                                    onClick = { onSet { it.copy(fetchScope = MotionFetchScope.WHOLE_LIBRARY) } },
+                                    modifier = Modifier.testTag("motion_preload_tip_enable")
+                                ) {
+                                    Text("Pre-load the library", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+                MotionChoiceList(
+                    title = "When to look",
+                    options = MotionFetchScope.entries,
+                    selected = motion.fetchScope,
+                    label = { it.label },
+                    detail = { it.detail },
+                    tag = { "motion_scope_${it.name.lowercase()}" },
+                    onPick = { picked -> onSet { it.copy(fetchScope = picked) } }
+                )
+                SettingsToggleRow(
+                    title = "Wi-Fi only",
+                    subtitle = "Never uses mobile data to look up or download moving artwork",
+                    checked = motion.wifiOnly,
+                    onCheckedChange = { on -> onSet { it.copy(wifiOnly = on) } },
+                    testTag = "toggle_motion_wifi_only"
+                )
+                var lookedAgain by remember { mutableStateOf(false) }
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { onLookAgain(); lookedAgain = true },
+                    modifier = Modifier.fillMaxWidth().testTag("settings_motion_look_again_button")
+                ) {
+                    Text("Look again now", style = MaterialTheme.typography.labelMedium)
+                }
+                Text(
+                    text = if (lookedAgain) {
+                        if (motion.fetchScope == MotionFetchScope.WHOLE_LIBRARY) "Checking the song playing now, then the whole library in the background."
+                        else "Checking the song playing now. Other albums are checked again when they play."
+                    } else {
+                        "Changed a cover on your server? Albums that had no moving artwork are checked again."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        Text("Storage", style = MaterialTheme.typography.titleSmall)
+        val limitBytes = motion.cacheLimitMb * 1024L * 1024L
+        Text(
+            text = (if (cacheBytes < 0) "…" else if (cacheBytes == 0L) "0 MB" else sizeLabel(cacheBytes)) +
+                " of ${limitLabel(motion.cacheLimitMb)}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { if (cacheBytes <= 0) 0f else (cacheBytes.toFloat() / limitBytes).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().testTag("motion_cache_meter"),
+            drawStopIndicator = {}
+        )
+        if (libraryRun != null) Text(
+            text = "Going through your library: album ${libraryRun.done + 1} of ${libraryRun.total}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.testTag("motion_library_progress")
+        )
+        Text(
+            text = "The limit is the most it may take, not space set aside: only artwork actually found is saved. " +
+                "Looking through the whole library stops when it's full; past it, the artwork shown longest ago goes first. " +
+                "Artwork in your music folders isn't copied or counted.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        var customLimit by remember { mutableStateOf(false) }
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            MotionArtworkSettings.CACHE_LIMITS_MB.forEach { mb ->
+                androidx.compose.material3.FilterChip(
+                    selected = motion.cacheLimitMb == mb,
+                    onClick = { onSet { it.copy(cacheLimitMb = mb) } },
+                    label = { Text(limitLabel(mb)) },
+                    modifier = Modifier.testTag("motion_cache_$mb")
+                )
+            }
+            val custom = motion.cacheLimitMb !in MotionArtworkSettings.CACHE_LIMITS_MB
+            androidx.compose.material3.FilterChip(
+                selected = custom,
+                onClick = { customLimit = true },
+                label = { Text(if (custom) "Custom: ${limitLabel(motion.cacheLimitMb)}" else "Custom…") },
+                modifier = Modifier.testTag("motion_cache_custom")
+            )
+        }
+        if (customLimit) CustomAmountDialog(
+            title = "Moving artwork limit",
+            explanation = "The most space saved moving artwork may take. Nothing is set aside: it only fills as artwork is found.",
+            unit = "MB",
+            initial = motion.cacheLimitMb,
+            range = MotionArtworkSettings.CUSTOM_LIMIT_MB,
+            onDone = { mb -> customLimit = false; if (mb != null) onSet { it.copy(cacheLimitMb = mb) } }
+        )
+        androidx.compose.material3.OutlinedButton(
+            onClick = onClear,
+            enabled = cacheBytes != 0L,
+            modifier = Modifier.fillMaxWidth().testTag("settings_clear_motion_cache_button")
+        ) {
+            Text("Clear moving artwork", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun <T> MotionChoiceList(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    detail: (T) -> String,
+    tag: (T) -> String,
+    onPick: (T) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        options.forEach { option ->
+            val isSelected = option == selected
+            SpringPressableSurface(
+                onClick = { onPick(option) },
+                color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                cornerRadius = 16.dp,
+                modifier = Modifier.fillMaxWidth().testTag(tag(option))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(text = label(option), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = detail(option),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LocalContentColor.current.copy(alpha = 0.72f)
+                        )
+                    }
+                    if (isSelected) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** "250 MB", "1 GB", "1.5 GB". */
+internal fun limitLabel(mb: Int): String = when {
+    mb < 1000 -> "$mb MB"
+    mb % 1000 == 0 -> "${mb / 1000} GB"
+    else -> "%.1f GB".format(mb / 1000.0)
 }

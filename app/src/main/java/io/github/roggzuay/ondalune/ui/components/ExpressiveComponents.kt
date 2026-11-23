@@ -112,6 +112,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.RectangleShape
@@ -704,6 +705,47 @@ fun Modifier.frosted(hazeState: HazeState?, shape: Shape): Modifier {
             )
     } else {
         this.clip(shape).background(surface.copy(alpha = 0.96f))
+    }
+}
+
+/**
+ * The Standard dock's ground: one light blur across the mini player and the bar together, so they
+ * read as a single surface the page passes under rather than two cards stacked on it. The blur is
+ * deliberately gentler than [frosted] (the bar is always on screen, so a heavy blur reads as a
+ * wall), and a hairline at the top edge keeps it from floating when the page behind is flat.
+ * Without blur support (below Android 12) it falls back to the old soft fade, which needs no GPU.
+ */
+@Composable
+fun Modifier.blendedBar(hazeState: HazeState?): Modifier {
+    val scheme = MaterialTheme.colorScheme
+    return if (hazeState != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        this
+            .hazeEffect(
+                state = hazeState,
+                style = HazeStyle(
+                    backgroundColor = scheme.surface,
+                    tint = HazeTint(scheme.surfaceContainer.copy(alpha = 0.55f)),
+                    blurRadius = 18.dp,
+                    noiseFactor = 0f
+                )
+            )
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    color = scheme.onSurface.copy(alpha = 0.07f),
+                    size = Size(size.width, 1.dp.toPx())
+                )
+            }
+    } else {
+        val page = scheme.background
+        this.background(
+            Brush.verticalGradient(
+                0f to Color.Transparent,
+                0.3f to page.copy(alpha = 0.55f),
+                0.55f to page.copy(alpha = 0.9f),
+                1f to page
+            )
+        )
     }
 }
 

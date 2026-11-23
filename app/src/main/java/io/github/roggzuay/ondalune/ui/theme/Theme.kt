@@ -236,7 +236,6 @@ fun OndaluneExpressiveTheme(
     cornerStylePreset: CornerStylePreset = CornerStylePreset.EXPRESSIVE_ROUNDED,
     headerFont: AppFont = AppFont.AUTO,
     bodyFont: AppFont = AppFont.AUTO,
-    artworkCut: io.github.roggzuay.ondalune.data.model.ArtworkCut = io.github.roggzuay.ondalune.data.model.ArtworkCut.AUTO,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -246,7 +245,7 @@ fun OndaluneExpressiveTheme(
         AppThemeMode.DARK, AppThemeMode.AMOLED -> true
         AppThemeMode.LIGHT -> false
     }
-    val spec = remember(artworkCut) { OndaluneStyle.withArtworkCut(artworkCut) }
+    val spec = OndaluneStyle
     val isAmoled = themeMode == AppThemeMode.AMOLED || (spec.pureBlack && isDark)
 
     val standard = spec.standardShapes

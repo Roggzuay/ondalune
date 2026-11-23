@@ -175,6 +175,44 @@ fun UpdateBanner(update: AppUpdate, onView: () -> Unit, onLater: () -> Unit, mod
 }
 
 /**
+ * Shown once, on the first launch: the navigation bar now blends into the page, and this says
+ * where to change it back. It sits just above the bar it is about, so there is no need to describe
+ * which thing is meant.
+ */
+@Composable
+fun NavBarIntroNote(onOpenAppearance: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier.fillMaxWidth().testTag("nav_bar_intro_note")
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp)) {
+            Text(
+                "The bar and the mini player blend into the page",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                "Prefer them as a floating capsule? Settings → Appearance → Navigation bar.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDismiss, modifier = Modifier.testTag("nav_bar_intro_dismiss")) {
+                    Text("Got it")
+                }
+                FilledTonalButton(onClick = onOpenAppearance, modifier = Modifier.testTag("nav_bar_intro_change")) {
+                    Text("Change it")
+                }
+            }
+        }
+    }
+}
+
+/**
  * The update's details: this version and the new one, its date and notes, and the way to update
  * that fits how this copy was installed. A GitHub copy downloads and installs it here (Android asks
  * to confirm); an F-Droid copy is sent to F-Droid, which builds and signs its own; any other copy

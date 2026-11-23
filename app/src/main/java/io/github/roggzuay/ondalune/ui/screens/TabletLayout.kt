@@ -1,5 +1,10 @@
 package io.github.roggzuay.ondalune.ui.screens
 
+import io.github.roggzuay.ondalune.ui.components.MotionArtworkInfoSheet
+import io.github.roggzuay.ondalune.ui.components.MotionCover
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
@@ -204,6 +209,8 @@ internal fun TabletCoverCard(
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val next by rememberUpdatedState(onSkipNext)
     val previous by rememberUpdatedState(onSkipPrevious)
+    var artworkInfo by remember { mutableStateOf(false) }
+    if (artworkInfo) MotionArtworkInfoSheet(track, onDismiss = { artworkInfo = false })
     Crossfade(
         targetState = track,
         animationSpec = tween(300),
@@ -226,26 +233,31 @@ internal fun TabletCoverCard(
                     dragged += amount
                 }
             }
+            // Holding the cover tells where its artwork comes from.
+            .pointerInput(Unit) { detectTapGestures(onLongPress = { artworkInfo = true }) }
             .testTag("tablet_cover_card"),
         label = "tabletCover"
     ) { shown ->
-        Box(Modifier.fillMaxSize()) {
-            ExpressiveArtwork(
-                seedHex = shown.paletteSeedHex,
-                accentHex = shown.accentHex,
-                artStyleIndex = shown.artStyleIndex,
-                coverArtUrl = shown.coverArtUrl,
-                fullBleed = true,
-                modifier = Modifier.fillMaxSize()
-            )
-            val sharp = sharperCoverUrl(shown.coverArtUrl)
-            if (sharp != shown.coverArtUrl) {
-                AsyncImage(
-                    model = remember(sharp) { ImageRequest.Builder(context).data(sharp).crossfade(250).build() },
-                    contentDescription = "${shown.album} cover",
-                    contentScale = ContentScale.Crop,
+        // The album's moving artwork, or the cover drifting gently, over the still picture.
+        MotionCover(shown, playerOpen = true, modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
+                ExpressiveArtwork(
+                    seedHex = shown.paletteSeedHex,
+                    accentHex = shown.accentHex,
+                    artStyleIndex = shown.artStyleIndex,
+                    coverArtUrl = shown.coverArtUrl,
+                    fullBleed = true,
                     modifier = Modifier.fillMaxSize()
                 )
+                val sharp = sharperCoverUrl(shown.coverArtUrl)
+                if (sharp != shown.coverArtUrl) {
+                    AsyncImage(
+                        model = remember(sharp) { ImageRequest.Builder(context).data(sharp).crossfade(250).build() },
+                        contentDescription = "${shown.album} cover",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }

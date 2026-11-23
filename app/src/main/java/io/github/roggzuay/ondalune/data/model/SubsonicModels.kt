@@ -414,6 +414,21 @@ enum class ShuffleMode(val label: String, val shortLabel: String, val descriptio
     STANDARD("Standard Shuffle", "Random", "Every song in the queue equally likely")
 }
 
+/**
+ * What happens when the queue, album or mix reaches its end.
+ *
+ * [OFF] plays through and stops, unless autoplay is on and keeps going with similar songs;
+ * [ALL] starts the same queue again; [ONE] plays the same song over and over.
+ */
+enum class RepeatMode(val label: String, val shortLabel: String, val description: String) {
+    OFF("Repeat off", "Off", "Plays to the end of the queue and stops"),
+    ALL("Repeat all", "All", "Starts the queue, album or mix again at the end"),
+    ONE("Repeat this song", "One", "Plays this song over and over");
+
+    /** The button cycles off, all, one, off. */
+    fun next(): RepeatMode = entries[(ordinal + 1) % entries.size]
+}
+
 enum class SmartShuffleProfile(val label: String, val description: String) {
     BALANCED("Balanced", "Favourites and much-played songs come up a little more often"),
     FAVOURITES("Favourites first", "Songs with a heart come up more often"),
@@ -421,8 +436,8 @@ enum class SmartShuffleProfile(val label: String, val description: String) {
 }
 
 enum class DockStyle(val label: String, val description: String) {
-    FLOATING("Floating", "Tonal capsule floating above the edge of the screen"),
-    STATIC("Standard", "Full-width bar with no background, blending into the page")
+    FLOATING("Floating", "A tonal capsule that lifts off the page, apart from the mini player"),
+    STATIC("Standard", "The mini player and the bar blend into one, over a soft blur of the page")
 }
 
 enum class AppThemeMode(val label: String) {
@@ -448,10 +463,16 @@ enum class AppFont(val label: String) {
     MONO("Mono")
 }
 
-/** How artwork is cut everywhere in the app: the theme's own shape, or flower-cut. */
-enum class ArtworkCut(val label: String) {
-    AUTO("Squircle"),
-    FLOWER("Flower")
+/**
+ * Where the whole app takes its colours from.
+ *
+ * [COVER] paints every page from the playing song's cover, so the app shifts with the music;
+ * [SOLID] keeps one steady palette (the phone's Material You colours) and leaves the cover's
+ * colours to the player and the playing song's own buttons.
+ */
+enum class AppColorSource(val label: String, val description: String) {
+    COVER("Follow the cover", "Every page takes its colours from the song that is playing"),
+    SOLID("One steady colour", "The app keeps one palette; only the player follows the cover")
 }
 
 /** Rows the Home screen can show, in the user's order. */
@@ -702,12 +723,15 @@ data class PlayerCustomizationSettings(
     val appIconVariant: AppIconVariant = AppIconVariant.MOONLIGHT,
     /** Re-pick the launcher icon whose colour is closest to the theme whenever the theme changes. */
     val iconFollowsTheme: Boolean = false,
-    val dockStyle: DockStyle = DockStyle.FLOATING,
+    val dockStyle: DockStyle = DockStyle.STATIC,
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val cornerStylePreset: CornerStylePreset = CornerStylePreset.EXPRESSIVE_ROUNDED,
     val headerFont: AppFont = AppFont.AUTO,
     val bodyFont: AppFont = AppFont.AUTO,
-    val artworkCut: ArtworkCut = ArtworkCut.AUTO,
+    /** Whether every page follows the playing cover's colours, or keeps one steady palette. */
+    val appColorSource: AppColorSource = AppColorSource.SOLID,
+    /** Set once the first-run note about the navigation bar has been shown. */
+    val seenDockIntro: Boolean = false,
     /** Custom Home order (visible sections only); empty = follow the theme's default layout. */
     val homeSections: List<HomeSection> = emptyList(),
     val playerBackgroundStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.ARTWORK_GLOW,
@@ -756,6 +780,8 @@ data class PlayerCustomizationSettings(
     val animatedSquigglyWave: Boolean = true,
     val hapticWobbleButtons: Boolean = true,
     val highRefreshRate120Hz: Boolean = true,
+    /** Moving artwork in the player: what shows, when it is looked up, and how much is kept. */
+    val motionArtwork: io.github.roggzuay.ondalune.data.motion.MotionArtworkSettings = io.github.roggzuay.ondalune.data.motion.MotionArtworkSettings(),
     /** Streaming quality on Wi-Fi and on mobile data (see [StreamQualities]); RAW/0 = the original file. */
     val wifiTranscodeFormat: String = "RAW",
     val wifiMaxBitRate: Int = 0,

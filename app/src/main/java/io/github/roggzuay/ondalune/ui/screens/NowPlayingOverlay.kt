@@ -114,6 +114,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -150,6 +151,10 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackLyricsResult
 import io.github.roggzuay.ondalune.ui.components.AnimatedAudioBarsIndicator
 import io.github.roggzuay.ondalune.ui.components.ExpressiveArtwork
+import io.github.roggzuay.ondalune.ui.components.MotionArtworkInfoSheet
+import io.github.roggzuay.ondalune.ui.components.MotionBackdrop
+import io.github.roggzuay.ondalune.ui.components.MotionCover
+import androidx.compose.foundation.gestures.detectTapGestures
 import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
 import io.github.roggzuay.ondalune.ui.components.FavouriteHeartIcon
 import io.github.roggzuay.ondalune.ui.components.ExpressiveSquigglySlider
@@ -186,6 +191,7 @@ import io.github.roggzuay.ondalune.ui.components.AudioQualityChip
 import io.github.roggzuay.ondalune.ui.components.AudioDetailsSheet
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -208,6 +214,12 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material3.Slider
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import io.github.roggzuay.ondalune.data.model.RepeatMode
 
 /**
  * Floating Pill/Squircle Mini-Player docked above the bottom navigation dock.
@@ -227,6 +239,8 @@ fun FloatingExpressiveMiniPlayer(
     onSkipPrevious: () -> Unit = {},
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
+    /** Standard dock: the bar sits flush on the dock's own blurred ground, with no card of its own. */
+    blended: Boolean = false,
     sheet: PlayerSheetState
 ) = MaterialTheme(colorScheme = LocalSongScheme.current ?: MaterialTheme.colorScheme) {
     // Swipe the bar: left = next track, right = previous. It follows the finger, then springs back.
@@ -257,7 +271,10 @@ fun FloatingExpressiveMiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 760.dp)
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .then(
+                    if (blended) Modifier.padding(horizontal = 4.dp)
+                    else Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
                 .onGloballyPositioned { sheet.miniCard = it.rootRect() }
                 .graphicsLayer {
                     translationX = dragX.value
@@ -314,10 +331,12 @@ fun FloatingExpressiveMiniPlayer(
                         }
                     }
                 }
-                .frosted(hazeState, cornerShape(22.dp))
+                // Blended: the dock's own blur is already behind it, so a second frosted card
+                // here would read as a box on a box.
+                .then(if (blended) Modifier else Modifier.frosted(hazeState, cornerShape(22.dp)))
                 .testTag("floating_mini_player"),
             color = Color.Transparent,
-            cornerRadius = 22.dp
+            cornerRadius = if (blended) 0.dp else 22.dp
         ) {
             Column {
                 Row(
@@ -471,7 +490,7 @@ fun NowPlayingStudioOverlay(
     speedPitchState: SpeedPitchState,
     sleepTimerState: SleepTimerState,
     shuffleEnabled: Boolean,
-    repeatOneEnabled: Boolean,
+    repeatMode: RepeatMode,
     animatedWaveEnabled: Boolean,
     activeTab: NowPlayingSheetTab,
     lyrics: List<LyricLine>,
@@ -486,7 +505,7 @@ fun NowPlayingStudioOverlay(
     onSwipePrevious: () -> Unit = onSkipPrevious,
     onSeek: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
-    onToggleRepeatOne: () -> Unit,
+    onCycleRepeat: () -> Unit,
     onToggleStar: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
     /** Long-press on the speed button: back to 1×, original pitch, no reverb. */
@@ -644,8 +663,33 @@ fun NowPlayingStudioOverlay(
                 )
             }
 
+            // An album with moving artwork plays it over the whole player, unblurred; the still
+            // cover above the title steps aside once it is in. Others keep the cover and its blur.
+            val motionFull = remember { mutableFloatStateOf(0f) }
+            // A tap on the moving artwork leaves it and the play buttons alone on screen; another
+            // tap brings the rest back. Anything that takes the artwork away brings it back too.
+            var bare by remember { mutableStateOf(false) }
+            val motionShowing by remember { derivedStateOf { motionFull.floatValue > 0.5f } }
+            if (bare && (!motionShowing || lyricsOpen || isUpNextBottomSheetOpen)) SideEffect { bare = false }
+            val bareShown = animateFloatAsState(if (bare) 1f else 0f, tween(420, easing = FastOutSlowInEasing), label = "bare")
+            if (!wide && !tablet) {
+                val fullyOpen by remember(lyricsOpen) { derivedStateOf { sheet.fraction >= 0.999f && !lyricsOpen } }
+                MotionBackdrop(
+                    track = track,
+                    playerOpen = fullyOpen,
+                    shown = motionFull,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = sheet.backdropAlpha }
+                        .pointerInput(Unit) { detectTapGestures(onTap = { if (motionShowing) bare = !bare }) },
+                    shade = { 1f - bareShown.value }
+                )
+            } else SideEffect { motionFull.floatValue = 0f }
+
             if (!tablet) PlayerHero(
                 sheet = sheet,
+                motionFull = { motionFull.floatValue },
+                onTapArt = { if (motionShowing) bare = !bare },
                 track = track,
                 queue = queue,
                 wide = wide,
@@ -669,6 +713,7 @@ fun NowPlayingStudioOverlay(
                 label = "topIconColor"
             )
             val topBar = @Composable {
+                AnimatedVisibility(visible = !bare, enter = fadeIn(tween(320)), exit = fadeOut(tween(240))) {
                 Box(openingContent) {
                     PlayerTopBar(
                         iconColor = topIconColor,
@@ -681,6 +726,7 @@ fun NowPlayingStudioOverlay(
                         onResetSpeedPitch = onResetSpeedPitch,
                         onSpeedResetHintShown = onSpeedResetHintShown
                     )
+                }
                 }
             }
             // The lyrics come up where the cover is; nothing below them moves.
@@ -709,7 +755,7 @@ fun NowPlayingStudioOverlay(
                 Box(
                     // Measured with everything showing only: the cover keeps its size while the
                     // lyrics fold the controls away and back.
-                    modifier = area.onSizeChanged { if (!lyricsOpen && lyricsShown.value == 0f) controlsHeight = it.height },
+                    modifier = area.onSizeChanged { if (!lyricsOpen && lyricsShown.value == 0f && bareShown.value == 0f) controlsHeight = it.height },
                     propagateMinConstraints = true
                 ) {
                     PlayerControls(
@@ -722,7 +768,7 @@ fun NowPlayingStudioOverlay(
                         sleepTimerActive = sleepTimerState.isActive,
                         shuffleEnabled = shuffleEnabled,
                         shuffleMode = shuffleMode,
-                        repeatOneEnabled = repeatOneEnabled,
+                        repeatMode = repeatMode,
                         animatedWaveEnabled = animatedWaveEnabled,
                         showRemainingTime = showRemainingTime,
                         showStarButton = showPlayerStarButton,
@@ -734,13 +780,14 @@ fun NowPlayingStudioOverlay(
                         onSkipNext = onSkipNext,
                         onSeek = onSeek,
                         onToggleShuffle = onToggleShuffle,
-                        onToggleRepeatOne = onToggleRepeatOne,
+                        onCycleRepeat = onCycleRepeat,
                         onToggleStar = onToggleStar,
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
-                        onTitleRowBottom = { if (!lyricsOpen && lyricsShown.value == 0f) titleRowBottom = it },
+                        onTitleRowBottom = { if (!lyricsOpen && lyricsShown.value == 0f && bareShown.value == 0f) titleRowBottom = it },
                         keepDetails = lyricsBeside,
+                        bare = bare,
                         modifier = openingContent
                     )
                 }
@@ -894,6 +941,9 @@ private fun PlayerHero(
     lyricsShown: () -> Float,
     topBarHeight: Dp,
     heroWidth: Dp,
+    /** How far the full-screen moving artwork has come in over the player. */
+    motionFull: () -> Float,
+    onTapArt: () -> Unit,
     heroHeight: Dp,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
@@ -907,6 +957,7 @@ private fun PlayerHero(
     val latestSwipeDownFinish by rememberUpdatedState(onSwipeDownFinish)
     val latestQueue by rememberUpdatedState(queue)
     val latestTrack by rememberUpdatedState(track)
+    val latestTapArt by rememberUpdatedState(onTapArt)
     val swipeHaptics = LocalHapticFeedbackManager.current
     val swipeScope = rememberCoroutineScope()
     // Horizontal offset of the cover while it is dragged or flung to the next/previous track. The
@@ -980,9 +1031,19 @@ private fun PlayerHero(
 
     // The outer box takes the gestures and stays put; the inner one moves, so finger positions are
     // never measured in a moving frame.
+    val coverMoves by remember(lyricsOpen) { derivedStateOf { sheet.fraction >= 0.999f && !lyricsOpen } }
+    var artworkInfo by remember { mutableStateOf(false) }
+    if (artworkInfo) MotionArtworkInfoSheet(track, onDismiss = { artworkInfo = false })
     Box(
         modifier = modifier
             .onGloballyPositioned { sheet.fullArt = it.rootRect() }
+            // Holding the cover tells where its artwork comes from.
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { latestTapArt() },
+                    onLongPress = { if (sheet.fraction >= 0.999f) artworkInfo = true }
+                )
+            }
             .pointerInput(Unit) {
                 // One drag detector so the gesture locks to one axis: sideways skips
                 // tracks, downwards closes the player.
@@ -1069,7 +1130,7 @@ private fun PlayerHero(
                     val dragged = 1f - abs(artDragX / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.7f)
                     // Behind the lyrics it is no cover for the mini player to take over, so it
                     // fades with the rest of the player.
-                    alpha = dragged * lerp(1f, sheet.contentAlpha, lyricsShown())
+                    alpha = dragged * lerp(1f, sheet.contentAlpha, lyricsShown()) * (1f - motionFull())
                     compositingStrategy = CompositingStrategy.Offscreen
                     if (sheet.fraction < 1f) {
                         clip = true
@@ -1186,14 +1247,18 @@ private fun PlayerHero(
                                 )
                             }
                     ) {
-                        ExpressiveArtwork(
-                            seedHex = shown.paletteSeedHex,
-                            accentHex = shown.accentHex,
-                            artStyleIndex = shown.artStyleIndex,
-                            coverArtUrl = shown.coverArtUrl,
-                            fullBleed = true,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        // The album's moving artwork, or the cover drifting gently, where there is
+                        // some; only while the whole player is open and the lyrics are down.
+                        MotionCover(shown, playerOpen = coverMoves, modifier = Modifier.fillMaxSize(), original = wide) {
+                            ExpressiveArtwork(
+                                seedHex = shown.paletteSeedHex,
+                                accentHex = shown.accentHex,
+                                artStyleIndex = shown.artStyleIndex,
+                                coverArtUrl = shown.coverArtUrl,
+                                fullBleed = true,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                         // Blurring a small copy and scaling it up is far cheaper than blurring
                         // the full-size cover.
                         if (blurs && behindLyrics) ExpressiveArtwork(
@@ -1317,7 +1382,7 @@ private fun PlayerControls(
     sleepTimerActive: Boolean,
     shuffleEnabled: Boolean,
     shuffleMode: ShuffleMode,
-    repeatOneEnabled: Boolean,
+    repeatMode: RepeatMode,
     animatedWaveEnabled: Boolean,
     showRemainingTime: Boolean,
     showStarButton: Boolean,
@@ -1329,7 +1394,7 @@ private fun PlayerControls(
     onSkipNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleShuffle: () -> Unit,
-    onToggleRepeatOne: () -> Unit,
+    onCycleRepeat: () -> Unit,
     onToggleStar: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
     onOpenArtist: () -> Unit,
@@ -1337,7 +1402,9 @@ private fun PlayerControls(
     onTitleRowBottom: (Int) -> Unit,
     modifier: Modifier = Modifier,
     /** Lyrics open beside the cover (tablet landscape): keep the title and transport. */
-    keepDetails: Boolean = false
+    keepDetails: Boolean = false,
+    /** Only the play buttons stay, settled at the bottom, over the moving artwork. */
+    bare: Boolean = false
 ) {
     val scroll = rememberScrollState()
     // The title and artist sit on the tail of the cover's fade: a soft halo in the surface colour
@@ -1356,7 +1423,7 @@ private fun PlayerControls(
         Column {
             // The cover reaches down behind this row; it needs to know where the row ends.
             AnimatedVisibility(
-                visible = !lyricsOpen,
+                visible = !lyricsOpen && !bare,
                 enter = expandVertically(tween(320, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(320, delayMillis = 100)),
                 exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
             ) {
@@ -1430,16 +1497,18 @@ private fun PlayerControls(
             Spacer(Modifier.height(14.dp))
             }
             }
-            PlayerProgress(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                isPlaying = isPlaying,
-                animatedWaveEnabled = animatedWaveEnabled,
-                showRemainingTime = showRemainingTime,
-                audioQuality = audioQuality,
-                onSeek = onSeek,
-                onOpenAudioDetails = onOpenAudioDetails
-            )
+            AnimatedVisibility(visible = !bare, enter = bareEnter, exit = bareExit) {
+                PlayerProgress(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    isPlaying = isPlaying,
+                    animatedWaveEnabled = animatedWaveEnabled,
+                    showRemainingTime = showRemainingTime,
+                    audioQuality = audioQuality,
+                    onSeek = onSeek,
+                    onOpenAudioDetails = onOpenAudioDetails
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -1459,6 +1528,13 @@ private fun PlayerControls(
             )
         }
 
+        // Volume sits between the transport and the row of toggles, as the foot of the controls.
+        AnimatedVisibility(visible = !bare && !lyricsOpen, enter = bareEnter, exit = bareExit) {
+            PlayerVolumeRow(modifier = Modifier.padding(top = 14.dp))
+        }
+
+        // Folding away below the transport is what carries the play buttons down to the bottom.
+        AnimatedVisibility(visible = !bare, enter = bareEnter, exit = bareExit) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1510,14 +1586,16 @@ private fun PlayerControls(
                     tag = "shuffle_button",
                     modifier = Modifier.weight(1f)
                 )
+                // Three states: the loop dimmed for off, lit for the whole queue, and the "1" loop
+                // for this song. Off and all share an icon, told apart by the lit state.
                 PlayerToggle(
-                    checked = repeatOneEnabled,
+                    checked = repeatMode != RepeatMode.OFF,
                     onToggle = {
-                        haptics.performToggleOption(!repeatOneEnabled)
-                        onToggleRepeatOne()
+                        haptics.performToggleOption(repeatMode == RepeatMode.OFF)
+                        onCycleRepeat()
                     },
-                    icon = Icons.Filled.RepeatOne,
-                    description = "Repeat this song",
+                    icon = if (repeatMode == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    description = repeatMode.label,
                     tag = "repeat_button",
                     modifier = Modifier.weight(1f)
                 )
@@ -1532,8 +1610,74 @@ private fun PlayerControls(
             )
             download?.let { PlayerDownloadButton(it, Modifier.weight(1f)) }
         }
+        }
     }
 }
+
+/**
+ * The system music volume, under the transport. It fills the band that used to sit empty between
+ * the buttons and the foot of the screen, so the cover above runs to its natural height instead of
+ * being stretched to cover it. The slider wears the song's own colours like everything else here.
+ *
+ * Hardware keys change the same stream, so the row listens for that and follows.
+ */
+@Composable
+private fun PlayerVolumeRow(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val audio = remember(context) { context.getSystemService(android.media.AudioManager::class.java) }
+    val stream = android.media.AudioManager.STREAM_MUSIC
+    val maxVolume = remember(audio) { (audio?.getStreamMaxVolume(stream) ?: 15).coerceAtLeast(1) }
+    var volume by remember { mutableFloatStateOf((audio?.getStreamVolume(stream) ?: 0).toFloat()) }
+    // The buttons on the side of the phone move the same stream: follow them while the player is up.
+    DisposableEffect(audio) {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val observer = object : android.database.ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) {
+                audio?.getStreamVolume(stream)?.let { volume = it.toFloat() }
+            }
+        }
+        runCatching {
+            context.contentResolver.registerContentObserver(
+                android.provider.Settings.System.CONTENT_URI, true, observer
+            )
+        }
+        onDispose { runCatching { context.contentResolver.unregisterContentObserver(observer) } }
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.VolumeDown,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Slider(
+            value = volume,
+            onValueChange = {
+                volume = it
+                runCatching { audio?.setStreamVolume(stream, it.roundToInt(), 0) }
+            },
+            valueRange = 0f..maxVolume.toFloat(),
+            steps = (maxVolume - 1).coerceAtLeast(0),
+            modifier = Modifier
+                .weight(1f)
+                .semantics { contentDescription = "Volume" }
+                .testTag("player_volume_slider")
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+private val bareEnter = expandVertically(tween(420, easing = FastOutSlowInEasing)) + fadeIn(tween(320, delayMillis = 120))
+private val bareExit = shrinkVertically(tween(420, easing = FastOutSlowInEasing)) + fadeOut(tween(180))
 
 /** The seek bar with the audio quality between the two times. Only this follows the position. */
 @Composable
