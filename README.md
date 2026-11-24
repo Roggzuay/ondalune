@@ -27,11 +27,11 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 <img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
 
 <img src="docs/screenshots/home.jpg" width="200" alt="Home with the Your Mix hero and its artwork collage" />
-<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured blue and violet from the cover" />
+<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured amber and blue from the cover" />
 <img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with full-bleed artwork and the latest release" />
 <img src="docs/screenshots/library.jpg" width="200" alt="Library in tiles layout" />
 
-**New look, in the 1.7.1.2 preview:** a proper light mode, clearer search and player controls, and settings in plain words. [Watch the video](docs/demo/new-look.mp4)
+**Light mode, search and settings:** a proper light mode that takes its colour from the song, search with the best match on top, and settings in plain words. [Watch the video](docs/demo/new-look.mp4)
 
 <img src="docs/screenshots/new-light-home.jpg" width="200" alt="Home in the new light mode" />
 <img src="docs/screenshots/new-dark-home.jpg" width="200" alt="Home in dark mode, coloured from the playing cover" />
@@ -140,8 +140,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 
 <p align="center">
 <img src="docs/demo/themes.gif" width="220" alt="Switching between interface styles in Appearance" />
-<img src="docs/demo/artwork-shapes.gif" width="220" alt="Tapping the cover to change its shape" />
-<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: interface style and fonts" />
+<img src="docs/screenshots/appearance.jpg" width="220" alt="Appearance settings: the theme tiles and the choice of where the app's colours come from" />
 </p>
 
 ### 👆 Built for your thumbs

@@ -108,6 +108,8 @@ import androidx.compose.ui.unit.sp
 import androidx.graphics.shapes.Morph
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.LibraryMix
+import io.github.roggzuay.ondalune.data.model.MixCover
+import io.github.roggzuay.ondalune.data.model.mixCover
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.ui.components.LocalTrackActions
 import io.github.roggzuay.ondalune.ui.components.MorphShape
@@ -121,13 +123,13 @@ import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.DragIndicator
 
 /** Cover art and the artist line shown on the Your Mix hero: from the songs the mix plays. */
-private class MixArt(val covers: List<String>, val artists: String)
+private class MixArt(val covers: List<MixCover>, val artists: String)
 
 private fun mixArt(shelves: HomeShelves): MixArt {
     val mix = shelves.yourMix
     // One cover per album (each track has its own cover URL, so de-duplicating URLs would let a
     // single album fill every shape), in play order: the first five albums you'll hear.
-    val covers = mix.filter { it.coverArtUrl.isNotBlank() }.distinctBy { it.albumId }.take(5).map { it.coverArtUrl }
+    val covers = mix.distinctBy { it.albumId }.take(5).map { it.mixCover() }
     val artists = mix.groupingBy { it.artist }.eachCount().entries
         .sortedByDescending { it.value }
         .map { it.key }
@@ -368,7 +370,7 @@ private fun Modifier.resting(
 
 @Composable
 private fun MixPiece(
-    url: String?,
+    cover: MixCover?,
     pieceShape: Shape,
     width: Dp,
     x: Dp,
@@ -393,12 +395,13 @@ private fun MixPiece(
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .then(modifier)
     ) {
-        if (url != null) {
-            ArtworkImage(
-                url = url,
-                contentDescription = null,
-                crossfadeMs = 300,
-                contentScale = ContentScale.Crop,
+        if (cover != null) {
+            ExpressiveArtwork(
+                seedHex = cover.seedHex,
+                accentHex = cover.accentHex,
+                artStyleIndex = cover.artStyleIndex,
+                coverArtUrl = cover.url,
+                fullBleed = true,
                 modifier = if (rotation != 0f) {
                     // Upright artwork inside the tilted pill: a square as wide as the pill's
                     // diagonal always covers it, whatever the pill's length.
@@ -845,7 +848,7 @@ fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
                         .clip(RoundedCornerShape(20.dp))
                         .combinedClickable(
                             onClickLabel = "Play ${mix.title}",
-                            onLongClick = hold?.let { { it(HoldTarget.Songs(mix.title, mix.subtitle, mix.covers.firstOrNull().orEmpty(), mix.tracks)) } },
+                            onLongClick = hold?.let { { it(HoldTarget.Songs(mix.title, mix.subtitle, mix.covers.firstOrNull()?.url.orEmpty(), mix.tracks)) } },
                             onClick = { onPlay(mix) }
                         )
                         // Room inside the rounded corner, so the clip never touches the text.
@@ -874,9 +877,22 @@ fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
     }
 }
 
+/** One square of a mix card's collage: the server's cover over the song's own painted art. */
+@Composable
+private fun MixCollageCell(cover: MixCover, modifier: Modifier) {
+    ExpressiveArtwork(
+        seedHex = cover.seedHex,
+        accentHex = cover.accentHex,
+        artStyleIndex = cover.artStyleIndex,
+        coverArtUrl = cover.url,
+        fullBleed = true,
+        modifier = modifier
+    )
+}
+
 /** Four covers in a rounded square (fewer fill what they can), on the theme's container colour. */
 @Composable
-internal fun MixCollage(covers: List<String>, modifier: Modifier) {
+internal fun MixCollage(covers: List<MixCover>, modifier: Modifier) {
     Box(
         modifier
             .clip(RoundedCornerShape(20.dp))
@@ -884,13 +900,13 @@ internal fun MixCollage(covers: List<String>, modifier: Modifier) {
     ) {
         val cells = covers.take(4)
         if (cells.size < 4) {
-            cells.firstOrNull()?.let { ArtworkImage(it, null, Modifier.fillMaxSize()) }
+            cells.firstOrNull()?.let { MixCollageCell(it, Modifier.fillMaxSize()) }
         } else {
             Column(Modifier.fillMaxSize()) {
                 cells.chunked(2).forEach { row ->
                     Row(Modifier.weight(1f)) {
-                        row.forEach { url ->
-                            ArtworkImage(url, null, Modifier.weight(1f).fillMaxHeight())
+                        row.forEach { cell ->
+                            MixCollageCell(cell, Modifier.weight(1f).fillMaxHeight())
                         }
                     }
                 }

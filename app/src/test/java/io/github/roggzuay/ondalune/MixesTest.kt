@@ -3,6 +3,7 @@ package io.github.roggzuay.ondalune
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.autoplayPicks
 import io.github.roggzuay.ondalune.data.model.hasGenre
+import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.data.model.libraryMixes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -65,6 +66,36 @@ class MixesTest {
         val justPlayed = library.filter { it.hasGenre("Rock") }.drop(2).take(10).map { it.id }
         val picks = autoplayPicks(seeds, library, justPlayed, seeds.mapTo(HashSet()) { it.id }, count = 10, random = Random(4))
         assertTrue("recent songs crowded the picks", picks.count { it.id in justPlayed } <= 2)
+    }
+
+    @Test
+    fun `a collage takes one piece per album and keeps songs the server gave no cover`() {
+        val tracks = listOf(
+            track(0, "Jazz", "Ora").copy(albumId = "al0", coverArtUrl = "https://server/al0"),
+            track(1, "Jazz", "Ora").copy(albumId = "al0", coverArtUrl = "https://server/al0"),
+            track(2, "Jazz", "Ora").copy(albumId = "al1", coverArtUrl = ""),
+            track(3, "Jazz", "Ora").copy(albumId = "al2", coverArtUrl = "")
+        )
+        val covers = LibraryMix("k", "Mix", "sub", tracks).covers
+        assertEquals(3, covers.size)
+        assertEquals(listOf("https://server/al0", "", ""), covers.map { it.url })
+    }
+
+    @Test
+    fun `a collage piece carries the song's own painted art, so it draws without a cover`() {
+        val song = track(0, "Jazz", "Ora").copy(
+            coverArtUrl = "", paletteSeedHex = "#112233", accentHex = "#445566", artStyleIndex = 3
+        )
+        val piece = LibraryMix("k", "Mix", "sub", listOf(song)).covers.single()
+        assertEquals("#112233", piece.seedHex)
+        assertEquals("#445566", piece.accentHex)
+        assertEquals(3, piece.artStyleIndex)
+    }
+
+    @Test
+    fun `a collage never holds more than four pieces`() {
+        val tracks = (0 until 12).map { track(it, "Jazz", "Ora").copy(albumId = "al$it") }
+        assertEquals(4, LibraryMix("k", "Mix", "sub", tracks).covers.size)
     }
 }
 

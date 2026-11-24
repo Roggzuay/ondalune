@@ -4,11 +4,25 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.random.Random
 
+/**
+ * One piece of a mix's collage. [url] is the server's cover, which is empty for a song that has
+ * none — songs from the built-in demo library, for one — and the rest is that song's own painted
+ * art, so a collage is never a row of empty shapes.
+ */
+data class MixCover(
+    val url: String,
+    val seedHex: String,
+    val accentHex: String,
+    val artStyleIndex: Int
+)
+
+fun SubsonicTrack.mixCover(): MixCover = MixCover(coverArtUrl, paletteSeedHex, accentHex, artStyleIndex)
+
 /** A mix built from the library: a name, a line saying where it comes from, and its songs. */
 data class LibraryMix(val key: String, val title: String, val subtitle: String, val tracks: List<SubsonicTrack>) {
-    /** Up to four different album covers, for the card's collage. */
-    val covers: List<String>
-        get() = tracks.asSequence().filter { it.coverArtUrl.isNotBlank() }.distinctBy { it.albumId }.take(4).map { it.coverArtUrl }.toList()
+    /** Up to four different albums' artwork, for the card's collage. */
+    val covers: List<MixCover>
+        get() = tracks.asSequence().distinctBy { it.albumId }.take(4).map { it.mixCover() }.toList()
 }
 
 /** Today's day number in the phone's time zone; changes at local midnight (java.time needs Android 8). */
