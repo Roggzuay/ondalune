@@ -218,7 +218,9 @@ class SettingsStore(private val prefs: SharedPreferences) {
             showPlayerStarButton = prefs.getBoolean("cfg_show_player_star", defaults.showPlayerStarButton),
             hideMiniPlayerOnScroll = prefs.getBoolean("cfg_hide_mini_player_on_scroll", defaults.hideMiniPlayerOnScroll),
             showCodecBadgesInLists = prefs.getBoolean("cfg_show_codec_lists", defaults.showCodecBadgesInLists),
-            fallbackArtistToAlbumArt = prefs.getBoolean("cfg_fallback_artist_album", defaults.fallbackArtistToAlbumArt),
+            // "cfg_fallback_artist_album" is deliberately not read back. No screen ever set it, so
+            // every phone holds the false this used to default to, and reading it would leave those
+            // artists on an empty header for good.
             defaultGridColumns = prefs.getInt("cfg_default_grid_cols", defaults.defaultGridColumns).coerceIn(2, 4),
             crossfadeSeconds = prefs.getInt("cfg_crossfade_sec", defaults.crossfadeSeconds).coerceIn(0, 12),
             gaplessPlayback = prefs.getBoolean("cfg_gapless", defaults.gaplessPlayback),
@@ -274,7 +276,6 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_show_player_star", s.showPlayerStarButton)
             .putBoolean("cfg_hide_mini_player_on_scroll", s.hideMiniPlayerOnScroll)
             .putBoolean("cfg_show_codec_lists", s.showCodecBadgesInLists)
-            .putBoolean("cfg_fallback_artist_album", s.fallbackArtistToAlbumArt)
             .putInt("cfg_default_grid_cols", s.defaultGridColumns)
             .putInt("cfg_crossfade_sec", s.crossfadeSeconds)
             .putBoolean("cfg_gapless", s.gaplessPlayback)

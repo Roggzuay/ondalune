@@ -27,8 +27,8 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 <img src="docs/demo/player.gif" width="260" alt="Tapping Your Mix opens the player; swiping the cover skips songs and the colours follow each new cover" />
 
 <img src="docs/screenshots/home.jpg" width="200" alt="Home with the Your Mix hero and its artwork collage" />
-<img src="docs/screenshots/player.jpg" width="200" alt="Now playing, coloured amber and blue from the cover" />
-<img src="docs/screenshots/artist.jpg" width="200" alt="An artist page with full-bleed artwork and the latest release" />
+<img src="docs/screenshots/player.jpg" width="200" alt="Now playing: the cover fills the screen and the controls take its colours" />
+<img src="docs/screenshots/artist.jpg" width="200" alt="An artist page, the artwork running to the top of the screen" />
 <img src="docs/screenshots/library.jpg" width="200" alt="Library in tiles layout" />
 
 **Light mode, search and settings:** a proper light mode that takes its colour from the song, search with the best match on top, and settings in plain words. [Watch the video](docs/demo/new-look.mp4)
@@ -97,9 +97,9 @@ Living Artwork, Velvet Mesh, Aurora, Halo and Still. They move with the music an
 pause.
 
 <p align="center">
-<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in pink and lavender, taken from the cover" />
-<img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in green, taken from the artist image" />
-<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in warm red, taken from the artist image" />
+<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in gold, taken from the cover" />
+<img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in green, taken from the artwork" />
+<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in warm red, taken from the artwork" />
 </p>
 
 ### 🎞️ Moving artwork
@@ -158,7 +158,7 @@ Plain lyrics work too. Big home-screen widgets can show the current line.
 - **Media notification and resizable widgets** with a blurred-artwork background.
 
 <p align="center">
-<img src="docs/screenshots/downloads.jpg" width="220" alt="Downloads: songs saved on the phone" />
+<img src="docs/screenshots/downloads.jpg" width="220" alt="The library filtered to the music saved on this phone" />
 <img src="docs/screenshots/library-filter.jpg" width="220" alt="Library filter: downloaded only, hide short tracks, lossless only" />
 <img src="docs/screenshots/settings.jpg" width="220" alt="Settings sections" />
 </p>

@@ -742,7 +742,11 @@ data class PlayerCustomizationSettings(
     /** The mini player slides away while scrolling down a list and returns on a scroll up. */
     val hideMiniPlayerOnScroll: Boolean = true,
     val showCodecBadgesInLists: Boolean = true,
-    val fallbackArtistToAlbumArt: Boolean = false,
+    /**
+     * An artist with no photo of their own borrows one of their album covers. Off, that artist's
+     * page opened on an empty header, and nothing in Settings ever turned this on.
+     */
+    val fallbackArtistToAlbumArt: Boolean = true,
     val defaultGridColumns: Int = 2,
     val resumePlaybackOnLaunch: Boolean = true,
     val pauseOnHeadphoneDisconnect: Boolean = true,

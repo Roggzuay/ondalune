@@ -3,7 +3,9 @@ package io.github.roggzuay.ondalune
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.autoplayPicks
 import io.github.roggzuay.ondalune.data.model.hasGenre
+import io.github.roggzuay.ondalune.data.local.DemoSubsonicCatalog
 import io.github.roggzuay.ondalune.data.model.LibraryMix
+import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
 import io.github.roggzuay.ondalune.data.model.libraryMixes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -96,6 +98,28 @@ class MixesTest {
     fun `a collage never holds more than four pieces`() {
         val tracks = (0 until 12).map { track(it, "Jazz", "Ora").copy(albumId = "al$it") }
         assertEquals(4, LibraryMix("k", "Mix", "sub", tracks).covers.size)
+    }
+
+    @Test
+    fun `an artist with no photo of their own borrows an album cover`() {
+        val song = track(0, "Jazz", "Ora").copy(artistImageUrl = "", coverArtUrl = "https://server/album")
+        val borrowed = DemoSubsonicCatalog.deriveArtistsFromTracks(listOf(song), fallbackToAlbumArt = true)
+        assertEquals("https://server/album", borrowed.single().coverArtUrl)
+        val bare = DemoSubsonicCatalog.deriveArtistsFromTracks(listOf(song), fallbackToAlbumArt = false)
+        assertEquals("", bare.single().coverArtUrl)
+    }
+
+    @Test
+    fun `an artist's own photo is kept over any album cover`() {
+        val song = track(0, "Jazz", "Ora")
+            .copy(artistImageUrl = "https://server/artist", coverArtUrl = "https://server/album")
+        val artist = DemoSubsonicCatalog.deriveArtistsFromTracks(listOf(song), fallbackToAlbumArt = true).single()
+        assertEquals("https://server/artist", artist.coverArtUrl)
+    }
+
+    @Test
+    fun `borrowing an album cover is on out of the box`() {
+        assertTrue(PlayerCustomizationSettings().fallbackArtistToAlbumArt)
     }
 }
 

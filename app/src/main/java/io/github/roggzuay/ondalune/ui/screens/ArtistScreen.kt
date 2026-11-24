@@ -352,23 +352,17 @@ private fun ArtistPortrait(
     ) {
         val haze = rememberHazeState()
         Box(Modifier.fillMaxSize().hazeSource(haze).graphicsLayer { translationY = parallax() }) {
-            if (artist.coverArtUrl.isNotBlank()) {
-                ArtworkImage(
-                    url = artist.coverArtUrl,
-                    contentDescription = "${artist.name} portrait",
-                    modifier = Modifier.fillMaxSize(),
-                    crossfadeMs = 250
-                )
-            } else {
-                ExpressiveArtwork(
-                    seedHex = artist.paletteSeedHex,
-                    accentHex = artist.accentHex,
-                    artStyleIndex = artist.artStyleIndex,
-                    monogramText = artist.name,
-                    shapeMode = ArtworkShapeMode.SQUIRCLE,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+            // The painted art and the monogram sit under the photo rather than beside it in an
+            // else: a photo whose URL no longer answers used to leave the whole header empty.
+            ExpressiveArtwork(
+                seedHex = artist.paletteSeedHex,
+                accentHex = artist.accentHex,
+                artStyleIndex = artist.artStyleIndex,
+                coverArtUrl = artist.coverArtUrl,
+                monogramText = artist.name,
+                fullBleed = true,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         // The portrait melts into the page colour where the name sits, so the name stays readable
         // on any photo and the page continues below without an edge.
