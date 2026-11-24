@@ -1,0 +1,3 @@
+# build artefacts from the design checks, not part of the site
+.taste-skill/
+shots/

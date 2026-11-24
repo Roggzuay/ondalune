@@ -29,3 +29,7 @@ keystore.properties
 # Local tool state, not part of the app
 /.claude/
 /.unslopovich/
+
+# Launch film: only renders, caches and thumbnails are left here, no sources.
+# The videos are 88 MB and git would keep them forever.
+/marketing/launch-film/
