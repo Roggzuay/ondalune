@@ -38,6 +38,8 @@ synced lyrics, and a player that takes its colours and motion from whatever is p
 <img src="docs/screenshots/new-light-search.jpg" width="200" alt="Search with the best match at the top and filter chips" />
 <img src="docs/screenshots/new-light-settings.jpg" width="200" alt="Settings sections in plain words" />
 
+<sub>The album art in these screenshots is public-domain painting, so the shots can be shared freely. Ondalune ships no artwork: it shows what your own library holds.</sub>
+
 </div>
 
 ---
@@ -97,9 +99,9 @@ Living Artwork, Velvet Mesh, Aurora, Halo and Still. They move with the music an
 pause.
 
 <p align="center">
-<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in gold, taken from the cover" />
+<img src="docs/screenshots/player-2.jpg" width="220" alt="Now playing in deep blue, taken from the cover" />
 <img src="docs/screenshots/artist-2.jpg" width="220" alt="An artist page in green, taken from the artwork" />
-<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in warm red, taken from the artwork" />
+<img src="docs/screenshots/artist-3.jpg" width="220" alt="An artist page in blue and amber, taken from the artwork" />
 </p>
 
 ### 🎞️ Moving artwork
