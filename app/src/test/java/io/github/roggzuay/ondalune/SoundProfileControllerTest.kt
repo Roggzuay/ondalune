@@ -181,4 +181,120 @@ class SoundProfileControllerTest {
         assertNull(profiles.offer.value)
         assertFalse(sound.currentSnapshot().differsFrom(SoundSnapshot()))
     }
+
+
+    // ---- A saved sound belongs to its song, not to everything after it ----
+
+    @Test
+    fun `a song without a saved sound goes back to how you had it`() = runTest(UnconfinedTestDispatcher()) {
+        val profiles = controller()
+        // You had the whole app at 1.10x by hand.
+        sound.setPlaybackSpeed(1.10f)
+        profiles.onTrackStarted(track, autoApply = false)
+
+        // This song has a sound of its own, played from the Sound Profiles list.
+        profiles.playWith(track.id, slowed)
+        profiles.onTrackStarted(track, autoApply = false)
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        // Skip on to a song that has none: back to 1.10x, not stuck at 0.80x.
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = false)
+        assertEquals(1.10f, sound.speedPitchState.value.speed, 0.001f)
+        assertEquals(ReverbPreset.OFF, sound.reverbState.value.preset)
+    }
+
+    @Test
+    fun `a saved sound put on from the strip is just as much its song's`() = runTest(UnconfinedTestDispatcher()) {
+        db.dao().upsertSoundProfile(soundProfileOf(1L, SoundProfileScope.TRACK, "s1", slowed, 1L))
+        val profiles = controller()
+        profiles.onTrackStarted(track, autoApply = false)
+        profiles.applyOffer()
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = false)
+        assertEquals(1.00f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+    @Test
+    fun `auto-applied sounds are lifted off the next song too`() = runTest(UnconfinedTestDispatcher()) {
+        db.dao().upsertSoundProfile(soundProfileOf(1L, SoundProfileScope.TRACK, "s1", slowed, 1L))
+        val profiles = controller()
+        profiles.onTrackStarted(track, autoApply = true)
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = true)
+        assertEquals(1.00f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+    @Test
+    fun `one saved sound gives way to the next, and the last gives way to how you had it`() = runTest(UnconfinedTestDispatcher()) {
+        sound.setPlaybackSpeed(1.25f)
+        db.dao().upsertSoundProfile(soundProfileOf(1L, SoundProfileScope.TRACK, "s1", slowed, 1L))
+        db.dao().upsertSoundProfile(
+            soundProfileOf(1L, SoundProfileScope.TRACK, "s2", SoundSnapshot(SpeedPitchState(speed = 1.75f)), 1L)
+        )
+        val profiles = controller()
+
+        profiles.onTrackStarted(track, autoApply = true)
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = true)
+        assertEquals(1.75f, sound.speedPitchState.value.speed, 0.001f)
+
+        // Not back to 0.80x, and not stuck at 1.75x: back to the 1.25x you set by hand.
+        profiles.onTrackStarted(track.copy(id = "s3", albumId = "al3"), autoApply = true)
+        assertEquals(1.25f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+    @Test
+    fun `with no saved sounds anywhere the sound carries on as it always has`() = runTest(UnconfinedTestDispatcher()) {
+        val profiles = controller()
+        profiles.onTrackStarted(track, autoApply = true)
+        sound.setPlaybackSpeed(0.90f)
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = true)
+        assertEquals(0.90f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+    @Test
+    fun `resetting by hand means the old sound does not come back later`() = runTest(UnconfinedTestDispatcher()) {
+        val profiles = controller()
+        sound.setPlaybackSpeed(1.10f)
+        profiles.playWith(track.id, slowed)
+        profiles.onTrackStarted(track, autoApply = false)
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        // You reset it yourself: that is the sound you want now, not the one from before.
+        sound.resetSpeedAndPitch()
+        sound.resetReverbToDry()
+        profiles.onSoundResetByHand()
+
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = false)
+        assertEquals(1.00f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+
+    @Test
+    fun `a sound you save while listening comes off the next song, back to how the song started`() = runTest(UnconfinedTestDispatcher()) {
+        val profiles = controller()
+        sound.setPlaybackSpeed(1.10f)
+        profiles.onTrackStarted(track, autoApply = false)
+
+        // You bend this song and keep it.
+        sound.setPlaybackSpeed(0.80f)
+        profiles.save(track, SoundProfileScope.TRACK, sound.currentSnapshot())
+        assertEquals(0.80f, sound.speedPitchState.value.speed, 0.001f)
+
+        // The next song is back to the 1.10x this one started on, not the 0.80x you just saved.
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = false)
+        assertEquals(1.10f, sound.speedPitchState.value.speed, 0.001f)
+    }
+
+    @Test
+    fun `a sound you bend by hand and do not save still carries, as it always has`() = runTest(UnconfinedTestDispatcher()) {
+        val profiles = controller()
+        profiles.onTrackStarted(track, autoApply = false)
+        sound.setPlaybackSpeed(0.90f)
+        profiles.onTrackStarted(track.copy(id = "s2", albumId = "al2"), autoApply = false)
+        assertEquals(0.90f, sound.speedPitchState.value.speed, 0.001f)
+    }
 }

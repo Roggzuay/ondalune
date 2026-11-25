@@ -1332,10 +1332,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onCycleRepeat = { viewModel.playback.cycleRepeatMode() },
                                 onToggleStar = { viewModel.toggleStarTrack(activeTrack) },
                                 onOpenSpeedPitchSheet = { viewModel.setSpeedPitchSheetOpen(true) },
-                                onResetSpeedPitch = {
-                                    viewModel.sound.resetSpeedAndPitch()
-                                    viewModel.sound.resetReverbToDry()
-                                },
+                                onResetSpeedPitch = viewModel::resetSoundByHand,
                                 showSpeedResetHint = showSpeedResetHint,
                                 onSpeedResetHintShown = viewModel.sound::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
@@ -1393,10 +1390,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onSetReverbDecay = viewModel.sound::setReverbDecay,
                         onSetReverbDamping = viewModel.sound::setReverbDamping,
                         onResetReverb = viewModel.sound::resetReverbToDry,
-                        onReset = {
-                            viewModel.sound.resetSpeedAndPitch()
-                            viewModel.sound.resetReverbToDry()
-                        },
+                        onReset = viewModel::resetSoundByHand,
                         onClose = { viewModel.setSpeedPitchSheetOpen(false) }
                     )
                 }

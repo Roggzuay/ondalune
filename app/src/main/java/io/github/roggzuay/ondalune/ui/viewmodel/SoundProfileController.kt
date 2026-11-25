@@ -53,9 +53,47 @@ class SoundProfileController(
      */
     private var pendingApply: Pair<String, SoundSnapshot>? = null
 
+    /**
+     * The sound you had before a saved one went on, kept so it can be put back.
+     *
+     * A saved sound belongs to its song. Without this it became the sound of everything that
+     * followed: play one song slowed and reverbed from the Sound Profiles list, skip on, and the
+     * whole queue stayed slowed. Null means no saved sound is in force and the sound is simply
+     * yours, carrying from song to song as it always has.
+     */
+    private var soundBeforeProfile: SoundSnapshot? = null
+
+    /** The sound as the playing song began, before anything was done to it for this song. */
+    private var soundAtStart: SoundSnapshot = SoundSnapshot()
+
     /** The Home card asked for this song, played the way it was played before. */
     fun playWith(trackId: String, snapshot: SoundSnapshot) {
         pendingApply = trackId to snapshot
+    }
+
+    /**
+     * Puts a saved sound on, remembering what it replaced so the next song without one can have
+     * it back. A second saved sound in a row replaces the first and leaves the memory alone: what
+     * is being kept is your sound, not the last song's.
+     */
+    private fun putProfileOn(snapshot: SoundSnapshot) {
+        if (soundBeforeProfile == null) soundBeforeProfile = soundAtStart
+        sound.applySnapshot(snapshot)
+    }
+
+    /** A song with no saved sound started: give back the sound you had before one went on. */
+    private fun takeProfileOff() {
+        val yours = soundBeforeProfile ?: return
+        soundBeforeProfile = null
+        sound.applySnapshot(yours)
+    }
+
+    /**
+     * You reset the sound yourself while a saved one was on. That is the sound you want now, so
+     * the one from before it is forgotten rather than coming back on the next song.
+     */
+    fun onSoundResetByHand() {
+        soundBeforeProfile = null
     }
 
     /**
@@ -80,22 +118,30 @@ class SoundProfileController(
      */
     fun onTrackStarted(track: SubsonicTrack?, autoApply: Boolean) {
         playing = track
+        soundAtStart = sound.currentSnapshot()
         sound.onPlaybackStarted()
         val wanted = pendingApply
         pendingApply = null
         if (track != null && wanted != null && wanted.first == track.id) {
-            sound.applySnapshot(wanted.second)
+            putProfileOn(wanted.second)
             _offer.value = SoundOffer(track.id, wanted.second, applied = true)
             return
         }
         _offer.value = null
-        if (track == null) return
+        if (track == null) {
+            takeProfileOff()
+            return
+        }
         scope.launch {
-            val saved = profileFor(track) ?: return@launch
+            val saved = profileFor(track)
             // The song may have moved on while the row was being read.
             if (playing?.id != track.id) return@launch
+            if (saved == null) {
+                takeProfileOff()
+                return@launch
+            }
             val snapshot = saved.snapshot
-            if (autoApply) sound.applySnapshot(snapshot)
+            if (autoApply) putProfileOn(snapshot)
             _offer.value = SoundOffer(track.id, snapshot, applied = autoApply)
         }
     }
@@ -103,7 +149,7 @@ class SoundProfileController(
     /** Puts the offered sound on. */
     fun applyOffer() {
         val offered = _offer.value ?: return
-        sound.applySnapshot(offered.snapshot)
+        putProfileOn(offered.snapshot)
         _offer.value = offered.copy(applied = true)
     }
 
@@ -131,6 +177,10 @@ class SoundProfileController(
             )
         }
         sound.dismissPendingSave()
+        // Saving the sound you are listening to does not change it, but from now on it is this
+        // song's. What comes back on the next song is the sound this one started with, not the
+        // one just saved.
+        if (soundBeforeProfile == null) soundBeforeProfile = soundAtStart
         _offer.value = SoundOffer(track.id, snapshot, applied = true)
     }
 

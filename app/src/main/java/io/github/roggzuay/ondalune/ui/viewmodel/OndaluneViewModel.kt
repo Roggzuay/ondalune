@@ -1637,6 +1637,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         playback.playInOrder(picks)
     }
 
+    /**
+     * The long press on the player's speed button. It resets the sound and, with it, forgets the
+     * sound that was in force before a saved one went on: you have just said what you want.
+     */
+    fun resetSoundByHand() {
+        sound.resetSpeedAndPitch()
+        sound.resetReverbToDry()
+        soundProfiles.onSoundResetByHand()
+    }
+
     /** Says something on the status banner, for parts of the UI that have no other way to. */
     fun showBanner(message: String) {
         _statusBanner.value = message
