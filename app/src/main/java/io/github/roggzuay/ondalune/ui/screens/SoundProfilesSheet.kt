@@ -238,7 +238,7 @@ fun SoundProfilesSheet(
 }
 
 @Composable
-private fun SoundProfileSwitchRow(
+internal fun SoundProfileSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
@@ -268,7 +268,7 @@ private fun SoundProfileSwitchRow(
 }
 
 @Composable
-private fun EmptySoundNote(text: String) {
+internal fun EmptySoundNote(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
@@ -278,7 +278,7 @@ private fun EmptySoundNote(text: String) {
 }
 
 @Composable
-private fun SoundRow(
+internal fun SoundRow(
     title: String,
     subtitle: String,
     detail: String,
@@ -333,5 +333,91 @@ private fun SoundRow(
             }
             trailing?.invoke()
         }
+    }
+}
+
+/**
+ * The same saved sounds, in Settings.
+ *
+ * Until now the only way to this was a Home card that is empty — and therefore invisible — until
+ * you have played something with the sound changed. Save your first profile and there was nowhere
+ * to find it. Settings is where a list of things you have saved belongs, so it lives here and the
+ * Home card went back to being what it says it is: recent plays.
+ */
+@Composable
+fun SavedSoundsSettings(
+    saved: List<SavedSound>,
+    autoApply: Boolean,
+    keepHistory: Boolean,
+    onSetAutoApply: (Boolean) -> Unit,
+    onSetKeepHistory: (Boolean) -> Unit,
+    onPlaySaved: (SavedSound) -> Unit,
+    onForget: (SavedSound) -> Unit,
+    onOpenEveryPlay: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            shape = cornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                SoundProfileSwitchRow(
+                    title = "Put saved sounds on by themselves",
+                    subtitle = "Off, the player asks above the song title and nothing changes until you tap it",
+                    checked = autoApply,
+                    onCheckedChange = onSetAutoApply,
+                    testTag = "settings_toggle_auto_sound_profiles"
+                )
+                SoundProfileSwitchRow(
+                    title = "Keep a record of how songs played",
+                    subtitle = "What fills the Sound Profiles card on Home. Nothing leaves your phone.",
+                    checked = keepHistory,
+                    onCheckedChange = onSetKeepHistory,
+                    testTag = "settings_toggle_keep_sound_history"
+                )
+            }
+        }
+
+        Text("Saved sounds", style = MaterialTheme.typography.titleMedium)
+        if (saved.isEmpty()) {
+            EmptySoundNote(
+                "Change the speed, pitch or reverb while a song plays and Ondalune offers to save " +
+                    "it. Saved sounds show up here."
+            )
+        } else {
+            saved.forEach { row ->
+                SoundRow(
+                    title = row.title,
+                    subtitle = if (row.isAlbum) "Whole album · ${row.subtitle}" else row.subtitle,
+                    detail = row.snapshot.summary,
+                    coverArtUrl = row.coverArtUrl,
+                    seedHex = row.seedHex,
+                    accentHex = row.accentHex,
+                    artStyleIndex = row.artStyleIndex,
+                    onClick = { onPlaySaved(row) },
+                    testTag = "settings_saved_sound_${row.profile.scopeId}",
+                    trailing = {
+                        ExpressiveBounceIconButton(
+                            onClick = { onForget(row) },
+                            size = 42.dp,
+                            modifier = Modifier.testTag("settings_forget_sound_${row.profile.scopeId}")
+                        ) {
+                            Icon(
+                                Icons.Filled.DeleteOutline,
+                                contentDescription = "Forget this sound",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        TextButton(
+            onClick = onOpenEveryPlay,
+            shapes = ButtonDefaults.shapes(),
+            modifier = Modifier.testTag("settings_open_sound_profiles")
+        ) { Text("Every play with the sound changed") }
     }
 }

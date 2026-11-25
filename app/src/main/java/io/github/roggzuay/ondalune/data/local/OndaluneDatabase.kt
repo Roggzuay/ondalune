@@ -332,6 +332,9 @@ interface OndaluneDao {
     @Query("SELECT * FROM sound_profiles")
     suspend fun getSoundProfilesOnce(): List<SoundProfile>
 
+    @Query("SELECT * FROM sound_profiles WHERE serverId = :serverId AND scope = :scope AND scopeId = :scopeId LIMIT 1")
+    suspend fun findSoundProfile(serverId: Long, scope: String, scopeId: String): SoundProfile?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSoundProfile(profile: SoundProfile)
 

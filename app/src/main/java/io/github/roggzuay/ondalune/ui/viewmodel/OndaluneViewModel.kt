@@ -1055,6 +1055,10 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             override fun onTrackStarted(track: SubsonicTrack, server: SubsonicServerConfig) {
                 lyrics.loadLyricsForTrack(track)
                 listenBrainz.nowPlaying(track)
+                // Here, not on a flow of the current track: playing the song you are already on
+                // is exactly what the Sound Profiles card does, and a StateFlow never emits an
+                // equal value, so that replay would never reach the saved sound.
+                soundProfiles.onTrackStarted(track, this@OndaluneViewModel.settings.customization.value.autoApplySoundProfiles)
                 playCountJob?.cancel()
                 if (settings.autoScrobble) playCountJob = viewModelScope.launch { countPlayOnceHeard(track, server) }
             }
@@ -1143,11 +1147,6 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 .filterNotNull()
                 .distinctUntilChanged()
                 .collect { recordPlayed(it) }
-        }
-        viewModelScope.launch {
-            playback.currentTrack.distinctUntilChangedBy { it?.id.orEmpty() }.collect { track ->
-                soundProfiles.onTrackStarted(track, settings.customization.value.autoApplySoundProfiles)
-            }
         }
         audioEngine.pauseOnHeadphoneDisconnect = settings.customization.value.pauseOnHeadphoneDisconnect
         audioEngine.crossfeed = settings.customization.value.crossfeed

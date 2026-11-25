@@ -4,7 +4,8 @@
 
 ### New
 - **Sound Profiles.** Slow a song down, drop it a few semitones, give it a long tail, and Ondalune offers to keep that for the song, or for the whole album. A saved sound is never put on behind your back: the player offers it on a quiet strip above the title and waits for a tap.
-- Ondalune writes down every play with the speed, pitch and reverb that were on at the time, saved or not, and a new Home card shows those plays with a tag across the cover saying what was done. Tapping one plays the song that way again. Behind the card, a Sound Profiles sheet lists every saved sound and every adjusted play, and can forget any of them.
+- Ondalune writes down every play with the speed, pitch and reverb that were on at the time, saved or not, and a new Home card shows those plays with a tag across the cover saying what was done. Tapping one plays the song that way again, even if it is the song already playing.
+- **Settings → Sound Profiles** keeps every sound you have saved, with the two switches that govern them and a way to forget any of them.
 - **Reactive**, a sixth player background: the same blurred cover, swelling on the bass, drifting on the mids, with the cover's own colours lifting off it on the top end. It reads the music itself, and only while it is on screen.
 - **Headphone crossfeed**, in Sonic Lab: a little of each side sent to the other ear, so hard-panned records stop splitting your head in two. Four settings, off by default.
 - **Vinyl**, also in Sonic Lab: a record under the music, with the groove's hiss and crackle, the platter's drift, the roll-off a cut gives both ends, and the needle landing at the start of every song. Three records to choose from.

@@ -88,7 +88,7 @@ val OndaluneStyle = StyleSpec(
     defaultHome = listOf(
         HomeSection.YOUR_MIX, HomeSection.MIXES, HomeSection.JUMP_BACK_IN, HomeSection.RECENTLY_ADDED,
         HomeSection.FAVOURITE_TRACKS, HomeSection.MOST_PLAYED, HomeSection.TOP_ARTISTS,
-        HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER
+        HomeSection.RECENTLY_PLAYED, HomeSection.REDISCOVER, HomeSection.SOUND_PROFILES
     )
 )
 

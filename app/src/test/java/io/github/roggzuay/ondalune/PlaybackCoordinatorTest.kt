@@ -11,6 +11,7 @@ import io.github.roggzuay.ondalune.data.model.RepeatMode
 import io.github.roggzuay.ondalune.playback.PlaybackHost
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -275,5 +276,30 @@ class PlaybackCoordinatorTest {
         playback.playTrack(songs[0], songs)
         assertEquals(listOf("t1", "t2", "t3", "t4", "t5", "t1"), engine.played)
         assertTrue(host.banners.contains("This phone can't decode Dolby Digital"))
+    }
+
+    /**
+     * Playing the song that is already playing has to count as a start. The Sound Profiles card
+     * exists to replay the song you are on with the sound it had, and nothing downstream can know
+     * that happened if the only signal is a StateFlow of the current track: an equal value is
+     * never emitted, so the song silently restarts with whatever sound was already on.
+     */
+    @Test
+    fun `playing the song that is already playing still reports a start`() {
+        playback.playTrack(songs[1], songs)
+        playback.playTrack(songs[1], songs)
+        assertEquals(listOf("t2", "t2"), host.started)
+        assertEquals(listOf("t2", "t2"), engine.played)
+    }
+
+    @Test
+    fun `the current track flow does not emit for the same song, which is why the start matters`() {
+        val seen = mutableListOf<String?>()
+        val job = scope.launch { playback.currentTrack.collect { seen += it?.id } }
+        playback.playTrack(songs[1], songs)
+        playback.playTrack(songs[1], songs)
+        job.cancel()
+        // One emission for two plays: the flow is the wrong place to hang "a song started" on.
+        assertEquals(listOf(null, "t2"), seen)
     }
 }

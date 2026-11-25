@@ -60,16 +60,18 @@ class SoundProfileController(
 
     /**
      * The saved sound for a song: its own first, then its album's. Null when neither is saved.
+     *
+     * This asks the database rather than the list [profiles] happens to be holding. That list is
+     * fed by a Room flow, which arrives a moment after a profile is written and a moment after
+     * the app starts — and a song can easily begin inside that moment. Reading through means a
+     * sound you just saved is found the very next time the song plays, which is exactly when
+     * someone tries it.
      */
-    fun profileFor(track: SubsonicTrack?): SoundProfile? {
+    suspend fun profileFor(track: SubsonicTrack?): SoundProfile? {
         if (track == null) return null
-        val all = profiles.value
-        return all.firstOrNull {
-            it.serverId == track.serverId && it.scope == SoundProfileScope.TRACK.name && it.scopeId == track.id
-        } ?: all.firstOrNull {
-            it.serverId == track.serverId && it.scope == SoundProfileScope.ALBUM.name &&
-                track.albumId.isNotEmpty() && it.scopeId == track.albumId
-        }
+        dao.findSoundProfile(track.serverId, SoundProfileScope.TRACK.name, track.id)?.let { return it }
+        if (track.albumId.isEmpty()) return null
+        return dao.findSoundProfile(track.serverId, SoundProfileScope.ALBUM.name, track.albumId)
     }
 
     /**
@@ -80,24 +82,21 @@ class SoundProfileController(
         playing = track
         sound.onPlaybackStarted()
         val wanted = pendingApply
+        pendingApply = null
         if (track != null && wanted != null && wanted.first == track.id) {
-            pendingApply = null
             sound.applySnapshot(wanted.second)
             _offer.value = SoundOffer(track.id, wanted.second, applied = true)
             return
         }
-        pendingApply = null
-        val saved = profileFor(track)
-        if (track == null || saved == null) {
-            _offer.value = null
-            return
-        }
-        val snapshot = saved.snapshot
-        if (autoApply) {
-            sound.applySnapshot(snapshot)
-            _offer.value = SoundOffer(track.id, snapshot, applied = true)
-        } else {
-            _offer.value = SoundOffer(track.id, snapshot, applied = false)
+        _offer.value = null
+        if (track == null) return
+        scope.launch {
+            val saved = profileFor(track) ?: return@launch
+            // The song may have moved on while the row was being read.
+            if (playing?.id != track.id) return@launch
+            val snapshot = saved.snapshot
+            if (autoApply) sound.applySnapshot(snapshot)
+            _offer.value = SoundOffer(track.id, snapshot, applied = autoApply)
         }
     }
 

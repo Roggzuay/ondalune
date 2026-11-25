@@ -254,6 +254,11 @@ enum class SettingsExpandableSection(
         subtitle = "Servers, music on this phone, library sync",
         icon = Icons.Filled.Dns
     ),
+    SOUND_PROFILES(
+        title = "Sound Profiles",
+        subtitle = "Songs you have saved a sound for, and whether they come on by themselves",
+        icon = Icons.Filled.GraphicEq
+    ),
     BACKUP(
         title = "Backup",
         subtitle = "Save how Ondalune is set up, and put it back",
@@ -450,6 +455,13 @@ fun SettingsCustomizationScreen(
     /** Scrobbling to ListenBrainz: off until a token is put in. */
     listenBrainz: io.github.roggzuay.ondalune.ui.viewmodel.ListenBrainzState =
         io.github.roggzuay.ondalune.ui.viewmodel.ListenBrainzState(),
+    /** Saved sounds, and the two switches that govern them. */
+    savedSounds: List<io.github.roggzuay.ondalune.data.model.SavedSound> = emptyList(),
+    onSetAutoApplySoundProfiles: (Boolean) -> Unit = {},
+    onSetKeepSoundHistory: (Boolean) -> Unit = {},
+    onPlaySavedSound: (io.github.roggzuay.ondalune.data.model.SavedSound) -> Unit = {},
+    onForgetSavedSound: (io.github.roggzuay.ondalune.data.model.SavedSound) -> Unit = {},
+    onOpenSoundProfiles: () -> Unit = {},
     onListenBrainzSignIn: (String) -> Unit = {},
     onListenBrainzSignOut: () -> Unit = {},
     onSetListenBrainzEnabled: (Boolean) -> Unit = {},
@@ -550,6 +562,7 @@ fun SettingsCustomizationScreen(
             SettingsExpandableSection.MOTION_ARTWORK to false,
             SettingsExpandableSection.WIDGET_NOTIFICATION to false,
             SettingsExpandableSection.SERVER_HUB to false,
+            SettingsExpandableSection.SOUND_PROFILES to false,
             SettingsExpandableSection.BACKUP to false
         )
     }
@@ -1553,6 +1566,28 @@ fun SettingsCustomizationScreen(
         }
 
         // 5. Expandable Section: OpenSubsonic Server Hub
+        if (shownSection == null || shownSection == SettingsExpandableSection.SOUND_PROFILES) item {
+            val isExpanded = expandedMap[SettingsExpandableSection.SOUND_PROFILES] == true
+            ExpandableSettingsSectionCard(
+                section = SettingsExpandableSection.SOUND_PROFILES,
+                badgeText = if (savedSounds.isEmpty()) "None yet" else "${savedSounds.size} saved",
+                isExpanded = isExpanded,
+                onToggleExpand = { expandedMap[SettingsExpandableSection.SOUND_PROFILES] = !isExpanded },
+                testTag = "settings_section_sound_profiles"
+            ) {
+                SavedSoundsSettings(
+                    saved = savedSounds,
+                    autoApply = settings.autoApplySoundProfiles,
+                    keepHistory = settings.keepSoundHistory,
+                    onSetAutoApply = onSetAutoApplySoundProfiles,
+                    onSetKeepHistory = onSetKeepSoundHistory,
+                    onPlaySaved = onPlaySavedSound,
+                    onForget = onForgetSavedSound,
+                    onOpenEveryPlay = onOpenSoundProfiles
+                )
+            }
+        }
+
         if (shownSection == null || shownSection == SettingsExpandableSection.BACKUP) item {
             val isExpanded = expandedMap[SettingsExpandableSection.BACKUP] == true
             ExpandableSettingsSectionCard(
