@@ -545,7 +545,7 @@ fun AppearanceSettingsContent(
     onSetDockStyle: (DockStyle) -> Unit,
     onSetHideMiniPlayerOnScroll: (Boolean) -> Unit,
     onSetCornerStylePreset: (CornerStylePreset) -> Unit,
-    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {}
+    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit
 ) {
     val defaults = LocalStyleSpec.current.defaultHome
     val shownCount = settings.homeSections.ifEmpty { defaults }.size

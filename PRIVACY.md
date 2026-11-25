@@ -36,8 +36,15 @@ curves, the sounds you have saved for songs and albums, and the song details you
 It is the only thing Ondalune writes outside its own private storage.
 
 It does not contain your passwords, your usernames or your servers' addresses. Anything belonging
-to a server travels under a one-way hash of that server's address and username, so another phone
-with the same server matches it without the file ever naming where your music lives.
+to a server travels under a one-way name worked out from that server's address and username, so
+another phone with the same server matches it without the file ever naming where your music lives.
+
+Being honest about the limit of that: because two phones have to reach the same name without
+talking to each other, the name cannot be salted, and an address and username together are not
+very hard to guess at. Someone who had your backup file and wanted to know whether your server is
+at a particular address could test that guess. The name is deliberately slow to compute, so
+testing millions of guesses costs real time, but it is a check they could make. What they cannot
+do is read the address out of the file.
 
 ## Data stored on your phone
 

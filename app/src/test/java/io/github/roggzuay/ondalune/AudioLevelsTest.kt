@@ -193,4 +193,88 @@ class AudioLevelsTest {
         engine.audioLevels(levels)
         assertTrue("silence read as ${levels.toList()}", levels.all { it < 0.02f })
     }
+
+
+    // ---- The bands have to mean something next to each other ----
+
+    @Test
+    fun `a band ten times louder than another reads louder, not the same`() {
+        // Scaling each band by its own recent peak made every band read 1.0, whatever the
+        // spectrum: the picture then said "loud" rather than anything about the sound.
+        val frames = 1024
+        var at = 0
+        repeat(80) {
+            val buf = tone(60.0, frames, amplitude = 0.6f, startFrame = at)
+            // A little top end, well below the bass.
+            for (f in 0 until frames) {
+                val v = (0.03 * kotlin.math.sin(2.0 * PI * 9_000.0 * (at + f) / rate)).toFloat()
+                buf[f * 2] += v
+                buf[f * 2 + 1] += v
+            }
+            engine.measureLevels(buf, frames, rate)
+            at += frames
+        }
+        engine.audioLevels(levels)
+        assertTrue("low=${levels[0]} high=${levels[2]} should be far apart", levels[0] > levels[2] * 3f)
+    }
+
+    @Test
+    fun `a quiet song after a loud one does not sit motionless`() {
+        val frames = 1024
+        var at = 0
+        repeat(120) {
+            engine.measureLevels(tone(60.0, frames, amplitude = 0.7f, startFrame = at), frames, rate)
+            at += frames
+        }
+        // A new song starts: the engine clears the levels, as playTrack does.
+        engine.clearAudioLevels()
+        repeat(60) {
+            engine.measureLevels(tone(60.0, frames, amplitude = 0.03f, startFrame = at), frames, rate)
+            at += frames
+        }
+        engine.audioLevels(levels)
+        assertTrue("a quiet song was left at ${levels[0]}", levels[0] > 0.5f)
+    }
+
+    @Test
+    fun `the picture reacts the same at every sample rate`() {
+        fun settleAt(sampleRate: Int): Float {
+            engine.clearAudioLevels()
+            val frames = 1024
+            var at = 0
+            // The same half second of music, whatever the rate.
+            val buffers = (sampleRate / 2) / frames
+            repeat(buffers) {
+                val buf = FloatArray(frames * 2)
+                for (f in 0 until frames) {
+                    val v = (0.5 * kotlin.math.sin(2.0 * PI * 60.0 * (at + f) / sampleRate)).toFloat()
+                    buf[f * 2] = v
+                    buf[f * 2 + 1] = v
+                }
+                engine.measureLevels(buf, frames, sampleRate)
+                at += frames
+            }
+            engine.audioLevels(levels)
+            return levels[0]
+        }
+        val cd = settleAt(44_100)
+        val hiRes = settleAt(192_000)
+        assertTrue("44.1k settled at $cd, 192k at $hiRes", kotlin.math.abs(cd - hiRes) < 0.2f)
+    }
+
+    @Test
+    fun `one bad sample does not poison the bands for ever`() {
+        val frames = 512
+        val poisoned = tone(60.0, frames, amplitude = 0.5f)
+        poisoned[10] = Float.NaN
+        engine.measureLevels(poisoned, frames, rate)
+        var at = frames
+        repeat(60) {
+            engine.measureLevels(tone(60.0, frames, amplitude = 0.5f, startFrame = at), frames, rate)
+            at += frames
+        }
+        engine.audioLevels(levels)
+        assertTrue("the bands died at ${levels.toList()}", levels[0] > 0.5f)
+        assertTrue(levels.all { it.isFinite() })
+    }
 }

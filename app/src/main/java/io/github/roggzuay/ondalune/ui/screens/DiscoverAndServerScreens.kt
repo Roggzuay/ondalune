@@ -478,8 +478,11 @@ fun SettingsCustomizationScreen(
     onSetHideMiniPlayerOnScroll: (Boolean) -> Unit = {},
     onSetThemeMode: (AppThemeMode) -> Unit,
     onSetCornerStylePreset: (CornerStylePreset) -> Unit = {},
-    /** What moves behind the player (see [PlayerBackgroundAnimationStyle]). */
-    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {},
+    /**
+     * What moves behind the player (see [PlayerBackgroundAnimationStyle]). No default: every
+     * backdrop but one was unreachable for a release because nothing was obliged to wire this.
+     */
+    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit,
     onSetHeaderFont: (AppFont) -> Unit = {},
     onSetBodyFont: (AppFont) -> Unit = {},
     onSetAppColorSource: (io.github.roggzuay.ondalune.data.model.AppColorSource) -> Unit = {},

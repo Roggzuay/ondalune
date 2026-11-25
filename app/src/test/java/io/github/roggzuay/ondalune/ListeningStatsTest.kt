@@ -1,6 +1,7 @@
 package io.github.roggzuay.ondalune
 
 import io.github.roggzuay.ondalune.data.model.PlayHistoryEntry
+import io.github.roggzuay.ondalune.data.model.PlayHistoryLimit
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
 import io.github.roggzuay.ondalune.data.model.ReverbState
 import io.github.roggzuay.ondalune.data.model.SoundSnapshot
@@ -14,6 +15,7 @@ import io.github.roggzuay.ondalune.data.model.windowStart
 import java.util.Calendar
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -271,5 +273,64 @@ class ListeningStatsTest {
         val totals = libraryTotals(emptyList())
         assertEquals(0, totals.countedPlays)
         assertEquals(0, totals.librarySongs)
+    }
+
+
+    // ---- Saying when the page cannot see everything ----
+
+    @Test
+    fun `a window inside what is kept does not claim to be short`() {
+        val tracks = listOf(track("s1"))
+        // A full list whose oldest play is from last year: nothing inside this year was let go,
+        // because trimming drops the oldest first. The page must not apologise for itself.
+        val history = List(PlayHistoryLimit - 1) { i ->
+            play("s1", at(2026, Calendar.MARCH, 1) + i.toLong())
+        } + play("s1", at(2025, Calendar.JUNE, 1))
+        assertEquals(PlayHistoryLimit, history.size)
+        assertFalse(listeningStats(history, tracks, StatsWindow.THIS_YEAR, now, utc).reachedTheCap)
+    }
+
+    @Test
+    fun `a window that reaches past everything kept warns that it might be short`() {
+        val tracks = listOf(track("s1"))
+        val history = List(PlayHistoryLimit) { i ->
+            play("s1", at(2026, Calendar.MARCH, 1) + i.toLong())
+        }
+        // It cannot know whether anything was actually dropped --- a list exactly full and never
+        // trimmed looks the same --- so it warns, and the page says "may be", not "has been".
+        assertTrue(listeningStats(history, tracks, StatsWindow.ALL_TIME, now, utc).reachedTheCap)
+    }
+
+    @Test
+    fun `a list that is not full never claims to be short`() {
+        val tracks = listOf(track("s1"))
+        val history = List(10) { i -> play("s1", at(2026, Calendar.MARCH, 1) + i.toLong()) }
+        assertFalse(listeningStats(history, tracks, StatsWindow.ALL_TIME, now, utc).reachedTheCap)
+    }
+
+    @Test
+    fun `a play dated in the future does not hide that the list is full`() {
+        val tracks = listOf(track("s1"))
+        // A phone whose clock jumped. The old form counted window members and so reported "not
+        // short" for a full list; reading the oldest play instead is immune.
+        val history = List(PlayHistoryLimit - 1) { i ->
+            play("s1", at(2026, Calendar.MARCH, 1) + i.toLong())
+        } + play("s1", now + 86_400_000L)
+        assertTrue(listeningStats(history, tracks, StatsWindow.ALL_TIME, now, utc).reachedTheCap)
+    }
+
+    @Test
+    fun `the page reports the oldest play in the window, not in the whole history`() {
+        val tracks = listOf(track("s1"))
+        val history = listOf(
+            play("s1", at(2026, Calendar.JUNE, 14)),
+            play("s1", at(2025, Calendar.JANUARY, 2))
+        )
+        // "Last 30 days" used to announce a date from last year, because the date came from the
+        // whole kept history rather than the window being shown.
+        val recent = listeningStats(history, tracks, StatsWindow.LAST_30, now, utc)
+        assertEquals(at(2026, Calendar.JUNE, 14), recent.firstPlayAt)
+        val everything = listeningStats(history, tracks, StatsWindow.ALL_TIME, now, utc)
+        assertEquals(at(2025, Calendar.JANUARY, 2), everything.firstPlayAt)
     }
 }

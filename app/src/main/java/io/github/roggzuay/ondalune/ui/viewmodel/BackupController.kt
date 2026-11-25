@@ -130,11 +130,35 @@ class BackupController(
     private companion object {
         const val PhoneKey = "this-phone"
 
-        /** A one-way name for a server: the same everywhere, and not the address. */
-        fun hashedKey(plain: String): String =
-            java.security.MessageDigest.getInstance("SHA-256")
-                .digest(plain.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
+        /**
+         * A one-way name for a server: the same everywhere, and not the address.
+         *
+         * It cannot be salted, because two phones have to arrive at the same name from the same
+         * server without talking to each other. That makes it checkable: an address and username
+         * are low-entropy enough that someone holding your backup could hash a few million
+         * guesses and find out whether one of them is yours. A plain digest makes that a second's
+         * work, so this is stretched instead --- a guess costs real time, and the handful of
+         * servers in a file costs a few hundred milliseconds once.
+         */
+        fun hashedKey(plain: String): String {
+            val key = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(
+                    javax.crypto.spec.PBEKeySpec(
+                        plain.toCharArray(),
+                        KeySalt.toByteArray(Charsets.UTF_8),
+                        KeyRounds,
+                        256
+                    )
+                )
+                .encoded
+            return key.joinToString("") { "%02x".format(it) }
+        }
+
+        /** Fixed, and not a secret: it only separates these hashes from any other use of PBKDF2. */
+        const val KeySalt = "ondalune-backup-server-key-v1"
+
+        /** Enough to make a few million guesses expensive, cheap enough to do a few of here. */
+        const val KeyRounds = 120_000
     }
 }
 

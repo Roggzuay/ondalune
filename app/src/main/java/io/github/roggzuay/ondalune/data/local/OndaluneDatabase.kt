@@ -238,6 +238,9 @@ interface OndaluneDao {
     @Query("DELETE FROM track_overrides WHERE serverId = :serverId AND trackId = :trackId")
     suspend fun deleteOverride(serverId: Long, trackId: String)
 
+    @Query("DELETE FROM track_overrides WHERE serverId = :serverId")
+    suspend fun deleteOverridesForServer(serverId: Long)
+
     @Transaction
     @Query("SELECT * FROM subsonic_tracks WHERE serverId = :serverId")
     suspend fun getTracksForServerOnce(serverId: Long): List<SubsonicTrack>

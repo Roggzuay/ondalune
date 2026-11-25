@@ -62,8 +62,9 @@ data class ListeningStats(
     /** The first play this page could see, so the page can say how far back it goes. */
     val firstPlayAt: Long = 0L,
     /**
-     * The window ran into the cap on how many plays are kept, so what it shows is the newest
-     * [PlayHistoryLimit] plays rather than everything in those dates. The page says so.
+     * The window reaches back past the oldest play still kept, with the list full, so there may
+     * be older plays inside those dates that Ondalune can no longer see. It cannot be certain:
+     * a list that is exactly full and has never been trimmed looks identical from here.
      */
     val reachedTheCap: Boolean = false
 ) {
@@ -246,8 +247,13 @@ fun listeningStats(
 
     return ListeningStats(
         window = window,
-        // Every window is also bounded by how many plays are kept at all.
-        reachedTheCap = history.size >= PlayHistoryLimit && inWindow.size == history.size,
+        // Every window is also bounded by how many plays are kept at all. Trimming keeps the
+        // newest, so everything let go is older than everything kept: a window can only be short
+        // if it reaches back past the oldest play still here and the list is full. That is a
+        // necessary condition, not a sufficient one --- exactly the limit with nothing yet
+        // trimmed looks the same from here --- so the page says "may be", not "has been".
+        reachedTheCap = history.size >= PlayHistoryLimit &&
+            (history.minOfOrNull { it.playedAt } ?: 0L) >= from,
         plays = inWindow.size,
         seconds = seconds,
         songs = songPlays.size,

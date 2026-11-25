@@ -16,10 +16,14 @@ import org.json.JSONObject
  * is an ordinary file that gets copied into cloud drives, and a file naming the machine your
  * music lives on is both identifying and a map for anyone who finds it.
  *
- * Everything that belongs to a server therefore travels under a one-way hash of that server's
- * address and username rather than the row number it happens to have on this phone. Two phones
- * with the same server work the same name out independently, so a restore lands on the right
- * songs without the file ever saying where they are.
+ * Everything that belongs to a server therefore travels under a one-way name worked out from that
+ * server's address and username rather than the row number it happens to have on this phone. Two
+ * phones with the same server work the same name out independently, so a restore lands on the
+ * right songs without the file ever saying where they are.
+ *
+ * That name cannot be salted, since nobody is there to share a salt with, so it can be guessed
+ * at by anyone holding the file who already suspects an address. It is deliberately slow to
+ * compute for that reason. PRIVACY.md says so plainly rather than implying more than it is.
  */
 object OndaluneBackup {
     const val Format = "ondalune-backup"

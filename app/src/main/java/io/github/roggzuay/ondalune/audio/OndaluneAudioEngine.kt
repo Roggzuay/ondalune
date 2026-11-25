@@ -425,6 +425,9 @@ class OndaluneAudioEngine(
 
             releasePlayerInternal()
             reverbDspProcessor.clearDelayLines()
+            // A quiet song after a loud one would otherwise sit near-motionless while the
+            // reference forgot the last track, which takes seconds.
+            clearAudioLevels()
             // Vinyl mode starts a song the way a record starts: the needle lands first.
             vinyl.dropNeedle()
             lowStateL = 0f
@@ -1097,9 +1100,18 @@ class OndaluneAudioEngine(
     private var lvRate = 0
     private var lvCoefLow = 0f
     private var lvCoefMid = 0f
-    private var refLow = LevelFloor
-    private var refMid = LevelFloor
-    private var refHigh = LevelFloor
+    /**
+     * One reference for all three bands, not one each.
+     *
+     * Scaling every band by its own recent peak makes them all read the same: a bass ten times
+     * louder than the top end reports the same number, and the only thing left distinguishing
+     * them is which happen to sit under the floor. One shared reference keeps the picture honest
+     * about the shape of the sound while still letting a quietly mastered record move it.
+     */
+    private var levelReference = LevelFloor
+    private var lvDecayPerBuffer = LevelReferenceDecayFallback
+    private var lvAttackPerBuffer = LevelAttackFallback
+    private var lvReleasePerBuffer = LevelReleaseFallback
 
     /**
      * How loud the bass, the middle and the top of the music are right now, each 0..1 and already
@@ -1130,9 +1142,7 @@ class OndaluneAudioEngine(
             lvClearRequested = false
             lvLow = 0f
             lvMid = 0f
-            refLow = LevelFloor
-            refMid = LevelFloor
-            refHigh = LevelFloor
+            levelReference = LevelFloor
         }
         val step = 4
         val rate = (sampleRate / step).coerceAtLeast(1)
@@ -1141,13 +1151,22 @@ class OndaluneAudioEngine(
             lvCoefLow = (1.0 - exp(-2.0 * Math.PI * 250.0 / rate)).toFloat().coerceIn(0f, 1f)
             lvCoefMid = (1.0 - exp(-2.0 * Math.PI * 2000.0 / rate)).toFloat().coerceIn(0f, 1f)
         }
+        // Every one of these used to be applied once per buffer, so the picture reacted four
+        // times faster to a hi-res track than to the same music at CD rate. They are times now.
+        val bufferSeconds = (safeFrames.toDouble() / sampleRate).coerceIn(0.001, 0.2)
+        lvDecayPerBuffer = exp(-bufferSeconds / LevelReferenceSeconds).toFloat()
+        lvAttackPerBuffer = (1.0 - exp(-bufferSeconds / LevelAttackSeconds)).toFloat().coerceIn(0f, 1f)
+        lvReleasePerBuffer = (1.0 - exp(-bufferSeconds / LevelReleaseSeconds)).toFloat().coerceIn(0f, 1f)
         var peakLow = 0f
         var peakMid = 0f
         var peakHigh = 0f
         var frame = 0
         while (frame < safeFrames) {
             val i = frame * 2
-            val mono = (samples[i] + samples[i + 1]) * 0.5f
+            val raw = (samples[i] + samples[i + 1]) * 0.5f
+            // One bad sample would otherwise live in the filter state for ever: these are IIR
+            // accumulators, and NaN in is NaN out until something resets them.
+            val mono = if (raw.isFinite()) raw else 0f
             lvLow += lvCoefLow * (mono - lvLow)
             lvMid += lvCoefMid * (mono - lvMid)
             val low = abs(lvLow)
@@ -1159,30 +1178,19 @@ class OndaluneAudioEngine(
             frame += step
         }
         // Music is not mastered to a level a picture can be driven from: measured straight, a
-        // band sits at a few per cent and nothing visible ever happens. Each band is scaled
-        // against the loudest it has been lately, so quiet music moves as much as loud music and
-        // a record that is quiet all the way through still moves at all.
-        refLow = referenceFor(refLow, peakLow)
-        refMid = referenceFor(refMid, peakMid)
-        refHigh = referenceFor(refHigh, peakHigh)
-        levelLow = follow(levelLow, (peakLow / refLow).coerceIn(0f, 1f))
-        levelMid = follow(levelMid, (peakMid / refMid).coerceIn(0f, 1f))
-        levelHigh = follow(levelHigh, (peakHigh / refHigh).coerceIn(0f, 1f))
-    }
-
-    /**
-     * The loudest this band has been lately: it rises to meet a new peak at once and falls away
-     * over several seconds, so the picture follows the shape of the music rather than its
-     * mastering. It never falls below [LevelFloor], which is what stops silence being amplified
-     * into a full-scale light show.
-     */
-    private fun referenceFor(current: Float, peak: Float): Float {
-        val decayed = current * LevelReferenceDecay
-        return maxOf(decayed, peak, LevelFloor)
+        // band sits at a few per cent and nothing visible ever happens. The loudest of the three
+        // sets one shared reference, so quiet music moves as much as loud music while the bands
+        // keep their proportions to each other.
+        val loudest = maxOf(peakLow, peakMid, peakHigh)
+        val decayed = levelReference * lvDecayPerBuffer
+        levelReference = maxOf(decayed, loudest, LevelFloor)
+        levelLow = follow(levelLow, (peakLow / levelReference).coerceIn(0f, 1f))
+        levelMid = follow(levelMid, (peakMid / levelReference).coerceIn(0f, 1f))
+        levelHigh = follow(levelHigh, (peakHigh / levelReference).coerceIn(0f, 1f))
     }
 
     private fun follow(current: Float, target: Float): Float {
-        val coef = if (target > current) LevelAttack else LevelRelease
+        val coef = if (target > current) lvAttackPerBuffer else lvReleasePerBuffer
         val next = current + (target - current) * coef
         return if (next.isNaN()) 0f else next
     }
@@ -1776,17 +1784,23 @@ private const val QuietLineMs = 10_000L
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L
 
-// Backdrop levels. The envelope rises in about three buffers and falls over about a dozen:
-// movement, not flicker.
-private const val LevelAttack = 0.45f
-private const val LevelRelease = 0.08f
+// Backdrop levels: movement, not flicker.
 
 /**
- * How much of a band's recent loudest is kept each buffer. At roughly ten milliseconds a buffer
- * this falls away over a few seconds, which is long enough to ride out a quiet bar and short
- * enough to follow a song getting louder.
+ * How long the reference takes to forget a loud passage: long enough to ride out a quiet bar,
+ * short enough that a quiet song after a loud one is not left motionless. Held in seconds, so it
+ * means the same at 44.1 kHz and at 192 kHz.
  */
-private const val LevelReferenceDecay = 0.9988f
+private const val LevelReferenceSeconds = 3.0
+
+/** How quickly a band rises to a new level, and how slowly it falls back. */
+private const val LevelAttackSeconds = 0.035
+private const val LevelReleaseSeconds = 0.25
+
+// Used only until the first buffer has said what the sample rate and buffer length are.
+private const val LevelReferenceDecayFallback = 0.993f
+private const val LevelAttackFallback = 0.45f
+private const val LevelReleaseFallback = 0.08f
 
 /**
  * The quietest a band's reference may fall to. Without it, silence divided by silence is a full

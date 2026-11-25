@@ -948,7 +948,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onDismissDownloadsHint = viewModel::dismissDownloadsHint,
                                             listState = homeListState,
                                             heroLaunch = heroLaunch,
-                                            onPlayMix = viewModel::playMix
+                                            onPlayMix = viewModel::playMix,
+                                            onMakeAMix = { viewModel.setMixSeedOpen(true) }
                                         )
                                     }
 

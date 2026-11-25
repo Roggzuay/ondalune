@@ -220,8 +220,11 @@ fun ListenNowHomeScreen(
     /** Pass a state held above the tab's content to come back to the same scroll position. */
     listState: LazyListState = rememberLazyListState(),
     onPlayMix: (LibraryMix) -> Unit = {},
-    /** Opens the sheet where a mix is made to order. */
-    onMakeAMix: () -> Unit = {},
+    /**
+     * Opens the sheet where a mix is made to order. No default: a callback that silently does
+     * nothing is how this feature shipped unreachable in the first place, with the build green.
+     */
+    onMakeAMix: () -> Unit,
     /** Your Mix launch, read by the shell to draw the zoom over its bars too. */
     heroLaunch: HeroLaunch = remember { HeroLaunch() }
 ) {

@@ -136,18 +136,23 @@ fun ListeningStatsSheet(
                 val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
                 Text(
                     text = buildString {
-                        if (countingSince > 0) {
+                        // The date of the oldest play *in this window*, not of the whole history:
+                        // on "Last 30 days" the latter announced a date a year ago.
+                        val from = stats.firstPlayAt.takeIf { it > 0L } ?: countingSince
+                        if (from > 0L) {
                             append("These numbers go back to ")
-                            append(SimpleDateFormat("d MMMM yyyy", locale).format(Date(countingSince)))
+                            append(SimpleDateFormat("d MMMM yyyy", locale).format(Date(from)))
                             append(". ")
                         } else {
                             append("Ondalune only started writing plays down in this version, so ")
                             append("these numbers begin now. ")
                         }
                         if (stats.reachedTheCap) {
-                            append("Ondalune keeps the last $PlayHistoryLimit plays and no more, ")
-                            append("and that is as far as this goes; the date moves forward as ")
-                            append("older plays are let go. ")
+                            // Deliberately "may": with exactly the limit and nothing yet trimmed
+                            // this is full without having lost anything, and the page cannot tell.
+                            append("Ondalune keeps the last $PlayHistoryLimit plays, which this ")
+                            append("window reaches back past, so there may be older ones it can ")
+                            append("no longer see. ")
                         }
                         append("The play counts below go further back, because your server and ")
                         append("Ondalune were both counting before any of this started.")

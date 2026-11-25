@@ -100,13 +100,18 @@ fun PlayerBackdrop(
 
     LaunchedEffect(animate, playbackSpeed, reactive) {
         if (!animate) {
-            // Coming to rest: the bands fall away over about a third of a second rather than
-            // snapping flat, which would read as the picture being switched off.
-            while (low.floatValue > 0.001f || mid.floatValue > 0.001f || high.floatValue > 0.001f) {
-                withFrameNanos {
-                    low.floatValue *= RestingFall
-                    mid.floatValue *= RestingFall
-                    high.floatValue *= RestingFall
+            // Coming to rest over about a third of a second rather than snapping flat, which
+            // would read as the picture being switched off. Timed, not counted in frames: the
+            // same fade on a 60 Hz screen and a 120 Hz one.
+            var last = withFrameNanos { it }
+            while (low.floatValue > 0.004f || mid.floatValue > 0.004f || high.floatValue > 0.004f) {
+                withFrameNanos { now ->
+                    val dt = ((now - last) / 1_000_000_000.0).coerceIn(0.0, 0.1)
+                    last = now
+                    val keep = kotlin.math.exp(-dt / RestingSeconds).toFloat()
+                    low.floatValue *= keep
+                    mid.floatValue *= keep
+                    high.floatValue *= keep
                 }
             }
             low.floatValue = 0f
@@ -143,7 +148,7 @@ fun PlayerBackdrop(
     val c3 by animateColorAsState(pick(3), tween(1600), label = "bd3")
     val c4 by animateColorAsState(pick(4), tween(1600), label = "bd4")
     val colors = Colors(c0, c1, c2, c3, c4)
-    val grain = remember { grainTexture() }
+    val grain = remember { sharedGrain() }
 
     BoxWithConstraints(modifier.fillMaxSize().background(base), contentAlignment = Alignment.Center) {
         // The cover itself, zoomed past the screen's edges and blurred: the picture at the top of
@@ -203,8 +208,8 @@ fun PlayerBackdrop(
 
 private val CoverBox = 200.dp
 
-/** How much of what is left falls away each frame once the music stops. */
-private const val RestingFall = 0.90f
+/** How long the bands take to fall away once the music stops. */
+private const val RestingSeconds = 0.1
 
 /** How much of a new level reading is taken each frame, so the picture glides instead of jumping. */
 private const val EyeSmoothing = 0.18f
@@ -470,7 +475,9 @@ fun BackdropPreview(
     val source = palette.regions.ifEmpty { palette.swatches }
     fun pick(i: Int) = tune(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
     val colors = Colors(pick(0), pick(1), pick(2), pick(3), pick(4))
-    val grain = remember { grainTexture() }
+    // Only one style draws grain. Building a 96x96 bitmap for all six tiles, every time the
+    // group is expanded, is 200 KB and a hundred thousand random numbers for nothing.
+    val grain = if (style == PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN) sharedGrain() else null
 
     Canvas(modifier.background(base)) {
         // A moment part-way through, so every scene is caught mid-movement rather than at rest.
@@ -485,7 +492,7 @@ fun BackdropPreview(
             PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
                 mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
                 sheen(t, colors.c4)
-                drawRect(ShaderBrush(ImageShader(grain, TileMode.Repeated, TileMode.Repeated)), alpha = 0.12f)
+                grain?.let { drawRect(ShaderBrush(ImageShader(it, TileMode.Repeated, TileMode.Repeated)), alpha = 0.12f) }
             }
             PlayerBackgroundAnimationStyle.LIQUID_AURORA -> aurora(colors, t)
             PlayerBackgroundAnimationStyle.VINYL_HALO_PULSE -> halo(colors, t, base)
@@ -495,6 +502,14 @@ fun BackdropPreview(
         }
     }
 }
+
+/**
+ * The grain, built once for the whole process. It is a fixed texture, so every caller can share
+ * one: the player's backdrop and any number of preview tiles.
+ */
+private var grainOnce: ImageBitmap? = null
+
+private fun sharedGrain(): ImageBitmap = grainOnce ?: grainTexture().also { grainOnce = it }
 
 /** Far enough into the scene's clock that nothing is caught at its starting position. */
 private const val PreviewMoment = 2.4f
