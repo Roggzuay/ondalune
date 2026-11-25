@@ -129,4 +129,43 @@ class DatabaseMigrationTest {
             }
         }
     }
+
+    @Test
+    fun `10 to 11 keeps songs and opens empty tables for saved sounds and plays`() {
+        helper.createDatabase("migration-test-11", 10).use { db ->
+            db.execSQL(
+                "INSERT INTO subsonic_tracks (id, serverId, title, artist, artistId, album, albumId, durationSec, bitRate, suffix, " +
+                    "bitDepth, samplingRate, starred, starredAtMs, trackNumber, year, genre, folderPath, coverArtUrl, artistImageUrl, artistBio, " +
+                    "artStyleIndex, paletteSeedHex, accentHex, bpm, musicalKey, syncedLyricsRaw, playCount, userRating, channelCount, codec) " +
+                    "VALUES ('s1', 7, 'Song', 'Artist', 'ar1', 'Album', 'al1', 200, 640, 'FLAC', 24, 96000, 1, 5, 1, 2020, 'Jazz', '/', '', '', '', " +
+                    "0, '#000000', '#FFFFFF', 0, '', '', 5, 4, 2, 'flac')"
+            )
+        }
+        helper.runMigrationsAndValidate("migration-test-11", 11, true, OndaluneDatabase.MIGRATION_10_11).use { db ->
+            db.query("SELECT title FROM subsonic_tracks").use { c ->
+                c.moveToFirst()
+                assertEquals("Song", c.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM sound_profiles").use { c ->
+                c.moveToFirst()
+                assertEquals(0, c.getInt(0))
+            }
+            db.query("SELECT COUNT(*) FROM play_history").use { c ->
+                c.moveToFirst()
+                assertEquals(0, c.getInt(0))
+            }
+            // A saved sound written straight into the new table reads back whole.
+            db.execSQL(
+                "INSERT INTO sound_profiles (serverId, scope, scopeId, speed, pitchMode, independentPitchRatio, " +
+                    "reverbEnabled, reverbPreset, wetDryMix, roomSize, decay, damping, eqPreset, eqBandsDb, name, updatedAt) " +
+                    "VALUES (7, 'TRACK', 's1', 0.8, 'VARISPEED_NATURAL_LINKED', 1.0, 1, 'AMBIENT', 0.6, 0.95, 0.92, 0.24, 'FLAT_STUDIO', '0,0,0,0,0', NULL, 99)"
+            )
+            db.query("SELECT scopeId, speed, reverbPreset FROM sound_profiles").use { c ->
+                c.moveToFirst()
+                assertEquals("s1", c.getString(0))
+                assertEquals(0.8f, c.getFloat(1), 0.001f)
+                assertEquals("AMBIENT", c.getString(2))
+            }
+        }
+    }
 }

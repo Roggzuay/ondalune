@@ -6,6 +6,7 @@ import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.PitchCorrectionMode
 import io.github.roggzuay.ondalune.data.model.ReverbPreset
 import io.github.roggzuay.ondalune.data.model.ReverbState
+import io.github.roggzuay.ondalune.data.model.SoundSnapshot
 import io.github.roggzuay.ondalune.data.model.SpeedPitchState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,76 @@ class SoundController(
     val customEqBands: StateFlow<List<Float>> = _customEqBands.asStateFlow()
 
     // =========================================================================
+    // Sound profiles: this song, the way you like to hear it
+    // =========================================================================
+
+    /**
+     * The sound as the playing song started. Everything the song does to it is measured against
+     * this, so turning a knob and turning it back doesn't count as a change.
+     */
+    private var baseline: SoundSnapshot = currentSnapshot()
+
+    /** "Not now" on the save card holds until the next song starts. */
+    private var saveDismissed = false
+
+    private val _pendingSave = MutableStateFlow<SoundSnapshot?>(null)
+
+    /** The sound to offer to save, or null when nothing has been changed for this song. */
+    val pendingSave: StateFlow<SoundSnapshot?> = _pendingSave.asStateFlow()
+
+    /** The sound exactly as it stands. */
+    fun currentSnapshot(): SoundSnapshot = SoundSnapshot(
+        speedPitch = _speedPitchState.value,
+        reverb = _reverbState.value,
+        eqPreset = _equalizerPreset.value,
+        eqBandsDb = _customEqBands.value
+    )
+
+    /**
+     * A song started. The sound carries over, as it always has, but it becomes the new baseline:
+     * the save card is for what you do to *this* song.
+     */
+    fun onPlaybackStarted() {
+        baseline = currentSnapshot()
+        saveDismissed = false
+        _pendingSave.value = null
+    }
+
+    /** Puts a saved sound back, in one go, without offering to save it again. */
+    fun applySnapshot(snapshot: SoundSnapshot) {
+        _speedPitchState.value = snapshot.speedPitch
+        persistSpeedPitchState(snapshot.speedPitch)
+        val reverb = snapshot.reverb.sanitized()
+        _reverbState.value = reverb
+        persistReverbState(reverb)
+        _equalizerPreset.value = snapshot.eqPreset
+        _customEqBands.value = snapshot.eqBandsDb
+        prefs.edit().putString("eq_preset", snapshot.eqPreset.name).apply()
+        engine.setSpeedAndPitch(snapshot.speedPitch.speed, snapshot.speedPitch.effectivePitch)
+        engine.setReverbState(reverb)
+        engine.setEqualizerBandsDb(snapshot.eqBandsDb)
+        baseline = snapshot
+        saveDismissed = false
+        _pendingSave.value = null
+    }
+
+    /** Keeps the sound, drops the offer to save it, until the next song. */
+    fun dismissPendingSave() {
+        saveDismissed = true
+        _pendingSave.value = null
+    }
+
+    /**
+     * Called after every change to the sound. The card appears once the sound both differs from
+     * where this song started and is actually doing something.
+     */
+    private fun refreshPendingSave() {
+        if (saveDismissed) return
+        val now = currentSnapshot()
+        _pendingSave.value = if (now.differsFrom(baseline) && !now.isNeutral) now else null
+    }
+
+    // =========================================================================
     // Speed (0.80x..2.00x) & Dynamic Pitch Correction Engine
     // =========================================================================
 
@@ -56,6 +127,7 @@ class SoundController(
         _speedPitchState.value = updated
         persistSpeedPitchState(updated)
         engine.setSpeedAndPitch(updated.speed, updated.effectivePitch)
+        refreshPendingSave()
     }
 
     fun setPitchCorrectionMode(mode: PitchCorrectionMode) {
@@ -63,6 +135,7 @@ class SoundController(
         _speedPitchState.value = updated
         persistSpeedPitchState(updated)
         engine.setSpeedAndPitch(updated.speed, updated.effectivePitch)
+        refreshPendingSave()
     }
 
     fun setIndependentSemitones(semitones: Float) {
@@ -74,6 +147,7 @@ class SoundController(
         _speedPitchState.value = updated
         persistSpeedPitchState(updated)
         engine.setSpeedAndPitch(updated.speed, updated.effectivePitch)
+        refreshPendingSave()
     }
 
     fun setIndependentPitchRatio(ratio: Float) {
@@ -85,6 +159,7 @@ class SoundController(
         _speedPitchState.value = updated
         persistSpeedPitchState(updated)
         engine.setSpeedAndPitch(updated.speed, updated.effectivePitch)
+        refreshPendingSave()
     }
 
     fun resetSpeedAndPitch() {
@@ -96,6 +171,7 @@ class SoundController(
         _speedPitchState.value = resetState
         persistSpeedPitchState(resetState)
         engine.setSpeedAndPitch(1.0f, 1.0f)
+        refreshPendingSave()
     }
 
     // =========================================================================
@@ -117,6 +193,7 @@ class SoundController(
         _reverbState.value = updated
         persistReverbState(updated)
         engine.setReverbState(updated)
+        refreshPendingSave()
     }
 
     fun selectReverbPreset(preset: ReverbPreset) {
@@ -144,6 +221,7 @@ class SoundController(
         _reverbState.value = updated
         persistReverbState(updated)
         engine.setReverbState(updated)
+        refreshPendingSave()
     }
 
     fun setReverbRoomSize(roomSize: Float) {
@@ -158,6 +236,7 @@ class SoundController(
         _reverbState.value = updated
         persistReverbState(updated)
         engine.setReverbState(updated)
+        refreshPendingSave()
     }
 
     fun setReverbDecay(decay: Float) {
@@ -172,6 +251,7 @@ class SoundController(
         _reverbState.value = updated
         persistReverbState(updated)
         engine.setReverbState(updated)
+        refreshPendingSave()
     }
 
     fun setReverbDamping(damping: Float) {
@@ -186,6 +266,7 @@ class SoundController(
         _reverbState.value = updated
         persistReverbState(updated)
         engine.setReverbState(updated)
+        refreshPendingSave()
     }
 
     fun resetReverbToDry() {
@@ -257,6 +338,7 @@ class SoundController(
         _customEqBands.value = preset.bandsDb
         prefs.edit().putString("eq_preset", preset.name).apply()
         engine.setEqualizerBandsDb(preset.bandsDb)
+        refreshPendingSave()
     }
 
     fun updateCustomEqBand(bandIndex: Int, gainDb: Float) {
@@ -265,6 +347,7 @@ class SoundController(
             currentList[bandIndex] = gainDb.coerceIn(-10f, 10f)
             _customEqBands.value = currentList
             engine.setEqualizerBandsDb(currentList)
+            refreshPendingSave()
         }
     }
 

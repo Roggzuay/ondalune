@@ -302,6 +302,15 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Speed, pitch, reverb and EQ (see SoundController). */
     val sound = SoundController(prefs, audioEngine) { _statusBanner.value = it }
 
+    /** Saved sounds and the play history that records them (see SoundProfileController). */
+    val soundProfiles = SoundProfileController(database.dao(), sound, viewModelScope)
+
+    /** Plays a song again with the sound it had that time, saved or not. */
+    fun playWithSound(played: io.github.roggzuay.ondalune.data.model.PlayedSound) {
+        soundProfiles.playWith(played.track.id, played.snapshot)
+        playback.playTrack(played.track, allServerTracks.value.filter { it.albumId == played.track.albumId })
+    }
+
     /** Music folders on this phone (see FolderController). */
     val musicFolders = FolderController(application, repository, viewModelScope) { _statusBanner.value = it }
 
@@ -405,6 +414,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Every play with the sound changed, for the Sound Profiles sheet. */
+    val soundPlaysAll: StateFlow<List<io.github.roggzuay.ondalune.data.model.PlayedSound>> =
+        combine(soundProfiles.history, allServerTracks) { history, library ->
+            io.github.roggzuay.ondalune.data.model.playedSounds(history, library, limit = 200)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Recent plays that changed the sound, for the Sound Profiles card on Home. */
+    val soundPlays: StateFlow<List<io.github.roggzuay.ondalune.data.model.PlayedSound>> =
+        combine(soundProfiles.history, allServerTracks) { history, library ->
+            io.github.roggzuay.ondalune.data.model.playedSounds(history, library)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+
     val offlineStorageSummary: StateFlow<OfflineStorageSummary> = downloadManager.storageSummary
 
     /** What plays without a connection, for the Downloaded filter. */
@@ -465,6 +487,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     private val _isSonicLabSheetOpen = MutableStateFlow(false)
     val isSonicLabSheetOpen: StateFlow<Boolean> = _isSonicLabSheetOpen.asStateFlow()
+
+    private val _isSoundProfilesOpen = MutableStateFlow(false)
+    val isSoundProfilesOpen: StateFlow<Boolean> = _isSoundProfilesOpen.asStateFlow()
 
     private val _isSpeedPitchSheetOpen = MutableStateFlow(false)
     val isSpeedPitchSheetOpen: StateFlow<Boolean> = _isSpeedPitchSheetOpen.asStateFlow()
@@ -541,6 +566,26 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     ) { trackList, listType ->
         repository.deriveAlbums(trackList, listType)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Saved sounds matched to the songs and albums they belong to. */
+    val savedSounds: StateFlow<List<io.github.roggzuay.ondalune.data.model.SavedSound>> = combine(
+        soundProfiles.profiles,
+        allServerTracks,
+        albums
+    ) { profiles, library, albumList ->
+        io.github.roggzuay.ondalune.data.model.savedSounds(profiles, library, albumList)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Plays a saved sound's song with that sound on. */
+    fun playSavedSound(saved: io.github.roggzuay.ondalune.data.model.SavedSound) {
+        val track = saved.track ?: return
+        soundProfiles.playWith(track.id, saved.snapshot)
+        playback.playTrack(track, allServerTracks.value.filter { it.albumId == track.albumId })
+    }
+
+    fun clearSoundHistory() {
+        viewModelScope.launch { soundProfiles.clearHistory() }
+    }
 
     val artists: StateFlow<List<SubsonicArtist>> = combine(
         tracks,
@@ -793,6 +838,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             if (isPlaying.value && !isBuffering.value) heardMs += 500L
         }
         repository.recordPlay(server, track)
+        if (settings.customization.value.keepSoundHistory) {
+            runCatching { soundProfiles.recordPlay(track) }
+        }
     }
 
     private fun recordPlayed(trackId: String) {
@@ -963,6 +1011,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 .filterNotNull()
                 .distinctUntilChanged()
                 .collect { recordPlayed(it) }
+        }
+        viewModelScope.launch {
+            playback.currentTrack.distinctUntilChangedBy { it?.id.orEmpty() }.collect { track ->
+                soundProfiles.onTrackStarted(track, settings.customization.value.autoApplySoundProfiles)
+            }
         }
         audioEngine.pauseOnHeadphoneDisconnect = settings.customization.value.pauseOnHeadphoneDisconnect
         sound.applyToEngine()
@@ -1367,6 +1420,42 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun setSonicLabSheetOpen(open: Boolean) {
         _isSonicLabSheetOpen.value = open
+    }
+
+    /** The three bands of what is playing, for the Reactive backdrop. */
+    fun readAudioLevels(out: FloatArray) = audioEngine.audioLevels(out)
+
+    /** On only while a backdrop that moves with the music is on screen. */
+    fun setAudioLevelsWanted(wanted: Boolean) {
+        audioEngine.levelsWanted = wanted
+        if (!wanted) audioEngine.clearAudioLevels()
+    }
+
+    fun setSoundProfilesOpen(open: Boolean) {
+        _isSoundProfilesOpen.value = open
+    }
+
+    /** Saves the sound as it stands, for the playing song or for its album. */
+    fun saveSoundProfile(profileScope: io.github.roggzuay.ondalune.data.model.SoundProfileScope) {
+        val track = playback.currentTrack.value ?: return
+        val snapshot = sound.pendingSave.value ?: sound.currentSnapshot()
+        soundProfiles.save(track, profileScope, snapshot)
+        _statusBanner.value = when (profileScope) {
+            io.github.roggzuay.ondalune.data.model.SoundProfileScope.TRACK -> "Saved this sound for \"${track.title}\""
+            io.github.roggzuay.ondalune.data.model.SoundProfileScope.ALBUM -> "Saved this sound for ${track.album}"
+        }
+    }
+
+    /** Forgets a saved sound. */
+    fun forgetSoundProfile(profile: io.github.roggzuay.ondalune.data.model.SoundProfile) {
+        soundProfiles.forget(
+            profile.serverId,
+            runCatching {
+                io.github.roggzuay.ondalune.data.model.SoundProfileScope.valueOf(profile.scope)
+            }.getOrDefault(io.github.roggzuay.ondalune.data.model.SoundProfileScope.TRACK),
+            profile.scopeId
+        )
+        _statusBanner.value = "Forgot that sound"
     }
 
     fun setSpeedPitchSheetOpen(open: Boolean) {

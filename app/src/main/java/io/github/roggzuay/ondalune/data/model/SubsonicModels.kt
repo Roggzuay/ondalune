@@ -487,7 +487,8 @@ enum class HomeSection(val label: String, val description: String) {
     MOST_PLAYED("Most played", "Your top tracks by play count"),
     TOP_ARTISTS("Top artists", "Artists you play the most"),
     RECENTLY_PLAYED("Recently played albums", "Albums the server saw you play"),
-    REDISCOVER("Rediscover", "A daily pick of albums to revisit")
+    REDISCOVER("Rediscover", "A daily pick of albums to revisit"),
+    SOUND_PROFILES("Sound Profiles", "Songs you played with the speed, pitch or reverb changed")
 }
 
 enum class CornerStylePreset(val label: String, val scaleMultiplier: Float) {
@@ -685,7 +686,8 @@ enum class PlayerBackgroundAnimationStyle(val label: String, val description: St
     APPLE_GLITTER_GRAIN("Velvet Mesh", "A flowing mesh of the cover's colours with a soft sheen and film grain"),
     LIQUID_AURORA("Aurora", "Curtains of the cover's colours rippling across the screen"),
     VINYL_HALO_PULSE("Halo", "A turning ring of cover colours with pulses radiating outward"),
-    MINIMAL_TONAL("Still", "A calm, motionless gradient of the cover's colours")
+    MINIMAL_TONAL("Still", "A calm, motionless gradient of the cover's colours"),
+    ARTWORK_REACTIVE("Reactive", "The blurred cover again, breathing and drifting with the music")
 }
 
 /**
@@ -793,7 +795,14 @@ data class PlayerCustomizationSettings(
     val mobileMaxBitRate: Int = 192,
     val downloadSpeedLimit: DownloadSpeedLimit = DownloadSpeedLimit.UNLIMITED,
     val readAheadTrackBuffer: Int = 5,
-    val smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED
+    val smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
+    /**
+     * A song with a saved sound starts in it, with no tap. Off, the player offers it on a strip
+     * above the title and nothing changes until you say so.
+     */
+    val autoApplySoundProfiles: Boolean = false,
+    /** Write down each play with the speed, pitch and reverb that were on; feeds the Home card. */
+    val keepSoundHistory: Boolean = true
 )
 
 /** A streaming quality: what the server converts songs to, and the bitrate cap (RAW/0 = the original file). */

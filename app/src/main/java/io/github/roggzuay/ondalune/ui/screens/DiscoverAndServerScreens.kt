@@ -44,6 +44,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -1982,7 +1985,7 @@ internal fun SettingsToggleRow(
  * LazyColumn is at the top of its scroll to intuitively dismiss any modal sheet.
  */
 @Composable
-private fun SwipeDownDismissModalContainer(
+internal fun SwipeDownDismissModalContainer(
     onClose: () -> Unit,
     testTag: String,
     containerColor: Color = MaterialTheme.colorScheme.background,
@@ -2116,10 +2119,87 @@ private fun TempoReadout(tempo: TempoInfo, speed: Float) {
     }
 }
 
+/**
+ * "Save this sound?" — shown inside the Speed & Pitch sheet once the song's sound has been
+ * changed. It never saves anything by itself, and "Not now" holds until the next song.
+ */
+@Composable
+private fun SaveSoundCard(
+    summary: String,
+    trackTitle: String,
+    albumTitle: String,
+    onSaveForTrack: () -> Unit,
+    onSaveForAlbum: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        shape = cornerShape(26.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("save_sound_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Save this sound for \u201c$trackTitle\u201d?",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.78f)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = onSaveForTrack,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("save_sound_for_track")
+                ) { Text("Save for this song") }
+                TextButton(
+                    onClick = onDismiss,
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    modifier = Modifier.testTag("dismiss_sound_save")
+                ) { Text("Not now") }
+            }
+            if (albumTitle.isNotEmpty()) TextButton(
+                onClick = onSaveForAlbum,
+                shapes = ButtonDefaults.shapes(),
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ),
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag("save_sound_for_album")
+            ) { Text("Save for all of \u201c$albumTitle\u201d") }
+        }
+    }
+}
+
 @Composable
 fun SpeedPitchStudioModal(
     state: SpeedPitchState,
     reverbState: ReverbState = ReverbState(),
+    /** The sound to offer to save, or null when nothing has been changed for this song. */
+    pendingSave: io.github.roggzuay.ondalune.data.model.SoundSnapshot? = null,
+    /** The playing song and its album, for the save card's wording. */
+    saveTrackTitle: String = "",
+    saveAlbumTitle: String = "",
+    onSaveSoundForTrack: () -> Unit = {},
+    onSaveSoundForAlbum: () -> Unit = {},
+    onDismissSoundSave: () -> Unit = {},
     /** The playing song's tempo, when it is actually known; nothing is shown otherwise. */
     tempo: TempoInfo = TempoInfo.Unknown,
     onSetSpeed: (Float) -> Unit,
@@ -2246,6 +2326,25 @@ fun SpeedPitchStudioModal(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Save this sound: appears between the readout and the speed card, once the
+                // song's sound has actually been changed, and goes away when it is saved or waved off.
+                item {
+                    AnimatedVisibility(
+                        visible = pendingSave != null && saveTrackTitle.isNotEmpty(),
+                        enter = expandVertically(animationSpec = tween(260, easing = FastOutSlowInEasing)) + fadeIn(tween(220)),
+                        exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(140))
+                    ) {
+                        SaveSoundCard(
+                            summary = pendingSave?.summary.orEmpty(),
+                            trackTitle = saveTrackTitle,
+                            albumTitle = saveAlbumTitle,
+                            onSaveForTrack = onSaveSoundForTrack,
+                            onSaveForAlbum = onSaveSoundForAlbum,
+                            onDismiss = onDismissSoundSave
+                        )
                     }
                 }
 

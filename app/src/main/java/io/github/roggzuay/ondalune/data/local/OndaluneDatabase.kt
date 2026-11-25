@@ -22,6 +22,9 @@ import io.github.roggzuay.ondalune.data.model.SubsonicPlaylist
 import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.data.model.TrackOverride
+import io.github.roggzuay.ondalune.data.model.PlayHistoryEntry
+import io.github.roggzuay.ondalune.data.model.PlayHistoryLimit
+import io.github.roggzuay.ondalune.data.model.SoundProfile
 import io.github.roggzuay.ondalune.data.model.LocalFolder
 import io.github.roggzuay.ondalune.data.model.LocalFileRecord
 import java.security.GeneralSecurityException
@@ -317,6 +320,41 @@ interface OndaluneDao {
 
     @Query("DELETE FROM subsonic_downloads WHERE serverId = :serverId")
     suspend fun deleteAllDownloadsForServer(serverId: Long)
+
+    // ---- Sound profiles: a song, or an album, the way you like to hear it ----
+
+    @Query("SELECT * FROM sound_profiles")
+    fun observeSoundProfiles(): Flow<List<SoundProfile>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSoundProfile(profile: SoundProfile)
+
+    @Query("DELETE FROM sound_profiles WHERE serverId = :serverId AND scope = :scope AND scopeId = :scopeId")
+    suspend fun deleteSoundProfile(serverId: Long, scope: String, scopeId: String)
+
+    @Query("DELETE FROM sound_profiles WHERE serverId = :serverId")
+    suspend fun deleteSoundProfilesForServer(serverId: Long)
+
+    // ---- Play history: what played, and what the sound was doing ----
+
+    @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT :limit")
+    fun observePlayHistory(limit: Int = PlayHistoryLimit): Flow<List<PlayHistoryEntry>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlay(entry: PlayHistoryEntry)
+
+    /** Keeps the newest [PlayHistoryLimit] plays and drops the rest. */
+    @Query("DELETE FROM play_history WHERE id NOT IN (SELECT id FROM play_history ORDER BY playedAt DESC LIMIT :limit)")
+    suspend fun trimPlayHistory(limit: Int = PlayHistoryLimit)
+
+    @Transaction
+    suspend fun recordPlay(entry: PlayHistoryEntry) {
+        insertPlay(entry)
+        trimPlayHistory(PlayHistoryLimit)
+    }
+
+    @Query("DELETE FROM play_history")
+    suspend fun clearPlayHistory()
 }
 
 @Database(
@@ -327,9 +365,11 @@ interface OndaluneDao {
         SubsonicDownloadEntity::class,
         TrackOverride::class,
         LocalFolder::class,
-        LocalFileRecord::class
+        LocalFileRecord::class,
+        SoundProfile::class,
+        PlayHistoryEntry::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 abstract class OndaluneDatabase : RoomDatabase() {
@@ -498,6 +538,35 @@ abstract class OndaluneDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Sound profiles and the play history that records them. Both tables are new and start
+         * empty: a profile is only ever written when you ask for one.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sound_profiles` (" +
+                        "`serverId` INTEGER NOT NULL, `scope` TEXT NOT NULL, `scopeId` TEXT NOT NULL, " +
+                        "`speed` REAL NOT NULL, `pitchMode` TEXT NOT NULL, `independentPitchRatio` REAL NOT NULL, " +
+                        "`reverbEnabled` INTEGER NOT NULL, `reverbPreset` TEXT NOT NULL, `wetDryMix` REAL NOT NULL, " +
+                        "`roomSize` REAL NOT NULL, `decay` REAL NOT NULL, `damping` REAL NOT NULL, " +
+                        "`eqPreset` TEXT NOT NULL, `eqBandsDb` TEXT NOT NULL, " +
+                        "`name` TEXT, `updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`serverId`, `scope`, `scopeId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `play_history` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`serverId` INTEGER NOT NULL, `trackId` TEXT NOT NULL, `playedAt` INTEGER NOT NULL, " +
+                        "`speed` REAL NOT NULL, `pitchMode` TEXT NOT NULL, `independentPitchRatio` REAL NOT NULL, " +
+                        "`reverbEnabled` INTEGER NOT NULL, `reverbPreset` TEXT NOT NULL, `wetDryMix` REAL NOT NULL, " +
+                        "`roomSize` REAL NOT NULL, `decay` REAL NOT NULL, `damping` REAL NOT NULL, " +
+                        "`eqPreset` TEXT NOT NULL, `eqBandsDb` TEXT NOT NULL, " +
+                        "`hadProfile` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): OndaluneDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -505,7 +574,7 @@ abstract class OndaluneDatabase : RoomDatabase() {
                     OndaluneDatabase::class.java,
                     "ondalune_opensubsonic.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

@@ -129,6 +129,14 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(autoScrobble = enabled) }
     }
 
+    fun setAutoApplySoundProfiles(enabled: Boolean) {
+        update { it.copy(autoApplySoundProfiles = enabled) }
+    }
+
+    fun setKeepSoundHistory(enabled: Boolean) {
+        update { it.copy(keepSoundHistory = enabled) }
+    }
+
     fun setRescanFoldersOnLaunch(enabled: Boolean) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }
@@ -230,6 +238,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
             songAnalysis = prefs.getBoolean("cfg_song_analysis", defaults.songAnalysis),
             replayGainMode = ReplayGainMode.entries.find { it.name == prefs.getString("cfg_replay_gain", defaults.replayGainMode.name) } ?: defaults.replayGainMode,
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
+            autoApplySoundProfiles = prefs.getBoolean("cfg_auto_sound_profiles", defaults.autoApplySoundProfiles),
+            keepSoundHistory = prefs.getBoolean("cfg_keep_sound_history", defaults.keepSoundHistory),
             rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
             librarySyncHours = prefs.getInt(LibrarySyncWorker.PREF_HOURS, defaults.librarySyncHours),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
@@ -285,6 +295,8 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_song_analysis", s.songAnalysis)
             .putString("cfg_replay_gain", s.replayGainMode.name)
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)
+            .putBoolean("cfg_auto_sound_profiles", s.autoApplySoundProfiles)
+            .putBoolean("cfg_keep_sound_history", s.keepSoundHistory)
             .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
             .putInt(LibrarySyncWorker.PREF_HOURS, s.librarySyncHours)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)

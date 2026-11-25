@@ -40,6 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.PI
 import kotlin.math.exp
@@ -803,6 +804,9 @@ class OndaluneAudioEngine(
                             eqPreset = currentEqPreset,
                             sampleRate = sampleRate
                         )
+                        // The backdrop that moves with the music reads the finished audio here,
+                        // and only while something is on screen looking at it.
+                        if (levelsWanted) measureLevels(buffer, result.frames, sampleRate)
                         // Counts are in floats, two to a frame.
                         val written = trackOut?.write(buffer, 0, result.frames * 2, AudioTrack.WRITE_BLOCKING) ?: 0
                         if (written > 0) audibleClock.wrote(written / 2, mixer.current.positionMs(), sampleRate)
@@ -972,6 +976,93 @@ class OndaluneAudioEngine(
     private var eqRate = 0
     private var eqLowCoeff = 0f
     private var eqHighCoeff = 0f
+
+    // =========================================================================
+    // Audio levels for the reactive backdrop
+    // =========================================================================
+
+    /**
+     * Set by the player while a backdrop that moves with the music is on screen. False (the
+     * default) and the measurement below never runs: one boolean test per buffer, nothing else.
+     */
+    @Volatile
+    var levelsWanted: Boolean = false
+
+    @Volatile private var levelLow = 0f
+    @Volatile private var levelMid = 0f
+    @Volatile private var levelHigh = 0f
+
+    // Filter state, kept between buffers. Audio thread only.
+    private var lvLow = 0f
+    private var lvMid = 0f
+    private var lvRate = 0
+    private var lvCoefLow = 0f
+    private var lvCoefMid = 0f
+
+    /**
+     * How loud the bass, the middle and the top of the music are right now, each 0..1 and already
+     * smoothed. Read from the UI thread; the three values are each written whole, so the worst a
+     * reader sees is one frame of a stale band.
+     */
+    fun audioLevels(out: FloatArray) {
+        if (out.size < 3) return
+        out[0] = levelLow
+        out[1] = levelMid
+        out[2] = levelHigh
+    }
+
+    /**
+     * Measures the three bands from audio that has already been through the EQ and the reverb, so
+     * the picture moves with what is actually heard.
+     *
+     * Every fourth frame is looked at, in mono, through two one-pole filters: no window, no FFT,
+     * no allocation, a few hundred multiply-adds for a buffer of ten milliseconds. The envelope
+     * rises quickly and falls slowly, which is what reads as movement rather than flicker.
+     */
+    internal fun measureLevels(samples: FloatArray, frameCount: Int, sampleRate: Int) {
+        val step = 4
+        val rate = (sampleRate / step).coerceAtLeast(1)
+        if (rate != lvRate) {
+            lvRate = rate
+            lvCoefLow = (1.0 - exp(-2.0 * Math.PI * 250.0 / rate)).toFloat().coerceIn(0f, 1f)
+            lvCoefMid = (1.0 - exp(-2.0 * Math.PI * 2000.0 / rate)).toFloat().coerceIn(0f, 1f)
+        }
+        var peakLow = 0f
+        var peakMid = 0f
+        var peakHigh = 0f
+        var frame = 0
+        while (frame < frameCount) {
+            val i = frame * 2
+            val mono = (samples[i] + samples[i + 1]) * 0.5f
+            lvLow += lvCoefLow * (mono - lvLow)
+            lvMid += lvCoefMid * (mono - lvMid)
+            val low = abs(lvLow)
+            val mid = abs(lvMid - lvLow)
+            val high = abs(mono - lvMid)
+            if (low > peakLow) peakLow = low
+            if (mid > peakMid) peakMid = mid
+            if (high > peakHigh) peakHigh = high
+            frame += step
+        }
+        levelLow = follow(levelLow, (peakLow * LevelGainLow).coerceIn(0f, 1f))
+        levelMid = follow(levelMid, (peakMid * LevelGainMid).coerceIn(0f, 1f))
+        levelHigh = follow(levelHigh, (peakHigh * LevelGainHigh).coerceIn(0f, 1f))
+    }
+
+    private fun follow(current: Float, target: Float): Float {
+        val coef = if (target > current) LevelAttack else LevelRelease
+        val next = current + (target - current) * coef
+        return if (next.isNaN()) 0f else next
+    }
+
+    /** Levels settle back to nothing when the music stops, so the picture comes to rest. */
+    internal fun clearAudioLevels() {
+        levelLow = 0f
+        levelMid = 0f
+        levelHigh = 0f
+        lvLow = 0f
+        lvMid = 0f
+    }
 
     /**
      * Real-time in-place stereo float DSP used for every audio buffer before output. Applies:
@@ -1542,6 +1633,15 @@ private const val QuietLineMs = 10_000L
 
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L
+
+// Backdrop levels. Music rarely peaks near full scale in any one band, so each is lifted into a
+// range the eye can read, then clamped. The envelope rises in about three buffers and falls over
+// about a dozen: movement, not flicker.
+private const val LevelGainLow = 3.2f
+private const val LevelGainMid = 5.0f
+private const val LevelGainHigh = 7.5f
+private const val LevelAttack = 0.45f
+private const val LevelRelease = 0.08f
 
 /** Songs coming up that are on the phone already ([ready] of [total]); [active] while more are being saved. */
 data class SongsAhead(val ready: Int = 0, val total: Int = 0, val active: Boolean = false)

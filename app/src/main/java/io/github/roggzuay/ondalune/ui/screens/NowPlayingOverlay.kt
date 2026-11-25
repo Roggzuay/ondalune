@@ -62,6 +62,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.GraphicEq
+import io.github.roggzuay.ondalune.ui.viewmodel.SoundOffer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -513,6 +515,13 @@ fun NowPlayingStudioOverlay(
     showSpeedResetHint: Boolean = false,
     onSpeedResetHintShown: () -> Unit = {},
     onOpenSleepTimerSheet: () -> Unit,
+    /** Reads the three bands of what is playing, for the Reactive backdrop. */
+    readAudioLevels: (FloatArray) -> Unit = {},
+    onWantAudioLevels: (Boolean) -> Unit = {},
+    /** The saved sound for this song, offered above the title. */
+    soundOffer: SoundOffer? = null,
+    onApplySoundOffer: () -> Unit = {},
+    onDismissSoundOffer: () -> Unit = {},
     onOpenArtist: () -> Unit = {},
     /** The playlist the queue came from, while the current track is in it; named in the header. */
     onOpenSonicLab: () -> Unit,
@@ -659,7 +668,9 @@ fun NowPlayingStudioOverlay(
                     palette = LocalArtworkPalette.current,
                     style = backgroundAnimationStyle,
                     isPlaying = isPlaying,
-                    playbackSpeed = speedPitchState.speed
+                    playbackSpeed = speedPitchState.speed,
+                    readLevels = readAudioLevels,
+                    onWantLevels = onWantAudioLevels
                 )
             }
 
@@ -783,6 +794,9 @@ fun NowPlayingStudioOverlay(
                         onCycleRepeat = onCycleRepeat,
                         onToggleStar = onToggleStar,
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                        soundOffer = soundOffer,
+                        onApplySoundOffer = onApplySoundOffer,
+                        onDismissSoundOffer = onDismissSoundOffer,
                         onOpenArtist = onOpenArtist,
                         onOpenAudioDetails = { showAudioDetails = true },
                         onTitleRowBottom = { if (!lyricsOpen && lyricsShown.value == 0f && bareShown.value == 0f) titleRowBottom = it },
@@ -1371,6 +1385,64 @@ private fun PlayerTopBar(
 }
 
 /** Everything under the cover: what is playing, where it is, and the controls. */
+/**
+ * The saved sound, offered above the song title: no card, no scrim, just a line over whatever the
+ * backdrop is doing. Tapping it puts the sound on; it fades by itself after a few seconds either
+ * way, and nothing changes unless it is tapped.
+ */
+@Composable
+private fun SavedSoundStrip(
+    offer: SoundOffer?,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    // Both states go away on their own: the question after eight seconds, the confirmation after
+    // three, so the strip never becomes furniture.
+    LaunchedEffect(offer?.trackId, offer?.applied) {
+        if (offer == null) return@LaunchedEffect
+        delay(if (offer.applied) 3_000L else 8_000L)
+        onDismiss()
+    }
+    AnimatedVisibility(
+        visible = offer != null,
+        enter = fadeIn(tween(420)) + expandVertically(tween(320, easing = FastOutSlowInEasing)),
+        exit = fadeOut(tween(320)) + shrinkVertically(tween(260))
+    ) {
+        val applied = offer?.applied == true
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+                .clip(cornerShape(12.dp))
+                .then(if (applied) Modifier else Modifier.clickable(onClick = onApply))
+                .padding(vertical = 4.dp)
+                .testTag("saved_sound_strip"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.GraphicEq,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = if (applied) "Playing your saved sound" else "Apply last audio profile?",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                maxLines = 1
+            )
+            Text(
+                text = offer?.snapshot?.summary.orEmpty(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 @Composable
 private fun PlayerControls(
     track: SubsonicTrack,
@@ -1400,6 +1472,10 @@ private fun PlayerControls(
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
     onTitleRowBottom: (Int) -> Unit,
+    /** The saved sound for this song, waiting above the title; null when there is none. */
+    soundOffer: SoundOffer? = null,
+    onApplySoundOffer: () -> Unit = {},
+    onDismissSoundOffer: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** Lyrics open beside the cover (tablet landscape): keep the title and transport. */
     keepDetails: Boolean = false,
@@ -1428,6 +1504,11 @@ private fun PlayerControls(
                 exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
             ) {
             Column {
+            SavedSoundStrip(
+                offer = soundOffer?.takeIf { it.trackId == track.id },
+                onApply = onApplySoundOffer,
+                onDismiss = onDismissSoundOffer
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

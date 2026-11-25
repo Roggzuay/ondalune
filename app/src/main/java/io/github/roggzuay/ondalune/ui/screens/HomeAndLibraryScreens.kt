@@ -28,6 +28,7 @@ import io.github.roggzuay.ondalune.data.model.genreList
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.FilledTonalButton
 import io.github.roggzuay.ondalune.data.model.HomeSection
+import io.github.roggzuay.ondalune.data.model.PlayedSound
 import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.ui.theme.LocalStyleSpec
 import io.github.roggzuay.ondalune.ui.theme.LocalSongScheme
@@ -87,6 +88,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -107,6 +109,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -199,6 +202,11 @@ fun ListenNowHomeScreen(
     onOpenShelf: (HomeShelfKind?) -> Unit = {},
     onPlayTrackFrom: (SubsonicTrack, List<SubsonicTrack>) -> Unit = { track, _ -> onPlayTrack(track) },
     homeSections: List<HomeSection> = emptyList(),
+    /** Recent plays that changed the sound, for the Sound Profiles card. */
+    soundPlays: List<PlayedSound> = emptyList(),
+    /** Play a song again with the sound it had that time. */
+    onPlaySound: (PlayedSound) -> Unit = {},
+    onOpenSoundProfiles: () -> Unit = {},
     onSetHomeSections: (List<HomeSection>) -> Unit = {},
     onResetHomeSections: () -> Unit = {},
     availableUpdate: AppUpdate? = null,
@@ -392,6 +400,9 @@ fun ListenNowHomeScreen(
                 }
                 HomeSection.REDISCOVER -> if (shelves.rediscover.isNotEmpty()) item(key = "shelf_rediscover") {
                     AlbumShelf(HomeShelfKind.REDISCOVER.title, shelves.rediscover, onOpenAlbum, onPlayAlbum) { onOpenShelf(HomeShelfKind.REDISCOVER) }
+                }
+                HomeSection.SOUND_PROFILES -> if (soundPlays.isNotEmpty()) item(key = "shelf_sound_profiles") {
+                    SoundProfilesShelf(soundPlays, currentTrackId, onPlaySound, onOpenSoundProfiles)
                 }
             }
         }
@@ -672,6 +683,106 @@ private fun TrackShelf(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Sound Profiles: songs you played with the speed, pitch or reverb changed. Each cover wears a
+ * tag saying what was done to it, and tapping one plays the song that way again — whether or not
+ * the sound was ever saved.
+ */
+@Composable
+private fun SoundProfilesShelf(
+    plays: List<PlayedSound>,
+    currentTrackId: String?,
+    onPlaySound: (PlayedSound) -> Unit,
+    onOpenAll: () -> Unit
+) {
+    val hold = LocalHold.current
+    Column {
+        ShelfHeader(
+            title = HomeSection.SOUND_PROFILES.label,
+            onMore = onOpenAll,
+            onPlayAll = plays.firstOrNull()?.let { first -> { onPlaySound(first) } }
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            items(plays.take(ShelfPreviewCount)) { played ->
+                val track = played.track
+                val isCurrent = track.id == currentTrackId
+                SpringPressableSurface(
+                    onClick = { onPlaySound(played) },
+                    onLongClick = hold?.let { { it(HoldTarget.Song(track)) } },
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .width(132.dp)
+                        .testTag("sound_profile_play_${track.id}")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.BottomStart) {
+                            ExpressiveArtwork(
+                                seedHex = track.paletteSeedHex,
+                                accentHex = track.accentHex,
+                                artStyleIndex = track.artStyleIndex,
+                                coverArtUrl = track.coverArtUrl,
+                                modifier = Modifier.size(132.dp)
+                            )
+                            played.ribbon?.let { SoundRibbon(it, played.hadProfile) }
+                        }
+                        Text(
+                            text = track.title,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = if (isCurrent) (LocalSongScheme.current ?: MaterialTheme.colorScheme).primary else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = played.snapshot.summary,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The tag across the corner of a cover: what was done to the sound that time. A saved profile
+ * wears the app's primary colour; a one-off play wears the quieter tertiary one, so the two read
+ * apart at a glance.
+ */
+@Composable
+private fun SoundRibbon(text: String, saved: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        color = if (saved) scheme.primary else scheme.tertiaryContainer,
+        contentColor = if (saved) scheme.onPrimary else scheme.onTertiaryContainer,
+        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 10.dp, bottomEnd = 10.dp, bottomStart = 4.dp),
+        modifier = Modifier.padding(start = 6.dp, bottom = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.size(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
         }
     }
 }

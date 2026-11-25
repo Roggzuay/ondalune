@@ -184,6 +184,7 @@ import androidx.compose.foundation.layout.Box
 import io.github.roggzuay.ondalune.data.model.SourceType
 import io.github.roggzuay.ondalune.data.model.source
 import io.github.roggzuay.ondalune.data.model.RepeatMode
+import io.github.roggzuay.ondalune.data.model.SoundProfileScope
 
 /**
  * Process-scoped tracker ensuring the Ondalune Animated Launch Intro runs at most once per cold
@@ -364,6 +365,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val statusBanner by viewModel.statusBanner.collectAsStateWithLifecycle()
     val homeShelves by viewModel.homeShelves.collectAsStateWithLifecycle()
+    val soundPlays by viewModel.soundPlays.collectAsStateWithLifecycle()
+    val pendingSoundSave by viewModel.sound.pendingSave.collectAsStateWithLifecycle()
+    val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
+    val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
+    val savedSounds by viewModel.savedSounds.collectAsStateWithLifecycle()
+    val soundPlaysAll by viewModel.soundPlaysAll.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel.activeServer().id) { viewModel.refreshHomeShelves() }
 
     val activeServer = viewModel.activeServer()
@@ -904,6 +911,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                                 viewModel.setPlayerExpanded(true)
                                             },
                                             homeSections = customizationSettings.homeSections,
+                                            soundPlays = soundPlays,
+                                            onPlaySound = viewModel::playWithSound,
+                                            onOpenSoundProfiles = { viewModel.setSoundProfilesOpen(true) },
                                             onSetHomeSections = viewModel.settings::setHomeSections,
                                             onResetHomeSections = viewModel.settings::resetHomeSections,
                                             onPullProgressChange = { homePullProgress = it },
@@ -1303,6 +1313,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 showSpeedResetHint = showSpeedResetHint,
                                 onSpeedResetHintShown = viewModel.sound::markSpeedResetHintShown,
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
+                                readAudioLevels = viewModel::readAudioLevels,
+                                onWantAudioLevels = viewModel::setAudioLevelsWanted,
+                                soundOffer = soundOffer,
+                                onApplySoundOffer = viewModel.soundProfiles::applyOffer,
+                                onDismissSoundOffer = viewModel.soundProfiles::dismissOffer,
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },
                                 onOpenSonicLab = { viewModel.setSonicLabSheetOpen(true) },
                                 onPlayQueueTrack = { viewModel.playback.playFromQueue(it) },
@@ -1332,6 +1347,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         state = speedPitchState,
                         reverbState = reverbState,
                         tempo = currentTempo,
+                        pendingSave = pendingSoundSave,
+                        saveTrackTitle = currentTrack?.title.orEmpty(),
+                        saveAlbumTitle = currentTrack?.album.orEmpty(),
+                        onSaveSoundForTrack = { viewModel.saveSoundProfile(SoundProfileScope.TRACK) },
+                        onSaveSoundForAlbum = { viewModel.saveSoundProfile(SoundProfileScope.ALBUM) },
+                        onDismissSoundSave = viewModel.sound::dismissPendingSave,
                         onSetSpeed = viewModel.sound::setPlaybackSpeed,
                         onSetPitchMode = viewModel.sound::setPitchCorrectionMode,
                         onSetIndependentSemitones = viewModel.sound::setIndependentSemitones,
@@ -1407,6 +1428,33 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onPlayMix = viewModel::playMix,
                         onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }
+                    )
+                }
+
+                // Sound Profiles: saved sounds, and the plays that changed one.
+                AnimatedVisibility(
+                    visible = soundProfilesOpen,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeOut()
+                ) {
+                    SoundProfilesSheet(
+                        saved = savedSounds,
+                        plays = soundPlaysAll,
+                        autoApply = customizationSettings.autoApplySoundProfiles,
+                        keepHistory = customizationSettings.keepSoundHistory,
+                        onSetAutoApply = viewModel.settings::setAutoApplySoundProfiles,
+                        onSetKeepHistory = viewModel.settings::setKeepSoundHistory,
+                        onPlaySaved = viewModel::playSavedSound,
+                        onForget = { viewModel.forgetSoundProfile(it.profile) },
+                        onPlaySound = viewModel::playWithSound,
+                        onClearHistory = viewModel::clearSoundHistory,
+                        onClose = { viewModel.setSoundProfilesOpen(false) }
                     )
                 }
 

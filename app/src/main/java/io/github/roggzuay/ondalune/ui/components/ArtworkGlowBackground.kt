@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -69,20 +70,56 @@ fun PlayerBackdrop(
     style: PlayerBackgroundAnimationStyle,
     isPlaying: Boolean,
     playbackSpeed: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Bass, middle and top of what is playing, each 0..1. Only read by the Reactive style. */
+    readLevels: (FloatArray) -> Unit = {},
+    /** Told while the Reactive style is on screen, so nothing is measured when nobody is looking. */
+    onWantLevels: (Boolean) -> Unit = {}
 ) {
     val reducedMotion = LocalReducedMotion.current
     val clock = remember { mutableFloatStateOf(0f) }
     val coverBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    // Reactive is the blurred cover again, but it moves: it needs the frame loop even where the
+    // other blurred-cover style holds still.
+    val reactive = style == PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE && !reducedMotion
     // The blurred cover holds still, like the picture above it.
-    val animate = isPlaying && !reducedMotion && style != PlayerBackgroundAnimationStyle.MINIMAL_TONAL && !coverBlur
-    LaunchedEffect(animate, playbackSpeed) {
-        if (!animate) return@LaunchedEffect
+    val animate = isPlaying && !reducedMotion &&
+        style != PlayerBackgroundAnimationStyle.MINIMAL_TONAL && (!coverBlur || reactive)
+
+    // The three bands, smoothed once more for the eye. Written in the frame loop and read in the
+    // draw and layer phases, so the picture moves without a single recomposition.
+    val low = remember { mutableFloatStateOf(0f) }
+    val mid = remember { mutableFloatStateOf(0f) }
+    val high = remember { mutableFloatStateOf(0f) }
+    val levels = remember { FloatArray(3) }
+
+    DisposableEffect(reactive) {
+        onWantLevels(reactive)
+        onDispose { onWantLevels(false) }
+    }
+
+    LaunchedEffect(animate, playbackSpeed, reactive) {
+        if (!animate) {
+            // Coming to rest: the bands fall away rather than snapping flat.
+            low.floatValue = 0f
+            mid.floatValue = 0f
+            high.floatValue = 0f
+            return@LaunchedEffect
+        }
         var last = withFrameNanos { it }
         while (true) {
             withFrameNanos { now ->
-                clock.floatValue += (now - last) / 1_000_000_000f * playbackSpeed.coerceIn(0.5f, 2f)
+                val dt = (now - last) / 1_000_000_000f
+                // Drift carries on with the music; the reactive scene speeds up a little with it.
+                val pace = if (reactive) 1f + mid.floatValue * 0.6f else 1f
+                clock.floatValue += dt * playbackSpeed.coerceIn(0.5f, 2f) * pace
                 last = now
+                if (reactive) {
+                    readLevels(levels)
+                    low.floatValue += (levels[0] - low.floatValue) * EyeSmoothing
+                    mid.floatValue += (levels[1] - mid.floatValue) * EyeSmoothing
+                    high.floatValue += (levels[2] - high.floatValue) * EyeSmoothing
+                }
             }
         }
     }
@@ -103,12 +140,26 @@ fun PlayerBackdrop(
     BoxWithConstraints(modifier.fillMaxSize().background(base), contentAlignment = Alignment.Center) {
         // The cover itself, zoomed past the screen's edges and blurred: the picture at the top of
         // the player carries on, out of focus, behind everything below it.
-        if (coverBlur) BlurredCover(track, max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.08f)
+        val fill = max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.08f
+        // Reactive breathes the same picture: the cover swells on the bass and drifts on the mids,
+        // read in the layer phase so it costs no recomposition.
+        if (coverBlur) {
+            if (reactive) BlurredCover(track, fill) { 1f + low.floatValue * ReactiveSwell to mid.floatValue }
+            else BlurredCover(track, fill)
+        }
         Canvas(Modifier.fillMaxSize()) {
             val t = clock.floatValue
             when (style) {
                 // Before Android 12 there is no blur: the cover's colours stand in for it.
                 PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> if (!coverBlur) mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
+                // The cover's own colours, lifted off it by the top of the music. On a phone with
+                // no blur the mesh is the whole scene, so it carries the bass as well.
+                PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> mesh(
+                    colors,
+                    t,
+                    alpha = if (coverBlur) 0.22f + high.floatValue * 0.30f else 0.55f + high.floatValue * 0.25f,
+                    amplitude = (if (coverBlur) 0.10f else 0.16f) + low.floatValue * 0.18f
+                )
                 PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
                     mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
                     sheen(t, colors.c4)
@@ -138,6 +189,15 @@ fun PlayerBackdrop(
 }
 
 private val CoverBox = 200.dp
+
+/** How much of a new level reading is taken each frame, so the picture glides instead of jumping. */
+private const val EyeSmoothing = 0.18f
+
+/** The blurred cover grows by at most this much on the bass. */
+private const val ReactiveSwell = 0.07f
+
+/** The furthest the blurred cover drifts, in density-independent pixels. */
+private const val ReactiveDriftPx = 18f
 
 private class Colors(val c0: Color, val c1: Color, val c2: Color, val c3: Color, val c4: Color)
 
@@ -197,15 +257,29 @@ fun BlurredCoverHeader(
 }
 
 @Composable
-private fun BlurredCover(track: SubsonicTrack, fill: Float) {
+private fun BlurredCover(
+    track: SubsonicTrack,
+    fill: Float,
+    /** Reactive only: extra swell and the drift, both read in the layer phase, per frame. */
+    motion: (() -> Pair<Float, Float>)? = null
+) {
     // Blurring a small box and scaling the cached result is far cheaper than blurring the screen.
     // The scale wraps the crossfade so the box edge never shows on track change.
     Box(
         Modifier
             .requiredSize(CoverBox)
             .graphicsLayer {
-                scaleX = fill
-                scaleY = fill
+                if (motion == null) {
+                    scaleX = fill
+                    scaleY = fill
+                } else {
+                    val (swell, drift) = motion()
+                    scaleX = fill * swell
+                    scaleY = fill * swell
+                    // A hand's width of drift at the loudest, and never more than that.
+                    translationX = drift * ReactiveDriftPx * density
+                    translationY = drift * ReactiveDriftPx * 0.6f * density
+                }
             }
     ) {
         AnimatedContent(
