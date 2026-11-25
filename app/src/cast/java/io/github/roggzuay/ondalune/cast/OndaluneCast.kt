@@ -3,15 +3,30 @@ package io.github.roggzuay.ondalune.cast
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
+import android.content.ContextWrapper
+import android.view.ContextThemeWrapper
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.mediarouter.app.MediaRouteButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.mediarouter.app.MediaRouteChooserDialog
+import androidx.mediarouter.app.MediaRouteControllerDialog
+import androidx.mediarouter.media.MediaRouteSelector
+import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
+import com.google.android.gms.cast.CastMediaControlIntent
 import com.google.android.gms.cast.MediaStatus
-import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastOptions
 import com.google.android.gms.cast.framework.CastSession
@@ -22,6 +37,7 @@ import com.google.android.gms.cast.framework.media.CastMediaOptions
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.google.android.gms.common.images.WebImage
 import io.github.roggzuay.ondalune.data.model.SubsonicTrack
+import io.github.roggzuay.ondalune.ui.components.ExpressiveBounceIconButton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -192,19 +208,104 @@ class GoogleCastGateway(context: Context) : CastGateway {
 fun createCastGateway(context: Context): CastGateway = GoogleCastGateway(context)
 
 /**
- * Google's own route button, so the device picker is the one people already know. It draws
- * nothing at all until there is a device on the network worth showing.
+ * A context androidx.mediarouter can actually work against.
+ *
+ * Everything in mediarouter reads the AppCompat `colorPrimary` attribute and runs the answer
+ * through `ColorUtils.calculateContrast`, which refuses a transparent colour. Ondalune's own
+ * theme is `android:Theme.DeviceDefault.NoActionBar`, where that attribute is not defined at
+ * all, so it comes back as #0 and mediarouter throws "background can not be translucent: #0" the
+ * moment a route button is built.
+ *
+ * Rather than drag the whole app onto an AppCompat theme for one button — which the build
+ * without Cast could not even compile, since AppCompat only arrives with mediarouter — the few
+ * pieces of mediarouter Ondalune uses are given an AppCompat context of their own. The activity
+ * stays underneath it, which the dialogs need in order to put up a window.
+ */
+fun castDialogContext(context: Context): Context =
+    ContextThemeWrapper(context, androidx.appcompat.R.style.Theme_AppCompat_DayNight_NoActionBar)
+
+/** The activity under a Compose context, which the route dialogs need to show themselves. */
+private fun Context.activity(): Activity? {
+    var at: Context? = this
+    while (at is ContextWrapper) {
+        if (at is Activity) return at
+        at = at.baseContext
+    }
+    return null
+}
+
+/** What Ondalune asks the network for: devices that can play its music. */
+private fun castSelector(): MediaRouteSelector = MediaRouteSelector.Builder()
+    .addControlCategory(CastMediaControlIntent.categoryForCast(DefaultMediaReceiver))
+    .build()
+
+/**
+ * The Cast button, in Ondalune's own hand rather than Google's.
+ *
+ * The route button that ships with mediarouter cannot be used here: it needs an AppCompat theme
+ * and a FragmentActivity, and Ondalune has neither. Watching for routes and putting up the
+ * picker are plain API calls though, so the button is ours and the device list is still the one
+ * everybody already knows.
+ *
+ * It draws nothing at all until there is something on the network to play to, and it watches for
+ * that passively — an active scan is for while a picker is open, not for the whole time a player
+ * is on screen.
  */
 @Composable
 fun CastButton(modifier: Modifier = Modifier) {
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            MediaRouteButton(context).also { button ->
-                runCatching { CastButtonFactory.setUpMediaRouteButton(context, button) }
+    val context = LocalContext.current
+    var available by remember { mutableStateOf(false) }
+    var connected by remember { mutableStateOf(false) }
+
+    DisposableEffect(context) {
+        val router = runCatching { MediaRouter.getInstance(context) }.getOrNull()
+            ?: return@DisposableEffect onDispose { }
+        val selector = castSelector()
+        val callback = object : MediaRouter.Callback() {
+            private fun refresh() {
+                available = router.isRouteAvailable(
+                    selector,
+                    MediaRouter.AVAILABILITY_FLAG_IGNORE_DEFAULT_ROUTE
+                )
+                connected = router.selectedRoute.matchesSelector(selector)
             }
+
+            override fun onRouteAdded(r: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+            override fun onRouteRemoved(r: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+            override fun onRouteChanged(r: MediaRouter, route: MediaRouter.RouteInfo) = refresh()
+            override fun onRouteSelected(r: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) = refresh()
+            override fun onRouteUnselected(r: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) = refresh()
         }
-    )
+        runCatching {
+            router.addCallback(selector, callback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
+            available = router.isRouteAvailable(selector, MediaRouter.AVAILABILITY_FLAG_IGNORE_DEFAULT_ROUTE)
+            connected = router.selectedRoute.matchesSelector(selector)
+        }
+        onDispose { runCatching { router.removeCallback(callback) } }
+    }
+
+    if (!available) return
+
+    ExpressiveBounceIconButton(
+        onClick = {
+            val activity = context.activity() ?: return@ExpressiveBounceIconButton
+            val themed = castDialogContext(activity)
+            runCatching {
+                if (connected) {
+                    MediaRouteControllerDialog(themed).show()
+                } else {
+                    MediaRouteChooserDialog(themed).apply { routeSelector = castSelector() }.show()
+                }
+            }
+        },
+        size = 44.dp,
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = if (connected) Icons.Filled.CastConnected else Icons.Filled.Cast,
+            contentDescription = if (connected) "Playing on another device" else "Play on another device"
+        )
+    }
 }
 
 /**
@@ -229,8 +330,7 @@ class OndaluneCastOptions : OptionsProvider {
 
     override fun getAdditionalSessionProviders(context: Context): MutableList<SessionProvider>? = null
 
-    private companion object {
-        /** Google's default media receiver: plays a media URL, needs no registration. */
-        const val DefaultMediaReceiver = "CC1AD845"
-    }
 }
+
+/** Google's default media receiver: plays a media URL, needs no registration. */
+private const val DefaultMediaReceiver = "CC1AD845"

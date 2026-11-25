@@ -24,6 +24,7 @@ kotlinxCoroutinesCore = "1.10.2"
 okhttp = "4.10.0"
 playServicesCast = "22.3.1"
 mediarouter = "1.9.0"
+appcompat = "1.6.1"
 robolectric = "4.16.1"
 
 
@@ -62,6 +63,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
 androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 

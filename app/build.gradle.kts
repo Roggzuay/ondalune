@@ -105,6 +105,8 @@ android {
     // One of these two is always compiled in, and they define the same names, so the rest of the
     // app never asks whether this build can cast.
     getByName("main").kotlin.srcDir(if (cast) "src/cast/java" else "src/noCast/java")
+    // Their tests split the same way, so each build tests the code it actually ships.
+    getByName("test").kotlin.srcDir(if (cast) "src/castTest/java" else "src/noCastTest/java")
     when {
       playStore -> getByName("release").manifest.srcFile("src/playStore/AndroidManifest.xml")
       !selfUpdate -> getByName("release").manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
@@ -125,6 +127,9 @@ dependencies {
   if (cast) {
     implementation(libs.play.services.cast.framework)
     implementation(libs.androidx.mediarouter)
+    // mediarouter already brings this in; naming it puts its theme on the compile path too, so
+    // the route dialogs can be given an AppCompat context. Not in the build without Cast.
+    implementation(libs.androidx.appcompat)
   }
   implementation(libs.androidx.work.runtime.ktx)
   implementation(platform(libs.androidx.compose.bom))
