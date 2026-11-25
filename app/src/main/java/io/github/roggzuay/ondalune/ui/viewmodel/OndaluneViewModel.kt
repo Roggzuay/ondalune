@@ -302,6 +302,66 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Speed, pitch, reverb and EQ (see SoundController). */
     val sound = SoundController(prefs, audioEngine) { _statusBanner.value = it }
 
+    /** Saving how Ondalune is set up, and putting it back (see BackupController). */
+    val backups = BackupController(
+        prefs = prefs,
+        dao = database.dao(),
+        appVersion = io.github.roggzuay.ondalune.BuildConfig.VERSION_NAME
+    )
+
+    private val _lastBackupMs = MutableStateFlow(prefs.getLong(PREF_LAST_BACKUP, 0L))
+
+    /** When the last backup was written; 0 when none has been. */
+    val lastBackupMs: StateFlow<Long> = _lastBackupMs.asStateFlow()
+
+    /** Writes a backup to the file the system picker returned. */
+    fun writeBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val written = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = backups.encode(backups.build())
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use {
+                        it.write(text.toByteArray())
+                    } ?: error("could not open the file for writing")
+                    text.length
+                }
+            }
+            written.onSuccess {
+                val now = System.currentTimeMillis()
+                _lastBackupMs.value = now
+                prefs.edit().putLong(PREF_LAST_BACKUP, now).apply()
+                _statusBanner.value = "Backup saved"
+            }.onFailure {
+                _statusBanner.value = "Couldn't save the backup"
+            }
+        }
+    }
+
+    /** Reads a backup from the file the system picker returned and puts it back. */
+    fun readBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        ?: error("could not open the file")
+                    val data = backups.decode(text) ?: error("not an Ondalune backup")
+                    backups.apply(data)
+                }
+            }
+            result.onSuccess { restored ->
+                settings.reload()
+                sound.applyToEngine()
+                audioEngine.crossfeed = settings.customization.value.crossfeed
+                audioEngine.vinylMode = settings.customization.value.vinylMode
+                _statusBanner.value = restored.message()
+            }.onFailure {
+                _statusBanner.value = "That file isn't an Ondalune backup"
+            }
+        }
+    }
+
     /** Saved sounds and the play history that records them (see SoundProfileController). */
     val soundProfiles = SoundProfileController(database.dao(), sound, viewModelScope)
 
@@ -2091,6 +2151,7 @@ data class LibraryFilters(
 }
 private const val PREF_FULL_SYNC_AT = "full_library_sync_at_"
 private const val PREF_DOWNLOADS_HINT_SEEN = "hint_downloads_seen"
+private const val PREF_LAST_BACKUP = "last_backup_at"
 
 /**
  * The library syncs on its own only once per server, when it has never been fully synced (first

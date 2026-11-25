@@ -229,6 +229,9 @@ interface OndaluneDao {
     @Query("SELECT * FROM track_overrides")
     fun observeOverrides(): Flow<List<TrackOverride>>
 
+    @Query("SELECT * FROM track_overrides")
+    suspend fun getOverridesOnce(): List<TrackOverride>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertOverride(override: TrackOverride)
 
@@ -325,6 +328,9 @@ interface OndaluneDao {
 
     @Query("SELECT * FROM sound_profiles")
     fun observeSoundProfiles(): Flow<List<SoundProfile>>
+
+    @Query("SELECT * FROM sound_profiles")
+    suspend fun getSoundProfilesOnce(): List<SoundProfile>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSoundProfile(profile: SoundProfile)

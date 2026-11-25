@@ -1,0 +1,131 @@
+package io.github.roggzuay.ondalune.ui.viewmodel
+
+import android.content.SharedPreferences
+import io.github.roggzuay.ondalune.data.backup.BackupData
+import io.github.roggzuay.ondalune.data.backup.OndaluneBackup
+import io.github.roggzuay.ondalune.data.backup.PortableEdit
+import io.github.roggzuay.ondalune.data.backup.PortableProfile
+import io.github.roggzuay.ondalune.data.local.OndaluneDao
+import io.github.roggzuay.ondalune.data.model.SubsonicServerConfig
+import io.github.roggzuay.ondalune.data.model.isLocalSource
+
+/**
+ * Builds a backup of how Ondalune is set up, and puts one back.
+ *
+ * Servers and passwords are never in the file (see [OndaluneBackup]), so everything that belongs
+ * to a server travels under that server's own address. On the way back in, a profile whose server
+ * is not on this phone is skipped rather than guessed at, and the restore says how many.
+ */
+class BackupController(
+    private val prefs: SharedPreferences,
+    private val dao: OndaluneDao,
+    private val appVersion: String,
+    private val now: () -> Long = { System.currentTimeMillis() }
+) {
+    /** The music on this phone has no address, so it travels under a name of its own. */
+    private fun keyOf(server: SubsonicServerConfig): String =
+        if (server.isLocalSource) PhoneKey else "${server.baseUrl.trimEnd('/')}|${server.username}"
+
+    suspend fun build(): BackupData {
+        val servers = dao.getAllServersOnce()
+        val keys = servers.associate { it.id to keyOf(it) }
+        val profiles = dao.getSoundProfilesOnce().mapNotNull { profile ->
+            keys[profile.serverId]?.let { PortableProfile.of(profile, it) }
+        }
+        val edits = dao.getOverridesOnce().mapNotNull { override ->
+            keys[override.serverId]?.let { PortableEdit.of(override, it) }
+        }
+        return BackupData(
+            createdAt = now(),
+            appVersion = appVersion,
+            settings = OndaluneBackup.settingsFrom(prefs.all),
+            soundProfiles = profiles,
+            trackEdits = edits,
+            serverKeys = keys.values.distinct()
+        )
+    }
+
+    fun encode(data: BackupData): String = OndaluneBackup.encode(data)
+
+    fun decode(text: String): BackupData? = OndaluneBackup.decode(text)
+
+    /**
+     * Puts a backup back. Settings are written first, then anything whose server is on this phone.
+     * Nothing is deleted: a restore adds to what is here and replaces what it matches.
+     */
+    suspend fun apply(data: BackupData): RestoreResult {
+        val editor = prefs.edit()
+        data.settings.forEach { (key, value) ->
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Double -> editor.putFloat(key, value.toFloat())
+                is String -> editor.putString(key, value)
+            }
+        }
+        editor.apply()
+
+        val byKey = dao.getAllServersOnce().associateBy { keyOf(it) }
+        var profiles = 0
+        var skippedProfiles = 0
+        data.soundProfiles.forEach { portable ->
+            val server = byKey[portable.serverKey]
+            if (server == null) {
+                skippedProfiles++
+            } else {
+                dao.upsertSoundProfile(portable.toProfile(server.id))
+                profiles++
+            }
+        }
+
+        var edits = 0
+        var skippedEdits = 0
+        data.trackEdits.forEach { portable ->
+            val server = byKey[portable.serverKey]
+            if (server == null) {
+                skippedEdits++
+            } else {
+                dao.upsertOverride(portable.toOverride(server.id))
+                edits++
+            }
+        }
+
+        return RestoreResult(
+            settings = data.settings.size,
+            soundProfiles = profiles,
+            trackEdits = edits,
+            skipped = skippedProfiles + skippedEdits,
+            missingServers = (data.soundProfiles.map { it.serverKey } + data.trackEdits.map { it.serverKey })
+                .distinct()
+                .filterNot { it in byKey }
+        )
+    }
+
+    private companion object {
+        const val PhoneKey = "this-phone"
+    }
+}
+
+/** What a restore actually put back, said plainly. */
+data class RestoreResult(
+    val settings: Int,
+    val soundProfiles: Int,
+    val trackEdits: Int,
+    val skipped: Int,
+    val missingServers: List<String>
+) {
+    fun message(): String {
+        val parts = mutableListOf<String>()
+        if (settings > 0) parts += "$settings settings"
+        if (soundProfiles > 0) parts += countOf(soundProfiles, "saved sound")
+        if (trackEdits > 0) parts += countOf(trackEdits, "corrected song")
+        val put = if (parts.isEmpty()) "Nothing to put back" else "Put back ${parts.joinToString(", ")}"
+        if (skipped == 0) return put
+        val servers = if (missingServers.size == 1) "a server" else "${missingServers.size} servers"
+        return "$put. Left $skipped for $servers you haven't added here."
+    }
+
+    private fun countOf(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
+}

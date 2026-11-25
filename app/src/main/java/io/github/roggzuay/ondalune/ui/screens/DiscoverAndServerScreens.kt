@@ -96,6 +96,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
@@ -252,6 +253,11 @@ enum class SettingsExpandableSection(
         title = "Music sources",
         subtitle = "Servers, music on this phone, library sync",
         icon = Icons.Filled.Dns
+    ),
+    BACKUP(
+        title = "Backup",
+        subtitle = "Save how Ondalune is set up, and put it back",
+        icon = Icons.Filled.Backup
     )
 }
 
@@ -437,6 +443,10 @@ fun SettingsCustomizationScreen(
     reverbState: ReverbState = ReverbState(),
     sleepTimerState: SleepTimerState,
     activeEqPreset: EqualizerPreset,
+    /** When the last backup was written; 0 when none has been. */
+    lastBackupMs: Long = 0L,
+    onWriteBackup: (android.net.Uri) -> Unit = {},
+    onReadBackup: (android.net.Uri) -> Unit = {},
     servers: List<SubsonicServerConfig>,
     activeServer: SubsonicServerConfig,
     pingDiagnostic: PingDiagnosticResult?,
@@ -533,7 +543,8 @@ fun SettingsCustomizationScreen(
             SettingsExpandableSection.LYRICS to false,
             SettingsExpandableSection.MOTION_ARTWORK to false,
             SettingsExpandableSection.WIDGET_NOTIFICATION to false,
-            SettingsExpandableSection.SERVER_HUB to false
+            SettingsExpandableSection.SERVER_HUB to false,
+            SettingsExpandableSection.BACKUP to false
         )
     }
 
@@ -1536,6 +1547,23 @@ fun SettingsCustomizationScreen(
         }
 
         // 5. Expandable Section: OpenSubsonic Server Hub
+        if (shownSection == null || shownSection == SettingsExpandableSection.BACKUP) item {
+            val isExpanded = expandedMap[SettingsExpandableSection.BACKUP] == true
+            ExpandableSettingsSectionCard(
+                section = SettingsExpandableSection.BACKUP,
+                badgeText = if (lastBackupMs > 0) friendlyDate(lastBackupMs) else "Never saved",
+                isExpanded = isExpanded,
+                onToggleExpand = { expandedMap[SettingsExpandableSection.BACKUP] = !isExpanded },
+                testTag = "settings_section_backup"
+            ) {
+                BackupCard(
+                    lastBackupMs = lastBackupMs,
+                    onWriteBackup = onWriteBackup,
+                    onReadBackup = onReadBackup
+                )
+            }
+        }
+
         if (shownSection == null || shownSection == SettingsExpandableSection.SERVER_HUB) item {
             val isExpanded = expandedMap[SettingsExpandableSection.SERVER_HUB] == true
             ExpandableSettingsSectionCard(

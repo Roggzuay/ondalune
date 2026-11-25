@@ -53,6 +53,15 @@ class SettingsStore(private val prefs: SharedPreferences) {
         persist(next)
     }
 
+    /**
+     * Reads everything back from [prefs]. Called after a restore has written new values straight
+     * into them, so the app shows what was put back without being closed and opened again.
+     */
+    fun reload() {
+        _customization.value = load()
+        _tabPreferences.value = loadTabs()
+    }
+
     fun putTab(categoryKey: String, pref: TabDisplayPreference) {
         val key = categoryKey.uppercase()
         _tabPreferences.value = _tabPreferences.value + (key to pref)
