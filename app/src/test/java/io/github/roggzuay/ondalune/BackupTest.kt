@@ -103,11 +103,57 @@ class BackupTest {
     }
 
     @Test
-    fun `the file says which servers it belongs to, without a username and password pair`() = runBlocking {
+    fun `the file never says where your music lives`() = runBlocking {
+        val id = addServer("Home", "https://music.example/", "rogg")
+        db.dao().upsertSoundProfile(soundProfileOf(id, SoundProfileScope.TRACK, "s1", slowed, 5L))
+        db.dao().upsertOverride(TrackOverride(id, "s1", title = "Fixed"))
+        val controller = controller()
+        val text = controller.encode(controller.build())
+        assertFalse(text, text.contains("music.example"))
+        assertFalse(text, text.contains("rogg"))
+        assertFalse(text, text.contains("hunter2"))
+    }
+
+    @Test
+    fun `a server travels under a one-way name, the same on any phone`() = runBlocking {
         val id = addServer("Home", "https://music.example/", "me")
         db.dao().upsertSoundProfile(soundProfileOf(id, SoundProfileScope.TRACK, "s1", slowed, 5L))
-        val data = controller().build()
-        assertEquals(listOf("https://music.example|me"), data.serverKeys)
+        val key = controller().build().serverKeys.single()
+        // A SHA-256 of the address and username: 64 hex characters, and neither of them readable.
+        assertEquals(64, key.length)
+        assertTrue(key, key.all { it.isDigit() || it in 'a'..'f' })
+        assertFalse(key, key.contains("music.example"))
+    }
+
+    @Test
+    fun `the same server on another phone works out the same name`() = runBlocking {
+        val here = addServer("Home", "https://music.example/", "me")
+        db.dao().upsertSoundProfile(soundProfileOf(here, SoundProfileScope.TRACK, "s1", slowed, 5L))
+        val file = controller().build()
+
+        // Another phone: the same server added under a different name, with a trailing slash gone.
+        db.dao().deleteSoundProfilesForServer(here)
+        db.dao().deleteServer(here)
+        val there = addServer("My music", "https://music.example", "me")
+        val result = controller().apply(file)
+        assertEquals(1, result.soundProfiles)
+        assertEquals(there, db.dao().getSoundProfilesOnce().single().serverId)
+    }
+
+    @Test
+    fun `a file from an earlier preview, with the address in the clear, still restores`() = runBlocking {
+        val id = addServer("Home", "https://music.example", "me")
+        val data = BackupData(
+            createdAt = 1L,
+            appVersion = "2.1.0",
+            soundProfiles = listOf(
+                PortableProfile.of(
+                    soundProfileOf(id, SoundProfileScope.TRACK, "s1", slowed, 5L),
+                    "https://music.example|me"
+                )
+            )
+        )
+        assertEquals(1, controller().apply(data).soundProfiles)
     }
 
     // ---- The file itself ----

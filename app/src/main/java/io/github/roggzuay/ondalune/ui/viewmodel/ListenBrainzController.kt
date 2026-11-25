@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Scrobbling to ListenBrainz.
@@ -29,6 +31,13 @@ class ListenBrainzController(
     private val showBanner: (String) -> Unit,
     private val now: () -> Long = { System.currentTimeMillis() }
 ) {
+    /**
+     * One submission at a time. Reading the queue, sending it and writing back what is left spans
+     * a network call, and two of those interleaving means the same listens go out twice and the
+     * slower one writes back listens the faster one already delivered.
+     */
+    private val sending = Mutex()
+
     private val _state = MutableStateFlow(load())
 
     /** Whether it is on, whose account it is, and how many listens are waiting. */
@@ -107,12 +116,13 @@ class ListenBrainzController(
         val token = tokenIfOn() ?: return
         val listen = PendingListen.of(track, listenedAt = now() / 1000L)
         scope.launch {
-            val waiting = queue()
-            val batch = waiting + listen
-            if (client.submit(token, batch)) {
-                saveQueue(emptyList())
-            } else {
-                saveQueue(batch.takeLast(MaxQueued))
+            sending.withLock {
+                val batch = queue() + listen
+                if (client.submit(token, batch)) {
+                    saveQueue(emptyList())
+                } else {
+                    saveQueue(batch.takeLast(MaxQueued))
+                }
             }
         }
     }
@@ -120,10 +130,12 @@ class ListenBrainzController(
     /** Tries the waiting listens again, if there are any. */
     fun flush() {
         val token = tokenIfOn() ?: return
-        val waiting = queue()
-        if (waiting.isEmpty()) return
         scope.launch {
-            if (client.submit(token, waiting)) saveQueue(emptyList())
+            sending.withLock {
+                val waiting = queue()
+                if (waiting.isEmpty()) return@withLock
+                if (client.submit(token, waiting)) saveQueue(emptyList())
+            }
         }
     }
 

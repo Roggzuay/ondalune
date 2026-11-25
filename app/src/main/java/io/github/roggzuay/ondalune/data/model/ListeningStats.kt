@@ -16,11 +16,17 @@ import java.util.TimeZone
  * server and Ondalune already kept are shown separately, and they do go further back.
  */
 
-/** How far back a page of statistics looks. */
+/**
+ * How far back a page of statistics looks.
+ *
+ * Ondalune keeps the last [io.github.roggzuay.ondalune.data.model.PlayHistoryLimit] plays and no
+ * more, so every window is bounded by that as well as by its own dates. The page says so: a
+ * window that has run into the cap is not "all time" and must not call itself that.
+ */
 enum class StatsWindow(val label: String) {
     LAST_30("Last 30 days"),
     THIS_YEAR("This year"),
-    ALL_TIME("Since Ondalune started counting")
+    ALL_TIME("As far back as it goes")
 }
 
 /** One row of a chart: a thing, how many times, and how long. */
@@ -54,11 +60,22 @@ data class ListeningStats(
     /** Plays by day of the week, Monday first. */
     val byWeekday: List<Int> = List(7) { 0 },
     /** The first play this page could see, so the page can say how far back it goes. */
-    val firstPlayAt: Long = 0L
+    val firstPlayAt: Long = 0L,
+    /**
+     * The window ran into the cap on how many plays are kept, so what it shows is the newest
+     * [PlayHistoryLimit] plays rather than everything in those dates. The page says so.
+     */
+    val reachedTheCap: Boolean = false
 ) {
     val isEmpty: Boolean get() = plays == 0
 
-    /** "14 hours, 20 minutes" — the number people actually want out of this. */
+    /**
+     * "14 hours, 20 minutes" — the number people actually want out of this.
+     *
+     * It adds up the length of the songs played, not how much of each was heard: a play counts
+     * once it is past the point Ondalune counts a play, and nothing measures where you skipped.
+     * The page says "of music" rather than claiming you sat through all of it.
+     */
     val listeningTime: String get() = humanDuration(seconds)
 
     /** The hour the music is on most, as "21:00"; null when nothing has been played. */
@@ -131,6 +148,13 @@ fun listeningStats(
     if (inWindow.isEmpty()) return ListeningStats(window = window)
 
     val byId = tracks.associateBy { it.id }
+    // One pass each, rather than a full library scan per row of every chart.
+    val anyByArtist = HashMap<String, SubsonicTrack>()
+    val anyByAlbum = HashMap<String, SubsonicTrack>()
+    tracks.forEach { track ->
+        if (track.artist.isNotBlank()) anyByArtist.putIfAbsent(track.artist, track)
+        if (track.albumId.isNotBlank()) anyByAlbum.putIfAbsent(track.albumId, track)
+    }
     val calendar = Calendar.getInstance(zone)
     val hours = IntArray(24)
     val weekdays = IntArray(7)
@@ -188,7 +212,7 @@ fun listeningStats(
         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .take(topCount)
         .map { (artist, plays) ->
-            val any = tracks.firstOrNull { it.artist == artist }
+            val any = anyByArtist[artist]
             StatsRow(
                 key = artist,
                 title = artist,
@@ -206,7 +230,7 @@ fun listeningStats(
         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .take(topCount)
         .mapNotNull { (albumId, plays) ->
-            val any = tracks.firstOrNull { it.albumId == albumId } ?: return@mapNotNull null
+            val any = anyByAlbum[albumId] ?: return@mapNotNull null
             StatsRow(
                 key = albumId,
                 title = any.album,
@@ -222,6 +246,8 @@ fun listeningStats(
 
     return ListeningStats(
         window = window,
+        // Every window is also bounded by how many plays are kept at all.
+        reachedTheCap = history.size >= PlayHistoryLimit && inWindow.size == history.size,
         plays = inWindow.size,
         seconds = seconds,
         songs = songPlays.size,

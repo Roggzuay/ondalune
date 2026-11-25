@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.ConfigurationCompat
 import io.github.roggzuay.ondalune.data.model.LibraryTotals
 import io.github.roggzuay.ondalune.data.model.ListeningStats
+import io.github.roggzuay.ondalune.data.model.PlayHistoryLimit
 import io.github.roggzuay.ondalune.data.model.StatsRow
 import io.github.roggzuay.ondalune.data.model.StatsWindow
 import io.github.roggzuay.ondalune.data.model.humanDuration
@@ -134,14 +135,22 @@ fun ListeningStatsSheet(
                 // Read through the configuration, so the date follows the phone's language.
                 val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
                 Text(
-                    text = if (countingSince > 0) {
-                        "Ondalune has been writing plays down since " +
-                            SimpleDateFormat("d MMMM yyyy", locale).format(Date(countingSince)) +
-                            ". Anything you played before that is not in these numbers, though the " +
-                            "play counts below do go further back."
-                    } else {
-                        "Ondalune only started writing plays down in this version, so these numbers " +
-                            "begin now. The play counts below go further back."
+                    text = buildString {
+                        if (countingSince > 0) {
+                            append("These numbers go back to ")
+                            append(SimpleDateFormat("d MMMM yyyy", locale).format(Date(countingSince)))
+                            append(". ")
+                        } else {
+                            append("Ondalune only started writing plays down in this version, so ")
+                            append("these numbers begin now. ")
+                        }
+                        if (stats.reachedTheCap) {
+                            append("Ondalune keeps the last $PlayHistoryLimit plays and no more, ")
+                            append("and that is as far as this goes; the date moves forward as ")
+                            append("older plays are let go. ")
+                        }
+                        append("The play counts below go further back, because your server and ")
+                        append("Ondalune were both counting before any of this started.")
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

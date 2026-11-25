@@ -108,6 +108,24 @@ class AudioLevelsTest {
     }
 
     /**
+     * This runs on the audio thread. A decoder reporting more frames than the buffer holds must
+     * be clamped, not walked past: the same guard the rest of the pipeline already had.
+     */
+    @Test
+    fun `a frame count larger than the buffer is clamped, not crashed`() {
+        engine.measureLevels(FloatArray(16), 9_999, rate)
+        engine.audioLevels(levels)
+        assertTrue(levels.all { it.isFinite() })
+    }
+
+    @Test
+    fun `a nonsense sample rate is refused rather than dividing by it`() {
+        engine.measureLevels(FloatArray(64), 32, 0)
+        engine.audioLevels(levels)
+        assertTrue(levels.all { it.isFinite() })
+    }
+
+    /**
      * The budget: ten minutes of 48 kHz stereo, measured, in well under the time that audio takes
      * to play. The real cost is a fraction of this; the headroom is for a slow CI machine.
      */

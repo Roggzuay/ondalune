@@ -25,9 +25,19 @@ Ondalune only connects to:
 | `api.github.com` | At most once a day in the background (only with a network and enough battery), to check for a newer Ondalune, and when you tap **Check now**. Turn the daily check off in **Settings → Updates → Check automatically**. Builds from F-Droid and Google Play never make this check | A standard request for the latest release. Like any website, GitHub sees your IP address |
 | `github.com` (release downloads) | Only when you tap **Update** in the update notice | A standard download of the new version's APK. Not in F-Droid or Google Play builds |
 | Cast devices on your own network | Only in the GitHub build, and only once **Settings → Music sources → Play on another device** is switched on. Off (the default) Ondalune never starts the Cast framework and nothing looks for a device | Google Play services looks around your network for Cast devices and, when you pick one, hands it the address your server streams the song from. The device fetches the song itself; Ondalune sends it no audio and no account details. Not in the F-Droid build, which has no Cast code at all |
-| `api.listenbrainz.org` | Only when you have put a ListenBrainz token into **Settings → Music sources → ListenBrainz**. Nothing is sent before that, and the switch stops it without forgetting the token | The playing song's title, artist, album, length and track number, and the time a play finished. Nothing about you beyond the token that says which account it is. A play that could not be sent is kept on your phone and goes with the next one |
+| `api.listenbrainz.org` | Only when you have put a ListenBrainz token into **Settings → Music sources → ListenBrainz**. Nothing is sent before that, and the switch stops it without forgetting the token | The playing song's title, artist, album, length and track number, the time a play finished, and the name "Ondalune" as the player it came from. Nothing about you beyond the token that says which account it is. A play that could not be sent is kept on your phone and goes with the next one |
 | `ko-fi.com` | Only if you tap **Buy me a coffee** | Nothing beyond opening the page in your browser |
 | Image hosts your server links to | When showing artist photos or covers whose address your server returns (Navidrome, for example, may link artist photos on Last.fm or Wikimedia) | An ordinary image request |
+
+## The backup file
+
+**Settings → Backup** writes one file, wherever you pick, holding your settings, your equalizer
+curves, the sounds you have saved for songs and albums, and the song details you have corrected.
+It is the only thing Ondalune writes outside its own private storage.
+
+It does not contain your passwords, your usernames or your servers' addresses. Anything belonging
+to a server travels under a one-way hash of that server's address and username, so another phone
+with the same server matches it without the file ever naming where your music lives.
 
 ## Data stored on your phone
 

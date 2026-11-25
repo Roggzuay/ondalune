@@ -364,6 +364,9 @@ interface OndaluneDao {
 
     @Query("DELETE FROM play_history")
     suspend fun clearPlayHistory()
+
+    @Query("DELETE FROM play_history WHERE serverId = :serverId")
+    suspend fun deletePlayHistoryForServer(serverId: Long)
 }
 
 @Database(

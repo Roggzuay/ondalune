@@ -62,9 +62,17 @@ class SoundController(
         if (clean.isEmpty()) return
         val bands = _customEqBands.value.map { it.coerceIn(-10f, 10f) }
         val kept = _savedEqCurves.value.filterNot { it.name.equals(clean, ignoreCase = true) }
-        _savedEqCurves.value = (kept + EqCurve(clean, bands)).takeLast(MaxSavedCurves)
+        val all = kept + EqCurve(clean, bands)
+        val dropped = all.size - MaxSavedCurves
+        _savedEqCurves.value = all.takeLast(MaxSavedCurves)
         persistSavedCurves()
-        showBanner("Saved the \"$clean\" curve")
+        showBanner(
+            if (dropped > 0) {
+                "Saved the \"$clean\" curve; \"${all.first().name}\" was let go to make room"
+            } else {
+                "Saved the \"$clean\" curve"
+            }
+        )
     }
 
     fun applyEqCurve(curve: EqCurve) {
@@ -75,7 +83,8 @@ class SoundController(
     }
 
     fun deleteEqCurve(name: String) {
-        _savedEqCurves.value = _savedEqCurves.value.filterNot { it.name == name }
+        // Saving matches names without case, so forgetting must too, or a curve becomes undeletable.
+        _savedEqCurves.value = _savedEqCurves.value.filterNot { it.name.equals(name, ignoreCase = true) }
         persistSavedCurves()
     }
 

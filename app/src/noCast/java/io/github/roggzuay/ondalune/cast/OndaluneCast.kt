@@ -19,6 +19,7 @@ class NoCastGateway : CastGateway {
     override var enabled: Boolean = false
     override val state: StateFlow<CastState> = MutableStateFlow(CastState())
     override fun attach(activity: Activity) = Unit
+    override fun detach() = Unit
     override fun load(
         track: SubsonicTrack,
         streamUrl: String,
@@ -37,6 +38,13 @@ class NoCastGateway : CastGateway {
 }
 
 fun createCastGateway(context: Context): CastGateway = NoCastGateway()
+
+/**
+ * Declared so this file and `src/cast` really do define the same names. Nothing here calls it;
+ * it exists so that the day something in src/main needs it, the build without Cast still
+ * compiles rather than breaking for a reason nobody would guess.
+ */
+fun castDialogContext(context: Context): Context = context
 
 /** No Cast SDK, so no button: the top bar simply has one fewer thing in it. */
 @Composable

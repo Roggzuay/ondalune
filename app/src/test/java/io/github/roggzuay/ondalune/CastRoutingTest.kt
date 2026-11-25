@@ -61,6 +61,7 @@ class CastRoutingTest {
         var seekedTo: Long? = null
         var position = 0L
         override fun attach(activity: android.app.Activity) = Unit
+        override fun detach() = Unit
         override fun load(
             track: SubsonicTrack,
             streamUrl: String,

@@ -121,6 +121,23 @@ class VinylModeTest {
         assertTrue("drop=${rms(drop)} after=${rms(after)}", rms(drop) > rms(after) * 1.3f)
     }
 
+    /**
+     * Both real callers ask for the needle before the first buffer of that mode: switching vinyl
+     * on mid-song, and starting a song. It used to be a countdown set from a length that is only
+     * worked out once a buffer has been seen, so on the very first play there was no landing at
+     * all --- only the pop.
+     */
+    @Test
+    fun `the needle lands on the very first buffer, before any has been processed`() {
+        val d = dsp(VinylMode.WORN)
+        d.dropNeedle()
+        val first = silence(2048)
+        d.process(first, 2048, rate)
+        val later = silence(2048)
+        repeat(8) { d.process(later, 2048, rate) }
+        assertTrue("first=${rms(first)} later=${rms(later)}", rms(first) > rms(later) * 1.3f)
+    }
+
     @Test
     fun `the needle does nothing when vinyl is off`() {
         val d = dsp(VinylMode.OFF)

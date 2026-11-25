@@ -27,6 +27,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Unit tests, lint and debug build
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-configuration-cache
+      # The F-Droid build compiles Cast out entirely and swaps two source sets. Nothing else here
+      # ever compiles it, so a change that only builds with Cast would otherwise reach a release.
+      - name: Unit tests, lint and debug build without Cast (the F-Droid build)
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug -Pondalune.cast=false --no-configuration-cache
       - name: Keep the lint report when lint fails
         if: failure()
         uses: actions/upload-artifact@v4

@@ -187,7 +187,15 @@ class SoundProfileController(
     /** Forgets a saved sound. */
     fun forget(serverId: Long, profileScope: SoundProfileScope, scopeId: String) {
         scope.launch { dao.deleteSoundProfile(serverId, profileScope.name, scopeId) }
-        if (_offer.value?.trackId != null && scopeId == playing?.id) _offer.value = null
+        // The offer on screen is for the playing song. An album's sound is keyed by the album, so
+        // comparing it with the track id left a strip offering a sound that no longer existed.
+        val playingThis = playing?.let { track ->
+            when (profileScope) {
+                SoundProfileScope.TRACK -> track.id == scopeId
+                SoundProfileScope.ALBUM -> track.albumId == scopeId
+            } && track.serverId == serverId
+        } ?: false
+        if (playingThis) _offer.value = null
     }
 
     /**

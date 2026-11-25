@@ -156,6 +156,17 @@ class GoogleCastGateway(context: Context) : CastGateway {
         ctx.sessionManager.currentCastSession?.let(::attachSession)
     }
 
+    /**
+     * Gives the Cast framework back. The session listener is removed and the reference dropped, so
+     * a later attach starts clean. Play services keeps its own CastContext for the process --- that
+     * is not ours to end --- but nothing of Ondalune's is listening to it any more.
+     */
+    override fun detach() {
+        castContext?.sessionManager?.removeSessionManagerListener(sessionListener, CastSession::class.java)
+        castContext = null
+        detachSession()
+    }
+
     override fun load(
         track: SubsonicTrack,
         streamUrl: String,

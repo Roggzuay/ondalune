@@ -12,14 +12,14 @@ import org.json.JSONObject
  * What goes in: every setting, your equalizer curves, the sounds you have saved for songs and
  * albums, and the song details you have corrected.
  *
- * What never goes in: your servers, your usernames and above all your passwords. Those are
- * encrypted on this phone with a key that cannot leave it, and a backup file is an ordinary file
- * that can be copied anywhere. Saying this plainly is better than a file that looks complete and
- * quietly carries a password into a cloud drive.
+ * What never goes in: your passwords, your usernames, or your servers' addresses. A backup file
+ * is an ordinary file that gets copied into cloud drives, and a file naming the machine your
+ * music lives on is both identifying and a map for anyone who finds it.
  *
- * Because servers are not in the file, everything that belongs to one is keyed by the server's own
- * address instead of the row number it happens to have on this phone. Restore onto a phone where
- * the same server has been added and it lands on the right songs.
+ * Everything that belongs to a server therefore travels under a one-way hash of that server's
+ * address and username rather than the row number it happens to have on this phone. Two phones
+ * with the same server work the same name out independently, so a restore lands on the right
+ * songs without the file ever saying where they are.
  */
 object OndaluneBackup {
     const val Format = "ondalune-backup"

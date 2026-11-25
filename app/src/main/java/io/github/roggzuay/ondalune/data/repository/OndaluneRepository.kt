@@ -442,7 +442,14 @@ class OndaluneRepository(
         return true
     }
 
+    /**
+     * Removes a server and everything that only made sense alongside it: its saved sounds and the
+     * plays Ondalune wrote down for it. Left behind, those rows belong to nothing and keep
+     * turning up in the listening statistics.
+     */
     suspend fun deleteServer(serverId: Long) {
+        dao.deleteSoundProfilesForServer(serverId)
+        dao.deletePlayHistoryForServer(serverId)
         dao.deleteServer(serverId)
     }
 

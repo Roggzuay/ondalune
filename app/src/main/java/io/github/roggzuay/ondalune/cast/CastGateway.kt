@@ -33,8 +33,15 @@ interface CastGateway {
 
     val state: StateFlow<CastState>
 
-    /** Starts the Cast framework. Called once, from the activity, and only when [supported]. */
+    /** Starts the Cast framework. Called from the activity, and only when [supported] and on. */
     fun attach(activity: android.app.Activity)
+
+    /**
+     * Lets go of the Cast framework again, when casting is switched off. Without this a session
+     * listener outlives the setting and the framework stays up for the life of the process, which
+     * is not what "off" says.
+     */
+    fun detach()
 
     /**
      * Hands a song to the connected device.

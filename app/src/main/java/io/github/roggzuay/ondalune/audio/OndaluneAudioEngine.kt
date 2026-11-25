@@ -988,12 +988,15 @@ class OndaluneAudioEngine(
     /** The record under the music (see [OndaluneVinylDsp]). Off unless you ask for it. */
     private val vinyl = OndaluneVinylDsp()
 
+    /**
+     * Switching the record on or off. Only the mode is set from here: it is volatile, and the DSP
+     * clears itself down on the first buffer it sees with the mode off. Reaching into its filter
+     * state from this thread would be a write under the audio thread's feet for no gain.
+     */
     var vinylMode: VinylMode
         get() = vinyl.mode
         set(value) {
-            val changed = vinyl.mode != value
             vinyl.mode = value
-            if (changed && value == VinylMode.OFF) vinyl.reset()
         }
 
     /** The needle lands. Called when a song starts, so vinyl mode starts the way a record does. */
@@ -1086,9 +1089,11 @@ class OndaluneAudioEngine(
     @Volatile private var levelMid = 0f
     @Volatile private var levelHigh = 0f
 
-    // Filter state, kept between buffers. Audio thread only.
+    // Filter state, kept between buffers. Audio thread only: nothing else may write these, so a
+    // request to clear them is a flag the audio thread picks up on its next pass.
     private var lvLow = 0f
     private var lvMid = 0f
+    @Volatile private var lvClearRequested = false
     private var lvRate = 0
     private var lvCoefLow = 0f
     private var lvCoefMid = 0f
@@ -1114,6 +1119,15 @@ class OndaluneAudioEngine(
      * rises quickly and falls slowly, which is what reads as movement rather than flicker.
      */
     internal fun measureLevels(samples: FloatArray, frameCount: Int, sampleRate: Int) {
+        // The same guard the rest of this pipeline uses. A decoder reporting more frames than the
+        // buffer holds would otherwise walk off the end, on the audio thread, in a release build.
+        val safeFrames = minOf(frameCount, samples.size / 2)
+        if (safeFrames <= 0 || sampleRate <= 0) return
+        if (lvClearRequested) {
+            lvClearRequested = false
+            lvLow = 0f
+            lvMid = 0f
+        }
         val step = 4
         val rate = (sampleRate / step).coerceAtLeast(1)
         if (rate != lvRate) {
@@ -1125,7 +1139,7 @@ class OndaluneAudioEngine(
         var peakMid = 0f
         var peakHigh = 0f
         var frame = 0
-        while (frame < frameCount) {
+        while (frame < safeFrames) {
             val i = frame * 2
             val mono = (samples[i] + samples[i + 1]) * 0.5f
             lvLow += lvCoefLow * (mono - lvLow)
@@ -1149,13 +1163,16 @@ class OndaluneAudioEngine(
         return if (next.isNaN()) 0f else next
     }
 
-    /** Levels settle back to nothing when the music stops, so the picture comes to rest. */
+    /**
+     * Levels settle back to nothing when the music stops, so the picture comes to rest. The three
+     * published bands are volatile and safe to write from here; the filter state behind them is
+     * the audio thread's, so it is asked to clear rather than written to from under it.
+     */
     internal fun clearAudioLevels() {
         levelLow = 0f
         levelMid = 0f
         levelHigh = 0f
-        lvLow = 0f
-        lvMid = 0f
+        lvClearRequested = true
     }
 
     /**

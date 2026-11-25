@@ -110,6 +110,9 @@ class RoutedPlaybackEngine(
         if (!casting) {
             castingTrack = null
             local.play(track, server, eq)
+            // The local engine starts from the beginning; honour a position if one was asked for.
+            if (startMs > 0L) local.seekTo(startMs)
+            if (!autoplay) local.pause()
             return
         }
         if (track.isOnDevice) {
@@ -165,8 +168,9 @@ class RoutedPlaybackEngine(
         if (ticker?.isActive == true) return
         ticker = scope.launch {
             while (true) {
-                val at = cast.positionMs()
-                if (at > 0L) _positionMs.value = at
+                // Zero is a real position: the start of a song, or a seek back to it. Skipping
+                // it left the progress bar showing the last song's place.
+                _positionMs.value = cast.positionMs().coerceAtLeast(0L)
                 _isPlaying.value = cast.state.value.playing
                 delay(PollMs)
             }

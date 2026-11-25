@@ -665,7 +665,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             window = window,
             nowMs = System.currentTimeMillis()
         )
-    }.stateIn(
+        // Hundreds of plays against a whole library, on every sync and every counted play: not
+        // work for the thread that draws.
+    }.flowOn(Dispatchers.Default).stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         io.github.roggzuay.ondalune.data.model.ListeningStats(io.github.roggzuay.ondalune.data.model.StatsWindow.THIS_YEAR)
@@ -675,6 +677,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     val libraryTotals: StateFlow<io.github.roggzuay.ondalune.data.model.LibraryTotals> =
         allServerTracks
             .map { io.github.roggzuay.ondalune.data.model.libraryTotals(it) }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), io.github.roggzuay.ondalune.data.model.LibraryTotals())
 
     /** Saved sounds matched to the songs and albums they belong to. */
@@ -1591,7 +1594,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun setCastEnabled(enabled: Boolean) {
         settings.setCastEnabled(enabled)
         cast.enabled = enabled
-        if (!enabled) cast.stop() else _statusBanner.value = "Looking for devices on your network"
+        if (!enabled) {
+            cast.stop()
+            cast.detach()
+        } else {
+            _statusBanner.value = "Looking for devices on your network"
+        }
     }
 
     /** Vinyl mode: kept in settings, handed to the engine. */

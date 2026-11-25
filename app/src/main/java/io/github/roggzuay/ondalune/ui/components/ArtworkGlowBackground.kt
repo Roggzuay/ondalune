@@ -100,7 +100,15 @@ fun PlayerBackdrop(
 
     LaunchedEffect(animate, playbackSpeed, reactive) {
         if (!animate) {
-            // Coming to rest: the bands fall away rather than snapping flat.
+            // Coming to rest: the bands fall away over about a third of a second rather than
+            // snapping flat, which would read as the picture being switched off.
+            while (low.floatValue > 0.001f || mid.floatValue > 0.001f || high.floatValue > 0.001f) {
+                withFrameNanos {
+                    low.floatValue *= RestingFall
+                    mid.floatValue *= RestingFall
+                    high.floatValue *= RestingFall
+                }
+            }
             low.floatValue = 0f
             mid.floatValue = 0f
             high.floatValue = 0f
@@ -189,6 +197,9 @@ fun PlayerBackdrop(
 }
 
 private val CoverBox = 200.dp
+
+/** How much of what is left falls away each frame once the music stops. */
+private const val RestingFall = 0.90f
 
 /** How much of a new level reading is taken each frame, so the picture glides instead of jumping. */
 private const val EyeSmoothing = 0.18f

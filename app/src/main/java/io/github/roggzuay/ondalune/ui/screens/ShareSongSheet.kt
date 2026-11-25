@@ -34,7 +34,9 @@ import io.github.roggzuay.ondalune.data.model.SubsonicTrack
 import io.github.roggzuay.ondalune.ui.components.NowPlayingCard
 import io.github.roggzuay.ondalune.ui.components.writeShareableCard
 import io.github.roggzuay.ondalune.ui.theme.ArtworkPalette
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Share what is playing, as a picture in Ondalune's own colours.
@@ -123,8 +125,11 @@ fun ShareSongSheet(
                         busy = true
                         scope.launch {
                             val bitmap = runCatching { layer.toImageBitmap().asAndroidBitmap() }.getOrNull()
+                            // Compressing a PNG and clearing a folder belong off the thread that draws.
                             val uri = bitmap?.let {
-                                writeShareableCard(context, it, "${track.artist} - ${track.title}")
+                                withContext(Dispatchers.IO) {
+                                    writeShareableCard(context, it, "${track.artist} - ${track.title}")
+                                }
                             }
                             busy = false
                             if (uri == null) {

@@ -61,12 +61,22 @@ class OndaluneVinylDsp(seed: Long = 0x5EEDL) {
     private var dropFrames = 0
     private var dropLeft = 0
 
-    /** The needle lands: one pop, then the groove settling in. Called when a song starts. */
+    /**
+     * The needle has been asked to land. It is a flag rather than a countdown because both
+     * callers ask before the first buffer of a mode is processed — switching vinyl on, and
+     * starting a song — and until then there is no sample rate, so there is no length to count.
+     * Writing it from another thread is safe; acting on it is the audio thread's business.
+     */
+    @Volatile private var needleQueued = false
+
+    /**
+     * The needle lands: one pop, then the groove settling in. Called when a song starts, and when
+     * vinyl is switched on mid-song. Both of those happen before the first buffer of that mode,
+     * so this only asks; [process] does it.
+     */
     fun dropNeedle() {
         if (mode == VinylMode.OFF) return
-        dropLeft = dropFrames
-        crackle = NeedlePop
-        rng = rng xor 0x9E3779B97F4A7C15UL.toLong()
+        needleQueued = true
     }
 
     /** Lifts the needle: clears the delay line and the noise so nothing carries into silence. */
@@ -79,6 +89,7 @@ class OndaluneVinylDsp(seed: Long = 0x5EEDL) {
         noiseLp = 0f; noiseHp = 0f
         crackle = 0f
         dropLeft = 0
+        needleQueued = false
         java.util.Arrays.fill(delayL, 0f)
         java.util.Arrays.fill(delayR, 0f)
     }
@@ -96,6 +107,12 @@ class OndaluneVinylDsp(seed: Long = 0x5EEDL) {
         val frames = minOf(frameCount, samples.size / 2)
         if (frames <= 0 || sampleRate <= 0) return
         if (wanted != active || sampleRate != rate) retune(wanted, sampleRate)
+        if (needleQueued) {
+            needleQueued = false
+            dropLeft = dropFrames
+            crackle = NeedlePop
+            rng = rng xor 0x9E3779B97F4A7C15UL.toLong()
+        }
 
         for (i in 0 until frames) {
             var left = samples[i * 2]
