@@ -79,14 +79,30 @@ fun yourMix(
         t to random.nextDouble().pow(1.0 / w)
     }.sortedByDescending { it.second }.map { it.first }
 
-    val artists = pool.mapTo(HashSet()) { it.artist.lowercase() }.size
+    return spreadAcross(keyed, count, random)
+}
+
+/**
+ * Takes [count] songs off an already-ordered list without letting one artist or album run away
+ * with the mix, then spreads what is left so two songs by the same artist are not side by side.
+ *
+ * The order coming in is the mix's opinion; this only stops that opinion from being monotonous.
+ * Shared by [yourMix] and by mixes made to order, so both spread out the same way.
+ */
+internal fun spreadAcross(
+    ordered: List<SubsonicTrack>,
+    count: Int,
+    random: Random = Random
+): List<SubsonicTrack> {
+    if (ordered.isEmpty() || count <= 0) return emptyList()
+    val artists = ordered.mapTo(HashSet()) { it.artist.lowercase() }.size.coerceAtLeast(1)
     val artistCap = maxOf((count + artists - 1) / artists, (count * 0.1).toInt(), 2)
     val albumCap = maxOf(artistCap / 2, 2)
     val perArtist = HashMap<String, Int>()
     val perAlbum = HashMap<String, Int>()
     val picks = ArrayList<SubsonicTrack>(count)
     val skipped = ArrayList<SubsonicTrack>()
-    for (t in keyed) {
+    for (t in ordered) {
         if (picks.size == count) break
         val a = t.artist.lowercase()
         val al = t.albumId.ifBlank { "${t.artist}/${t.album}" }

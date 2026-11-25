@@ -220,6 +220,8 @@ fun ListenNowHomeScreen(
     /** Pass a state held above the tab's content to come back to the same scroll position. */
     listState: LazyListState = rememberLazyListState(),
     onPlayMix: (LibraryMix) -> Unit = {},
+    /** Opens the sheet where a mix is made to order. */
+    onMakeAMix: () -> Unit = {},
     /** Your Mix launch, read by the shell to draw the zoom over its bars too. */
     heroLaunch: HeroLaunch = remember { HeroLaunch() }
 ) {
@@ -367,7 +369,7 @@ fun ListenNowHomeScreen(
                     YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onNewMix = onNewYourMix, onOpenPlayer = onOpenPlayerFromMix, heroLaunch = heroLaunch)
                 }
                 HomeSection.MIXES -> if (shelves.mixes.isNotEmpty()) item(key = "mixes") {
-                    MixesShelf(shelves.mixes, onPlayMix)
+                    MixesShelf(shelves.mixes, onPlayMix, onMakeAMix)
                 }
                 HomeSection.QUICK_ACTIONS -> item(key = "quick_actions") {
                     HomeQuickActions(onOpenShelf = onOpenShelf, onShuffle = { onStartSmartShuffle(null) })
@@ -553,7 +555,13 @@ internal fun ScrollToTopOnSignal(state: LazyListState, signal: Int) {
 }
 
 @Composable
-internal fun ShelfHeader(title: String, onMore: (() -> Unit)?, onPlayAll: (() -> Unit)? = null) {
+internal fun ShelfHeader(
+    title: String,
+    onMore: (() -> Unit)?,
+    onPlayAll: (() -> Unit)? = null,
+    /** Overrides "See all" where the link does something else, like opening the mix dials. */
+    moreLabel: String? = null
+) {
     val spec = LocalStyleSpec.current
     Row(
         modifier = Modifier
@@ -589,7 +597,7 @@ internal fun ShelfHeader(title: String, onMore: (() -> Unit)?, onPlayAll: (() ->
             shapes = ButtonDefaults.shapes(),
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
             modifier = Modifier.testTag("shelf_more_${title.lowercase().replace(' ', '_')}")
-        ) { Text(if (spec.eyebrows) "See all" else "More") }
+        ) { Text(moreLabel ?: if (spec.eyebrows) "See all" else "More") }
     }
 }
 

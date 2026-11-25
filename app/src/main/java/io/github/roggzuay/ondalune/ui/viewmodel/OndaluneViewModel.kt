@@ -561,6 +561,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val _isSoundProfilesOpen = MutableStateFlow(false)
     val isSoundProfilesOpen: StateFlow<Boolean> = _isSoundProfilesOpen.asStateFlow()
 
+    private val _mixSeedOpen = MutableStateFlow(false)
+
+    /** The sheet where a mix is made to order. */
+    val isMixSeedOpen: StateFlow<Boolean> = _mixSeedOpen.asStateFlow()
+
     private val _shareSongOpen = MutableStateFlow(false)
 
     /** The share sheet for whatever is playing. */
@@ -1597,6 +1602,40 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun setSoundProfilesOpen(open: Boolean) {
         _isSoundProfilesOpen.value = open
+    }
+
+    fun setMixSeedOpen(open: Boolean) {
+        _mixSeedOpen.value = open
+    }
+
+    /** The decades the library actually has songs from, newest first. */
+    val libraryDecades: StateFlow<List<Int>> = allServerTracks
+        .map { list ->
+            list.asSequence()
+                .map { it.year }
+                .filter { it in 1900..2100 }
+                .map { (it / 10) * 10 }
+                .distinct()
+                .sortedDescending()
+                .toList()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Plays a mix made from the dials. */
+    fun playMixSeed(seed: io.github.roggzuay.ondalune.data.model.MixSeed) {
+        val picks = io.github.roggzuay.ondalune.data.model.mixFromSeed(
+            library = allServerTracks.value,
+            seed = seed,
+            recentIds = _recentTrackIds.value,
+            features = songFeatures.value
+        )
+        if (picks.isEmpty()) {
+            _statusBanner.value = "Nothing in your library fits that"
+            return
+        }
+        _mixSeedOpen.value = false
+        _statusBanner.value = seed.title
+        playback.playInOrder(picks)
     }
 
     /** Says something on the status banner, for parts of the UI that have no other way to. */

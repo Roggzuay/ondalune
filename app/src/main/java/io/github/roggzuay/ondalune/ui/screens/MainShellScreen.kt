@@ -370,6 +370,9 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
     val castState by viewModel.cast.state.collectAsStateWithLifecycle()
     val shareSongOpen by viewModel.isShareSongOpen.collectAsStateWithLifecycle()
+    val mixSeedOpen by viewModel.isMixSeedOpen.collectAsStateWithLifecycle()
+    val libraryDecades by viewModel.libraryDecades.collectAsStateWithLifecycle()
+    val libraryGenres by viewModel.genres.collectAsStateWithLifecycle()
     val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
     val listeningStatsOpen by viewModel.isListeningStatsOpen.collectAsStateWithLifecycle()
     val listeningStats by viewModel.listeningStats.collectAsStateWithLifecycle()
@@ -1484,6 +1487,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onClearHistory = viewModel::clearSoundHistory,
                         onOpenListeningStats = { viewModel.setListeningStatsOpen(true) },
                         onClose = { viewModel.setSoundProfilesOpen(false) }
+                    )
+                }
+
+                // A mix made to order.
+                AnimatedVisibility(
+                    visible = mixSeedOpen,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeOut()
+                ) {
+                    MixSeedSheet(
+                        decades = libraryDecades,
+                        genres = libraryGenres.take(14).map { it.name },
+                        energyUnavailable = !customizationSettings.songAnalysis,
+                        onPlay = viewModel::playMixSeed,
+                        onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
+                        onClose = { viewModel.setMixSeedOpen(false) }
                     )
                 }
 

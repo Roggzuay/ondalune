@@ -833,10 +833,11 @@ fun HomeLayoutSheet(
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit) {
+fun MixesShelf(mixes: List<LibraryMix>, onPlay: (LibraryMix) -> Unit, onMakeAMix: () -> Unit = {}) {
     val hold = LocalHold.current
     Column {
-        ShelfHeader("Mixes for you", onMore = null)
+        // "Make one" opens the dials, for when none of the ready-made mixes is what you want.
+        ShelfHeader("Mixes for you", onMore = onMakeAMix, moreLabel = "Make one")
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
