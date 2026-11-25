@@ -561,6 +561,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val _isSoundProfilesOpen = MutableStateFlow(false)
     val isSoundProfilesOpen: StateFlow<Boolean> = _isSoundProfilesOpen.asStateFlow()
 
+    private val _shareSongOpen = MutableStateFlow(false)
+
+    /** The share sheet for whatever is playing. */
+    val isShareSongOpen: StateFlow<Boolean> = _shareSongOpen.asStateFlow()
+
     private val _isListeningStatsOpen = MutableStateFlow(false)
     val isListeningStatsOpen: StateFlow<Boolean> = _isListeningStatsOpen.asStateFlow()
 
@@ -1592,6 +1597,26 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun setSoundProfilesOpen(open: Boolean) {
         _isSoundProfilesOpen.value = open
+    }
+
+    /** Says something on the status banner, for parts of the UI that have no other way to. */
+    fun showBanner(message: String) {
+        _statusBanner.value = message
+    }
+
+    /**
+     * The line of the song playing right now, for the shareable card. Empty when the song has no
+     * timed lyrics, or when nothing has reached a line yet.
+     */
+    fun currentLyricLine(): String {
+        val lines = lyrics.currentLyrics.value
+        if (lines.isEmpty()) return ""
+        val at = audiblePositionMs()
+        return lines.lastOrNull { it.timeMs in 0..at }?.text.orEmpty()
+    }
+
+    fun setShareSongOpen(open: Boolean) {
+        _shareSongOpen.value = open && playback.currentTrack.value != null
     }
 
     fun setListeningStatsOpen(open: Boolean) {

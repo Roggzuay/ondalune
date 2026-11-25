@@ -369,6 +369,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val pendingSoundSave by viewModel.sound.pendingSave.collectAsStateWithLifecycle()
     val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
     val castState by viewModel.cast.state.collectAsStateWithLifecycle()
+    val shareSongOpen by viewModel.isShareSongOpen.collectAsStateWithLifecycle()
     val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
     val listeningStatsOpen by viewModel.isListeningStatsOpen.collectAsStateWithLifecycle()
     val listeningStats by viewModel.listeningStats.collectAsStateWithLifecycle()
@@ -1331,6 +1332,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 readAudioLevels = viewModel::readAudioLevels,
                                 onWantAudioLevels = viewModel::setAudioLevelsWanted,
+                                onShareSong = { viewModel.setShareSongOpen(true) },
                                 castSupported = viewModel.cast.supported,
                                 castState = castState,
                                 soundOffer = soundOffer,
@@ -1482,6 +1484,28 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onClearHistory = viewModel::clearSoundHistory,
                         onOpenListeningStats = { viewModel.setListeningStatsOpen(true) },
                         onClose = { viewModel.setSoundProfilesOpen(false) }
+                    )
+                }
+
+                // A picture of what is playing, in the song's own colours.
+                val sharing = currentTrack
+                AnimatedVisibility(
+                    visible = shareSongOpen && sharing != null,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeOut()
+                ) {
+                    if (sharing != null) ShareSongSheet(
+                        track = sharing,
+                        palette = artworkPalette,
+                        lyricLine = remember(sharing?.id, shareSongOpen) { viewModel.currentLyricLine() },
+                        onClose = { viewModel.setShareSongOpen(false) },
+                        onFailed = { viewModel.showBanner(it) }
                     )
                 }
 

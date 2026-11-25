@@ -64,6 +64,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.IosShare
 import io.github.roggzuay.ondalune.cast.CastButton
 import io.github.roggzuay.ondalune.ui.viewmodel.SoundOffer
 import androidx.compose.foundation.layout.Arrangement
@@ -517,6 +518,8 @@ fun NowPlayingStudioOverlay(
     showSpeedResetHint: Boolean = false,
     onSpeedResetHintShown: () -> Unit = {},
     onOpenSleepTimerSheet: () -> Unit,
+    /** Make a picture of this song to share. */
+    onShareSong: () -> Unit = {},
     /** Reads the three bands of what is playing, for the Reactive backdrop. */
     readAudioLevels: (FloatArray) -> Unit = {},
     onWantAudioLevels: (Boolean) -> Unit = {},
@@ -800,6 +803,7 @@ fun NowPlayingStudioOverlay(
                         onCycleRepeat = onCycleRepeat,
                         onToggleStar = onToggleStar,
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                        onShareSong = onShareSong,
                         castState = castState,
                         soundOffer = soundOffer,
                         onApplySoundOffer = onApplySoundOffer,
@@ -1536,6 +1540,8 @@ private fun PlayerControls(
     onCycleRepeat: () -> Unit,
     onToggleStar: () -> Unit,
     onOpenSleepTimerSheet: () -> Unit,
+    /** Make a picture of this song to share. */
+    onShareSong: () -> Unit = {},
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
     onTitleRowBottom: (Int) -> Unit,
@@ -1757,6 +1763,14 @@ private fun PlayerControls(
                 icon = Icons.Filled.Bedtime,
                 description = "Sleep timer",
                 tag = "open_sleep_timer_pill",
+                modifier = Modifier.weight(1f)
+            )
+            PlayerToggle(
+                checked = false,
+                onToggle = onShareSong,
+                icon = Icons.Filled.IosShare,
+                description = "Share this song",
+                tag = "share_song_pill",
                 modifier = Modifier.weight(1f)
             )
             download?.let { PlayerDownloadButton(it, Modifier.weight(1f)) }
