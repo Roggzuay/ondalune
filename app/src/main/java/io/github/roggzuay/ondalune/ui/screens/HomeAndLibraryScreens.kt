@@ -369,13 +369,24 @@ fun ListenNowHomeScreen(
         sections.forEach { section ->
             when (section) {
                 HomeSection.YOUR_MIX -> item(key = "your_mix") {
-                    YourMixHero(shelves = shelves, onPlay = onStartSmartShuffle, onNewMix = onNewYourMix, onOpenPlayer = onOpenPlayerFromMix, heroLaunch = heroLaunch)
+                    YourMixHero(
+                        shelves = shelves,
+                        onPlay = onStartSmartShuffle,
+                        onNewMix = onNewYourMix,
+                        onMakeAMix = onMakeAMix,
+                        onOpenPlayer = onOpenPlayerFromMix,
+                        heroLaunch = heroLaunch
+                    )
                 }
                 HomeSection.MIXES -> if (shelves.mixes.isNotEmpty()) item(key = "mixes") {
                     MixesShelf(shelves.mixes, onPlayMix, onMakeAMix)
                 }
                 HomeSection.QUICK_ACTIONS -> item(key = "quick_actions") {
-                    HomeQuickActions(onOpenShelf = onOpenShelf, onShuffle = { onStartSmartShuffle(null) })
+                    HomeQuickActions(
+                        onOpenShelf = onOpenShelf,
+                        onShuffle = { onStartSmartShuffle(null) },
+                        onMakeAMix = onMakeAMix
+                    )
                 }
                 HomeSection.FEATURED -> if (featuredAlbum != null) item(key = "featured") {
                     FeaturedAlbumHeroCard(

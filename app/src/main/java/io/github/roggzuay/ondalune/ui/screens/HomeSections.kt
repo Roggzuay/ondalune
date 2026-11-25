@@ -173,6 +173,8 @@ fun YourMixHero(
     onPlay: (startAfter: Job?) -> Job?,
     /** Deals and plays a new mix, without opening the player. */
     onNewMix: () -> Unit,
+    /** Opens the dials that make a mix to order. */
+    onMakeAMix: () -> Unit,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
     /** Mirrors the launch for the shell, which draws the zoom over its bars as well. */
@@ -279,17 +281,35 @@ fun YourMixHero(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(if (wide) left - 24.dp else w * 0.55f)
             )
-            TextButton(
-                onClick = {
-                    haptics?.performSubtleTick()
-                    onNewMix()
-                },
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                modifier = Modifier.testTag("your_mix_new_mix")
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("New mix", style = MaterialTheme.typography.labelLarge)
+            // "Make one" sits beside "New mix" because this hero is the one row always on Home.
+            // The Mixes shelf hides itself on a library that yields no ready-made mixes, and the
+            // Quick actions row is not in the default layout, so neither can be the only door.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = {
+                        haptics?.performSubtleTick()
+                        onNewMix()
+                    },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("your_mix_new_mix")
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("New mix", style = MaterialTheme.typography.labelLarge)
+                }
+                Spacer(Modifier.width(14.dp))
+                TextButton(
+                    onClick = {
+                        haptics?.performSubtleTick()
+                        onMakeAMix()
+                    },
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("your_mix_make_a_mix")
+                ) {
+                    Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Make one", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
 
@@ -472,14 +492,24 @@ private fun MixPlayButton(
 
 /** Four round shortcuts: history, newest, top tracks and a fresh mix. */
 @Composable
-fun HomeQuickActions(onOpenShelf: (HomeShelfKind) -> Unit, onShuffle: () -> Unit) {
+fun HomeQuickActions(
+    onOpenShelf: (HomeShelfKind) -> Unit,
+    onShuffle: () -> Unit,
+    /**
+     * Opens the dials that make a mix to order. It lives here rather than only on the Mixes
+     * shelf, because that shelf hides itself when a library yields no ready-made mixes --- which
+     * is exactly the library where making one to order is most useful.
+     */
+    onMakeAMix: () -> Unit
+) {
     val scheme = MaterialTheme.colorScheme
     val actions = listOf(
         // One neutral tone for all four: colour belongs to the music, not the shortcuts.
         QuickAction("History", Icons.Filled.History, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.JUMP_BACK_IN) },
         QuickAction("Last added", Icons.Filled.LibraryAdd, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.RECENTLY_ADDED) },
         QuickAction("Most played", Icons.AutoMirrored.Filled.TrendingUp, scheme.surfaceContainerHighest, scheme.onSurfaceVariant) { onOpenShelf(HomeShelfKind.MOST_PLAYED) },
-        QuickAction("Shuffle", Icons.Filled.Shuffle, scheme.surfaceContainerHighest, scheme.onSurfaceVariant, onShuffle)
+        QuickAction("Shuffle", Icons.Filled.Shuffle, scheme.surfaceContainerHighest, scheme.onSurfaceVariant, onShuffle),
+        QuickAction("Make a mix", Icons.Filled.Tune, scheme.surfaceContainerHighest, scheme.onSurfaceVariant, onMakeAMix)
     )
     Row(
         modifier = Modifier
