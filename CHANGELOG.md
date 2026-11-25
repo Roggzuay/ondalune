@@ -10,6 +10,11 @@
 - **Vinyl**, also in Sonic Lab: a record under the music, with the groove's hiss and crackle, the platter's drift, the roll-off a cut gives both ends, and the needle landing at the start of every song. Three records to choose from.
 - **Your own equalizer curves.** Shape the five bands, give the shape a name, and it waits as a chip under the sliders.
 - **Backup**, in Settings: one file with every setting, your curves, your saved sounds and the song details you have corrected. Your servers and passwords are not in it, and the card says so.
+- **Casting.** Play on a Chromecast, a speaker or a TV, through the same device picker the rest of Android uses. The player says plainly that the sound engine stays on the phone while it is playing elsewhere, because a receiver plays the file itself. Only in the GitHub build: the Cast SDK is Google's and proprietary, so the F-Droid build cannot carry it.
+- **ListenBrainz.** An open record of what you listen to that you can take with you. Off until you put a token in, and the card says exactly what leaves the phone. A listen that could not be sent is kept and goes with the next one.
+- **Your listening**: what you played, for how long, when, and how much of it you bent out of shape. Worked out on the phone and sent nowhere. It says the date Ondalune started counting rather than overstating what it can see.
+- **Share a song** as a picture in its own colours, made on the phone and handed to Android's share sheet.
+- **Make a mix** from three dials — energy, familiarity and era — instead of the recipe the app picked. Everything in the middle is Your Mix.
 
 ### Changed
 - The equalizer bands themselves are now remembered between launches, not just the preset.
