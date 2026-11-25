@@ -1432,6 +1432,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onDeleteEqCurve = viewModel.sound::deleteEqCurve,
                         crossfeed = customizationSettings.crossfeed,
                         onSetCrossfeed = viewModel::setCrossfeed,
+                        vinylMode = customizationSettings.vinylMode,
+                        onSetVinylMode = viewModel::setVinylMode,
                         onPlayMix = viewModel::playMix,
                         onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }

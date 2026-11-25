@@ -22,6 +22,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.os.Build
 import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
+import io.github.roggzuay.ondalune.data.model.VinylMode
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.codecName
@@ -424,6 +425,8 @@ class OndaluneAudioEngine(
 
             releasePlayerInternal()
             reverbDspProcessor.clearDelayLines()
+            // Vinyl mode starts a song the way a record starts: the needle lands first.
+            vinyl.dropNeedle()
             lowStateL = 0f
             lowStateR = 0f
             highStateL = 0f
@@ -979,6 +982,24 @@ class OndaluneAudioEngine(
     private var eqHighCoeff = 0f
 
     // =========================================================================
+    // Vinyl mode
+    // =========================================================================
+
+    /** The record under the music (see [OndaluneVinylDsp]). Off unless you ask for it. */
+    private val vinyl = OndaluneVinylDsp()
+
+    var vinylMode: VinylMode
+        get() = vinyl.mode
+        set(value) {
+            val changed = vinyl.mode != value
+            vinyl.mode = value
+            if (changed && value == VinylMode.OFF) vinyl.reset()
+        }
+
+    /** The needle lands. Called when a song starts, so vinyl mode starts the way a record does. */
+    internal fun dropNeedle() = vinyl.dropNeedle()
+
+    // =========================================================================
     // Headphone crossfeed
     // =========================================================================
 
@@ -1156,6 +1177,9 @@ class OndaluneAudioEngine(
         if (safeFrames <= 0) return
 
         dsp.updateState(reverbState, sampleRate)
+
+        // A record gets to the song before the EQ and the reverb do.
+        vinyl.process(samples, safeFrames, sampleRate)
 
         val bands = if (customEqBandsDb.size >= 5 && customEqBandsDb.any { it != 0f }) {
             customEqBandsDb

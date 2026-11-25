@@ -14,6 +14,7 @@ import io.github.roggzuay.ondalune.data.model.LibraryViewMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
 import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
 import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
+import io.github.roggzuay.ondalune.data.model.VinylMode
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.SeekBarStyle
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
@@ -142,6 +143,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(crossfeed = level) }
     }
 
+    fun setVinylMode(mode: VinylMode) {
+        update { it.copy(vinylMode = mode) }
+    }
+
     fun setRescanFoldersOnLaunch(enabled: Boolean) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }
@@ -248,6 +253,9 @@ class SettingsStore(private val prefs: SharedPreferences) {
             crossfeed = runCatching {
                 CrossfeedLevel.valueOf(prefs.getString("cfg_crossfeed", defaults.crossfeed.name)!!)
             }.getOrDefault(defaults.crossfeed),
+            vinylMode = runCatching {
+                VinylMode.valueOf(prefs.getString("cfg_vinyl", defaults.vinylMode.name)!!)
+            }.getOrDefault(defaults.vinylMode),
             rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
             librarySyncHours = prefs.getInt(LibrarySyncWorker.PREF_HOURS, defaults.librarySyncHours),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
@@ -306,6 +314,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_auto_sound_profiles", s.autoApplySoundProfiles)
             .putBoolean("cfg_keep_sound_history", s.keepSoundHistory)
             .putString("cfg_crossfeed", s.crossfeed.name)
+            .putString("cfg_vinyl", s.vinylMode.name)
             .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
             .putInt(LibrarySyncWorker.PREF_HOURS, s.librarySyncHours)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)

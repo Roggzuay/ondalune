@@ -170,6 +170,7 @@ import io.github.roggzuay.ondalune.data.model.CornerStylePreset
 import io.github.roggzuay.ondalune.data.model.DockStyle
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
 import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
+import io.github.roggzuay.ondalune.data.model.VinylMode
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.PitchCorrectionMode
@@ -3155,6 +3156,44 @@ private fun CrossfeedCard(crossfeed: CrossfeedLevel, onSetCrossfeed: (CrossfeedL
 }
 
 /**
+ * Vinyl mode: a record under the music. The platter drifts, the groove hisses, the needle lands
+ * with a pop at the start of every song.
+ */
+@Composable
+private fun VinylCard(mode: VinylMode, onSetMode: (VinylMode) -> Unit) {
+    Surface(
+        shape = cornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().testTag("vinyl_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Vinyl", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = mode.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(VinylMode.entries) { level ->
+                    FilterChip(
+                        selected = level == mode,
+                        onClick = { onSetMode(level) },
+                        label = { Text(level.label) },
+                        modifier = Modifier.testTag("vinyl_${level.name}")
+                    )
+                }
+            }
+            if (mode != VinylMode.OFF) Text(
+                text = "The needle lands at the start of every song, and neither the deepest bass " +
+                    "nor the last of the top survives the cut.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
  * Full-screen Opaque Sonic Lab Modal Sheet.
  */
 @Composable
@@ -3170,6 +3209,8 @@ fun SonicLabModalOverlay(
     onDeleteEqCurve: (String) -> Unit = {},
     crossfeed: CrossfeedLevel = CrossfeedLevel.OFF,
     onSetCrossfeed: (CrossfeedLevel) -> Unit = {},
+    vinylMode: VinylMode = VinylMode.OFF,
+    onSetVinylMode: (VinylMode) -> Unit = {},
     /** The quality set for the network the phone is on now ([onMobileData]). */
     streamQuality: StreamQuality,
     onMobileData: Boolean,
@@ -3394,6 +3435,10 @@ fun SonicLabModalOverlay(
 
                 item {
                     CrossfeedCard(crossfeed = crossfeed, onSetCrossfeed = onSetCrossfeed)
+                }
+
+                item {
+                    VinylCard(mode = vinylMode, onSetMode = onSetVinylMode)
                 }
 
                 item {

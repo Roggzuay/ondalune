@@ -1019,6 +1019,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         }
         audioEngine.pauseOnHeadphoneDisconnect = settings.customization.value.pauseOnHeadphoneDisconnect
         audioEngine.crossfeed = settings.customization.value.crossfeed
+        audioEngine.vinylMode = settings.customization.value.vinylMode
         sound.applyToEngine()
 
         audioEngine.onTrackEnded = { playback.onTrackEnded() }
@@ -1427,6 +1428,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun setCrossfeed(level: io.github.roggzuay.ondalune.data.model.CrossfeedLevel) {
         settings.setCrossfeed(level)
         audioEngine.crossfeed = level
+    }
+
+    /** Vinyl mode: kept in settings, handed to the engine. */
+    fun setVinylMode(mode: io.github.roggzuay.ondalune.data.model.VinylMode) {
+        settings.setVinylMode(mode)
+        audioEngine.vinylMode = mode
+        // Switching it on mid-song drops the needle, so you hear what you just chose.
+        if (mode != io.github.roggzuay.ondalune.data.model.VinylMode.OFF) audioEngine.dropNeedle()
     }
 
     /** The three bands of what is playing, for the Reactive backdrop. */

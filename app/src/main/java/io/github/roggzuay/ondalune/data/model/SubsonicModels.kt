@@ -804,7 +804,9 @@ data class PlayerCustomizationSettings(
     /** Write down each play with the speed, pitch and reverb that were on; feeds the Home card. */
     val keepSoundHistory: Boolean = true,
     /** Headphone crossfeed; off by default (see [CrossfeedLevel]). */
-    val crossfeed: CrossfeedLevel = CrossfeedLevel.OFF
+    val crossfeed: CrossfeedLevel = CrossfeedLevel.OFF,
+    /** Vinyl mode; off by default (see [VinylMode]). */
+    val vinylMode: VinylMode = VinylMode.OFF
 )
 
 /** A streaming quality: what the server converts songs to, and the bitrate cap (RAW/0 = the original file). */
@@ -835,6 +837,34 @@ fun PlayerCustomizationSettings.streamQuality(mobile: Boolean): StreamQuality {
  */
 fun PlayerCustomizationSettings.streamQualityFor(track: SubsonicTrack, mobile: Boolean): StreamQuality =
     if (dolbyPassthrough && track.mayHoldDolby()) StreamQualities.first() else streamQuality(mobile)
+
+/**
+ * Vinyl mode: what a record does to a song. The platter drifts, the groove hisses, the needle
+ * lands with a pop, and neither the deepest bass nor the last of the top survives the cut.
+ *
+ * It is a colour, not a correction: off unless you want it.
+ */
+enum class VinylMode(
+    val label: String,
+    val description: String,
+    /** How loud the groove's hiss is. */
+    val noiseLevel: Float,
+    /** How loud a crackle is over that hiss. */
+    val crackleLevel: Float,
+    /** Roughly how many crackles a second. */
+    val cracklesPerSecond: Float,
+    /** How far the pitch drifts, in hundredths of a semitone. */
+    val wowCents: Float,
+    /** The bass is rolled off below this. */
+    val bottomHz: Float,
+    /** The top is rolled off above this. */
+    val topHz: Float
+) {
+    OFF("Off", "The song as it was mastered", 0f, 0f, 0f, 0f, 0f, 0f),
+    LIGHT("New pressing", "A clean record, barely played", 0.0016f, 0.35f, 2.5f, 3.5f, 32f, 17_000f),
+    CLASSIC("Well played", "A record that has been on the turntable a few hundred times", 0.0042f, 0.60f, 9f, 6.5f, 42f, 15_000f),
+    WORN("Charity shop", "Loved to within an inch of its life", 0.0095f, 0.95f, 24f, 11f, 55f, 12_500f)
+}
 
 /**
  * Headphone crossfeed. On headphones a hard-panned mix arrives at one ear only, which the head
