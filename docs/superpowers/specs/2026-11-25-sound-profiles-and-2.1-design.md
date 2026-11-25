@@ -1,7 +1,7 @@
 # Ondalune 2.1 — Sound Profiles, reactive artwork, and reach
 
 Date: 2026-11-25
-Status: approved to build (phases 1–3 first)
+Status: phases 1–3 built and on main; the rest is listed below with what each still needs
 
 ## Intent
 
@@ -231,21 +231,45 @@ exactly as it disables the others.
 
 Each ships on its own with tests and a green pipeline:
 
-| # | Feature | Notes |
+**Built and on main:**
+
+| # | Feature | Where |
 |---|---|---|
-| 4 | Named EQ curves | `customEqBands` already exists; add save/name/delete and a drawn curve. |
-| 5 | Headphone crossfeed | Bauer-style, in `processRealtimeStereoChunk`, one slider in Sonic Lab. |
-| 6 | Backup & restore | One JSON file: servers (without secrets), settings, playlists, overrides, profiles. |
-| 7 | ListenBrainz scrobbling | Token in the Keystore like server passwords; opt-in, listed in `PRIVACY.md`. |
-| 8 | Shareable now-playing card | Render the player's own composition to a bitmap; no new assets. |
-| 9 | Year in Ondalune / stats | Built on `play_history`; totals seeded from `playCount`, timeline honest from 2.1. |
-| 10 | Mix seeds | Energy/familiarity/era dials over the existing Your Mix machinery. |
-| 11 | Smart playlists | Saved rules re-evaluated on sync. |
-| 12 | Jukebox mode | Subsonic `jukeboxControl`; mutually exclusive with local playback. |
-| 13 | Chromecast | DSP off while casting, said plainly in the UI. |
-| 14 | Beat-matched transitions | Tempo ramp in `TransitionMixer`; needs BPM on both sides. |
-| 15 | Vinyl mode | Surface noise, wow/flutter, needle drop, in the reverb DSP chain. |
-| 16 | Wear OS companion | A new Gradle module and its own APK — a project of its own, last. |
+| 4 | Named EQ curves | `SoundController.savedEqCurves`, `SavedCurvesCard` |
+| 5 | Headphone crossfeed | `OndaluneAudioEngine.applyCrossfeed`, `CrossfeedCard` |
+| 6 | Backup & restore | `data/backup/OndaluneBackup.kt`, `BackupController`, `BackupCard` |
+| 15 | Vinyl mode | `audio/OndaluneVinylDsp.kt`, `VinylCard` |
+
+**Still to build, in this order:**
+
+| # | Feature | What it still needs |
+|---|---|---|
+| 7 | ListenBrainz scrobbling | A token in the Keystore beside the server passwords, a submit on the same trigger that already scrobbles, a queue for offline plays, and a line in `PRIVACY.md`. |
+| 9 | Year in Ondalune / stats | Aggregation over `play_history` (shipped and filling from now), totals seeded from `playCount`, and a screen. Honest from 2.1 forward; say so on the page. |
+| 8 | Shareable now-playing card | Render the player's own composition to a bitmap and hand it to `ACTION_SEND`. No new assets, no new permission. |
+| 10 | Mix seeds | Energy, familiarity and era dials over the existing Your Mix machinery and `SongFeatures`. |
+| 11 | Smart playlists | A rule type, a store, and re-evaluation on sync. The largest of these. |
+| 12 | Jukebox mode | Subsonic `jukeboxControl`. No new dependency. Mutually exclusive with local playback, and the sound engine does not apply — say so where it is turned on. |
+| 14 | Beat-matched transitions | A tempo ramp in `TransitionMixer`. Needs BPM on both sides, so it degrades to the plain crossfade when either is unknown. |
+| 16 | Wear OS companion | A new Gradle module and its own APK. A project of its own. |
+
+### 13. Casting — a decision, not a task
+
+Chromecast cannot simply be added. The Google Cast SDK is proprietary and pulls in Play
+Services, and Ondalune ships on F-Droid from a single reproducible build. Adding it would make
+the app ineligible as it stands. There are three honest ways out, and the choice is the owner's:
+
+1. **A GitHub-only build with Cast.** The build file already knows about a `playStore` property
+   and an `ondalune.selfUpdate` switch, so a third switch is a small change. Cost: two APKs that
+   are no longer the same app, and an F-Droid build without the feature.
+2. **UPnP / DLNA instead.** Fully open, no Play Services, works with most network speakers and
+   many TVs. More work than Cast, and it does not reach a Chromecast dongle.
+3. **Jukebox mode only** (#12 above). Plays out of the server's own audio output. Not casting,
+   but for a Navidrome box wired to speakers it is the same thing in practice, and it is free.
+
+Whichever is chosen, the constraint from the Approaches section stands: a Cast or UPnP receiver
+plays the file itself, so speed, pitch, reverb, EQ and crossfade stop applying while it is
+playing elsewhere. That has to be said plainly in the UI, not hidden.
 
 ## What is left to the builder
 

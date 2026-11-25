@@ -1,0 +1,57 @@
+name: Site
+
+# Publishes marketing/site to GitHub Pages. Enable it once under
+# Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'marketing/site/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the page is intact
+        run: |
+          set -euo pipefail
+          cd marketing/site
+          test -f index.html
+          # every local asset the page references must exist
+          grep -oE '(src|srcset|href)="[^"]*"' index.html \
+            | sed -E 's/^[a-z]+="//; s/"$//' \
+            | tr ',' '\n' \
+            | sed -E 's/ +[0-9]+w$//; s/^ +//; s/ +$//' \
+            | grep -vE '^(https?:|#|mailto:)' \
+            | grep -v '^$' | sort -u > /tmp/refs.txt
+          missing=0
+          while read -r f; do
+            [ -e "$f" ] || { echo "missing: $f"; missing=1; }
+          done < /tmp/refs.txt
+          test "$missing" -eq 0
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: marketing/site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
