@@ -24,11 +24,13 @@ Ondalune only connects to:
 | `en.wikipedia.org` | When an artist page has no biography from your server (or, for music on your phone, no biography yet) | The artist's name |
 | `api.github.com` | At most once a day in the background (only with a network and enough battery), to check for a newer Ondalune, and when you tap **Check now**. Turn the daily check off in **Settings → Updates → Check automatically**. Builds from F-Droid and Google Play never make this check | A standard request for the latest release. Like any website, GitHub sees your IP address |
 | `github.com` (release downloads) | Only when you tap **Update** in the update notice | A standard download of the new version's APK. Not in F-Droid or Google Play builds |
+| `api.listenbrainz.org` | Only when you have put a ListenBrainz token into **Settings → Music sources → ListenBrainz**. Nothing is sent before that, and the switch stops it without forgetting the token | The playing song's title, artist, album, length and track number, and the time a play finished. Nothing about you beyond the token that says which account it is. A play that could not be sent is kept on your phone and goes with the next one |
 | `ko-fi.com` | Only if you tap **Buy me a coffee** | Nothing beyond opening the page in your browser |
 | Image hosts your server links to | When showing artist photos or covers whose address your server returns (Navidrome, for example, may link artist photos on Last.fm or Wikimedia) | An ordinary image request |
 
 ## Data stored on your phone
 
+- **Your ListenBrainz token**, if you add one, is encrypted with the same Keystore key as your server passwords, and is never written into a backup file.
 - **Server details.** Passwords are encrypted with a key held in Android's Keystore, which never
   leaves the device. For a Jellyfin server the password is only used to sign in and isn't stored;
   the sign-in token Jellyfin returns is kept instead, encrypted the same way.

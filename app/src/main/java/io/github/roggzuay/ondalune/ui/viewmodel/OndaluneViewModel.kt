@@ -304,6 +304,14 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     /** Speed, pitch, reverb and EQ (see SoundController). */
     val sound = SoundController(prefs, audioEngine) { _statusBanner.value = it }
 
+    /** Scrobbling to ListenBrainz, when a token has been put in (see ListenBrainzController). */
+    val listenBrainz = ListenBrainzController(
+        prefs = prefs,
+        client = io.github.roggzuay.ondalune.data.network.ListenBrainzClient(),
+        scope = viewModelScope,
+        showBanner = { _statusBanner.value = it }
+    )
+
     /** Saving how Ondalune is set up, and putting it back (see BackupController). */
     val backups = BackupController(
         prefs = prefs,
@@ -900,6 +908,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             if (isPlaying.value && !isBuffering.value) heardMs += 500L
         }
         repository.recordPlay(server, track)
+        listenBrainz.submit(track)
         if (settings.customization.value.keepSoundHistory) {
             runCatching { soundProfiles.recordPlay(track) }
         }
@@ -1005,6 +1014,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             override fun serverFor(track: SubsonicTrack) = streamServerFor(track)
             override fun onTrackStarted(track: SubsonicTrack, server: SubsonicServerConfig) {
                 lyrics.loadLyricsForTrack(track)
+                listenBrainz.nowPlaying(track)
                 playCountJob?.cancel()
                 if (settings.autoScrobble) playCountJob = viewModelScope.launch { countPlayOnceHeard(track, server) }
             }

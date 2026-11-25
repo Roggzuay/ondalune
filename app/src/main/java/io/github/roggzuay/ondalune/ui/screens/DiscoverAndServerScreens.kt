@@ -447,6 +447,12 @@ fun SettingsCustomizationScreen(
     lastBackupMs: Long = 0L,
     onWriteBackup: (android.net.Uri) -> Unit = {},
     onReadBackup: (android.net.Uri) -> Unit = {},
+    /** Scrobbling to ListenBrainz: off until a token is put in. */
+    listenBrainz: io.github.roggzuay.ondalune.ui.viewmodel.ListenBrainzState =
+        io.github.roggzuay.ondalune.ui.viewmodel.ListenBrainzState(),
+    onListenBrainzSignIn: (String) -> Unit = {},
+    onListenBrainzSignOut: () -> Unit = {},
+    onSetListenBrainzEnabled: (Boolean) -> Unit = {},
     servers: List<SubsonicServerConfig>,
     activeServer: SubsonicServerConfig,
     pingDiagnostic: PingDiagnosticResult?,
@@ -1576,6 +1582,12 @@ fun SettingsCustomizationScreen(
                 testTag = "settings_section_server"
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ListenBrainzCard(
+                        state = listenBrainz,
+                        onSignIn = onListenBrainzSignIn,
+                        onSignOut = onListenBrainzSignOut,
+                        onSetEnabled = onSetListenBrainzEnabled
+                    )
                     // The server in use shows once: in the list below when it's there.
                     if (servers.none { it.id == activeServer.id }) Surface(
                         shape = cornerShape(22.dp),

@@ -374,6 +374,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundPlaysAll by viewModel.soundPlaysAll.collectAsStateWithLifecycle()
     val savedEqCurves by viewModel.sound.savedEqCurves.collectAsStateWithLifecycle()
     val lastBackupMs by viewModel.lastBackupMs.collectAsStateWithLifecycle()
+    val listenBrainz by viewModel.listenBrainz.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel.activeServer().id) { viewModel.refreshHomeShelves() }
 
     val activeServer = viewModel.activeServer()
@@ -1101,6 +1102,10 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             lastBackupMs = lastBackupMs,
                                             onWriteBackup = viewModel::writeBackup,
                                             onReadBackup = viewModel::readBackup,
+                                            listenBrainz = listenBrainz,
+                                            onListenBrainzSignIn = viewModel.listenBrainz::signIn,
+                                            onListenBrainzSignOut = viewModel.listenBrainz::signOut,
+                                            onSetListenBrainzEnabled = viewModel.listenBrainz::setEnabled,
                                             servers = servers,
                                             activeServer = activeServer,
                                             pingDiagnostic = pingDiagnostic,
