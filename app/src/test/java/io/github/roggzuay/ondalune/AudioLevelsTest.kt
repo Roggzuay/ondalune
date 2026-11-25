@@ -141,4 +141,56 @@ class AudioLevelsTest {
         val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
         assertTrue("measuring 10 minutes of audio took ${elapsedMs}ms", elapsedMs < 1_500L)
     }
+
+
+    /**
+     * The reason the backdrop looked switched off: measured straight, a band of ordinary music
+     * sits at a few per cent, so a scene driven from it moved by less than a pixel. Each band is
+     * now scaled against the loudest it has been lately, so what the picture gets is the shape of
+     * the music rather than its mastering.
+     */
+    @Test
+    fun `music that gets louder and quieter swings the band across its range`() {
+        val frames = 512
+        var at = 0
+        val seen = mutableListOf<Float>()
+        // Four loud bars and four quiet ones, twice over.
+        repeat(2) {
+            repeat(40) {
+                engine.measureLevels(tone(60.0, frames, amplitude = 0.7f, startFrame = at), frames, rate)
+                at += frames
+            }
+            engine.audioLevels(levels)
+            seen += levels[0]
+            repeat(40) {
+                engine.measureLevels(tone(60.0, frames, amplitude = 0.02f, startFrame = at), frames, rate)
+                at += frames
+            }
+            engine.audioLevels(levels)
+            seen += levels[0]
+        }
+        val swing = seen.max() - seen.min()
+        assertTrue("the low band only swung $swing across loud and quiet passages: $seen", swing > 0.5f)
+    }
+
+    @Test
+    fun `quiet music still moves the picture, instead of sitting flat`() {
+        val frames = 512
+        var at = 0
+        // A recording mastered quietly: nothing here approaches full scale.
+        repeat(80) {
+            engine.measureLevels(tone(60.0, frames, amplitude = 0.05f, startFrame = at), frames, rate)
+            at += frames
+        }
+        engine.audioLevels(levels)
+        assertTrue("a quiet record left the low band at ${levels[0]}", levels[0] > 0.5f)
+    }
+
+    @Test
+    fun `silence is not amplified into a light show`() {
+        val frames = 512
+        repeat(200) { engine.measureLevels(FloatArray(frames * 2), frames, rate) }
+        engine.audioLevels(levels)
+        assertTrue("silence read as ${levels.toList()}", levels.all { it < 0.02f })
+    }
 }

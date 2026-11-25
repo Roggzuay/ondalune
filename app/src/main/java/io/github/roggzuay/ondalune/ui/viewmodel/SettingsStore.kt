@@ -160,6 +160,14 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(castEnabled = enabled) }
     }
 
+    /**
+     * What moves behind the player. This was loaded and saved but never set by anything, so every
+     * backdrop but the default was unreachable however many of them the enum held.
+     */
+    fun setPlayerBackgroundStyle(style: PlayerBackgroundAnimationStyle) {
+        update { it.copy(playerBackgroundStyle = style) }
+    }
+
     fun setRescanFoldersOnLaunch(enabled: Boolean) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }

@@ -1097,6 +1097,9 @@ class OndaluneAudioEngine(
     private var lvRate = 0
     private var lvCoefLow = 0f
     private var lvCoefMid = 0f
+    private var refLow = LevelFloor
+    private var refMid = LevelFloor
+    private var refHigh = LevelFloor
 
     /**
      * How loud the bass, the middle and the top of the music are right now, each 0..1 and already
@@ -1127,6 +1130,9 @@ class OndaluneAudioEngine(
             lvClearRequested = false
             lvLow = 0f
             lvMid = 0f
+            refLow = LevelFloor
+            refMid = LevelFloor
+            refHigh = LevelFloor
         }
         val step = 4
         val rate = (sampleRate / step).coerceAtLeast(1)
@@ -1152,9 +1158,27 @@ class OndaluneAudioEngine(
             if (high > peakHigh) peakHigh = high
             frame += step
         }
-        levelLow = follow(levelLow, (peakLow * LevelGainLow).coerceIn(0f, 1f))
-        levelMid = follow(levelMid, (peakMid * LevelGainMid).coerceIn(0f, 1f))
-        levelHigh = follow(levelHigh, (peakHigh * LevelGainHigh).coerceIn(0f, 1f))
+        // Music is not mastered to a level a picture can be driven from: measured straight, a
+        // band sits at a few per cent and nothing visible ever happens. Each band is scaled
+        // against the loudest it has been lately, so quiet music moves as much as loud music and
+        // a record that is quiet all the way through still moves at all.
+        refLow = referenceFor(refLow, peakLow)
+        refMid = referenceFor(refMid, peakMid)
+        refHigh = referenceFor(refHigh, peakHigh)
+        levelLow = follow(levelLow, (peakLow / refLow).coerceIn(0f, 1f))
+        levelMid = follow(levelMid, (peakMid / refMid).coerceIn(0f, 1f))
+        levelHigh = follow(levelHigh, (peakHigh / refHigh).coerceIn(0f, 1f))
+    }
+
+    /**
+     * The loudest this band has been lately: it rises to meet a new peak at once and falls away
+     * over several seconds, so the picture follows the shape of the music rather than its
+     * mastering. It never falls below [LevelFloor], which is what stops silence being amplified
+     * into a full-scale light show.
+     */
+    private fun referenceFor(current: Float, peak: Float): Float {
+        val decayed = current * LevelReferenceDecay
+        return maxOf(decayed, peak, LevelFloor)
     }
 
     private fun follow(current: Float, target: Float): Float {
@@ -1752,14 +1776,23 @@ private const val QuietLineMs = 10_000L
 /** How often the AudioTrack is asked for a fresh timestamp; between asks the last one is carried forward. */
 private const val AudibleStampRefreshNanos = 250_000_000L
 
-// Backdrop levels. Music rarely peaks near full scale in any one band, so each is lifted into a
-// range the eye can read, then clamped. The envelope rises in about three buffers and falls over
-// about a dozen: movement, not flicker.
-private const val LevelGainLow = 3.2f
-private const val LevelGainMid = 5.0f
-private const val LevelGainHigh = 7.5f
+// Backdrop levels. The envelope rises in about three buffers and falls over about a dozen:
+// movement, not flicker.
 private const val LevelAttack = 0.45f
 private const val LevelRelease = 0.08f
+
+/**
+ * How much of a band's recent loudest is kept each buffer. At roughly ten milliseconds a buffer
+ * this falls away over a few seconds, which is long enough to ride out a quiet bar and short
+ * enough to follow a song getting louder.
+ */
+private const val LevelReferenceDecay = 0.9988f
+
+/**
+ * The quietest a band's reference may fall to. Without it, silence divided by silence is a full
+ * scale reading and a paused player would dance to its own noise floor.
+ */
+private const val LevelFloor = 0.02f
 
 /** Long enough for any crossfeed delay at 192 kHz, and small enough to stay in cache. */
 private const val CrossfeedLineFrames = 128

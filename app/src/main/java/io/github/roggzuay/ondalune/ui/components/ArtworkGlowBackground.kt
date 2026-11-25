@@ -162,12 +162,17 @@ fun PlayerBackdrop(
                 PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> if (!coverBlur) mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
                 // The cover's own colours, lifted off it by the top of the music. On a phone with
                 // no blur the mesh is the whole scene, so it carries the bass as well.
-                PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> mesh(
-                    colors,
-                    t,
-                    alpha = if (coverBlur) 0.22f + high.floatValue * 0.30f else 0.55f + high.floatValue * 0.25f,
-                    amplitude = (if (coverBlur) 0.10f else 0.16f) + low.floatValue * 0.18f
-                )
+                PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> {
+                    // The cover's own colours lifting off it. Wide enough to be seen: a scene
+                    // that only moves a couple of per cent is a scene nobody notices.
+                    mesh(
+                        colors,
+                        t,
+                        alpha = (if (coverBlur) 0.20f else 0.50f) + high.floatValue * 0.45f,
+                        amplitude = (if (coverBlur) 0.12f else 0.18f) + low.floatValue * 0.34f
+                    )
+                    sheen(t, colors.c4.copy(alpha = 0.3f + mid.floatValue * 0.7f))
+                }
                 PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
                     mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
                     sheen(t, colors.c4)
@@ -205,10 +210,10 @@ private const val RestingFall = 0.90f
 private const val EyeSmoothing = 0.18f
 
 /** The blurred cover grows by at most this much on the bass. */
-private const val ReactiveSwell = 0.07f
+private const val ReactiveSwell = 0.16f
 
 /** The furthest the blurred cover drifts, in density-independent pixels. */
-private const val ReactiveDriftPx = 18f
+private const val ReactiveDriftPx = 44f
 
 private class Colors(val c0: Color, val c1: Color, val c2: Color, val c3: Color, val c4: Color)
 
@@ -444,3 +449,52 @@ private fun grainTexture(): ImageBitmap {
     }
     return android.graphics.Bitmap.createBitmap(pixels, n, n, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
 }
+
+/**
+ * A still of what a backdrop does, for the picker in Appearance.
+ *
+ * It is drawn by the same code that draws the real thing, at a fixed moment, in the playing
+ * song's own colours — so a tile shows the scene you would actually get rather than an artist's
+ * impression of it. The two styles built on the blurred cover stand in with the cover's colours,
+ * since a tile this size cannot show a blurred photograph meaningfully.
+ */
+@Composable
+fun BackdropPreview(
+    style: PlayerBackgroundAnimationStyle,
+    palette: ArtworkPalette,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val base = scheme.surface
+    val dark = base.luminance() < 0.5f
+    val source = palette.regions.ifEmpty { palette.swatches }
+    fun pick(i: Int) = tune(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
+    val colors = Colors(pick(0), pick(1), pick(2), pick(3), pick(4))
+    val grain = remember { grainTexture() }
+
+    Canvas(modifier.background(base)) {
+        // A moment part-way through, so every scene is caught mid-movement rather than at rest.
+        val t = PreviewMoment
+        when (style) {
+            PlayerBackgroundAnimationStyle.ARTWORK_GLOW ->
+                mesh(colors, t, alpha = 0.85f, amplitude = 0.16f)
+            PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> {
+                mesh(colors, t, alpha = 0.85f, amplitude = 0.26f)
+                sheen(t, colors.c4)
+            }
+            PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
+                mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
+                sheen(t, colors.c4)
+                drawRect(ShaderBrush(ImageShader(grain, TileMode.Repeated, TileMode.Repeated)), alpha = 0.12f)
+            }
+            PlayerBackgroundAnimationStyle.LIQUID_AURORA -> aurora(colors, t)
+            PlayerBackgroundAnimationStyle.VINYL_HALO_PULSE -> halo(colors, t, base)
+            PlayerBackgroundAnimationStyle.MINIMAL_TONAL -> drawRect(
+                Brush.linearGradient(listOf(colors.c0.copy(alpha = 0.75f), colors.c3.copy(alpha = 0.5f), base))
+            )
+        }
+    }
+}
+
+/** Far enough into the scene's clock that nothing is caught at its starting position. */
+private const val PreviewMoment = 2.4f

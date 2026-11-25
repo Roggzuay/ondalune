@@ -1133,6 +1133,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                             onSetHideMiniPlayerOnScroll = viewModel.settings::setHideMiniPlayerOnScroll,
                                             onSetThemeMode = viewModel::setThemeMode,
                                             onSetCornerStylePreset = viewModel.settings::setCornerStylePreset,
+                                            onSetPlayerBackgroundStyle = viewModel.settings::setPlayerBackgroundStyle,
                                             onSetHeaderFont = viewModel.settings::setHeaderFont,
                                             onSetBodyFont = viewModel.settings::setBodyFont,
                                             onSetAppColorSource = viewModel.settings::setAppColorSource,

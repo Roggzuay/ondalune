@@ -478,6 +478,8 @@ fun SettingsCustomizationScreen(
     onSetHideMiniPlayerOnScroll: (Boolean) -> Unit = {},
     onSetThemeMode: (AppThemeMode) -> Unit,
     onSetCornerStylePreset: (CornerStylePreset) -> Unit = {},
+    /** What moves behind the player (see [PlayerBackgroundAnimationStyle]). */
+    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {},
     onSetHeaderFont: (AppFont) -> Unit = {},
     onSetBodyFont: (AppFont) -> Unit = {},
     onSetAppColorSource: (io.github.roggzuay.ondalune.data.model.AppColorSource) -> Unit = {},
@@ -1037,7 +1039,8 @@ fun SettingsCustomizationScreen(
                     onResetHomeSections = onResetHomeSections,
                     onSetDockStyle = onSetDockStyle,
                     onSetHideMiniPlayerOnScroll = onSetHideMiniPlayerOnScroll,
-                    onSetCornerStylePreset = onSetCornerStylePreset
+                    onSetCornerStylePreset = onSetCornerStylePreset,
+                    onSetPlayerBackgroundStyle = onSetPlayerBackgroundStyle
                 )
             }
         }

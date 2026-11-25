@@ -55,6 +55,10 @@ import io.github.roggzuay.ondalune.data.model.AppFont
 import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
 import io.github.roggzuay.ondalune.data.model.DockStyle
+import androidx.compose.ui.draw.clip
+import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
+import io.github.roggzuay.ondalune.ui.components.BackdropPreview
+import io.github.roggzuay.ondalune.ui.theme.LocalArtworkPalette
 import io.github.roggzuay.ondalune.data.model.HomeSection
 import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
 import io.github.roggzuay.ondalune.ui.components.SpringPressableSurface
@@ -135,6 +139,44 @@ fun CompactSettingsGroup(
 }
 
 /** A selectable tile: the preview on top, its name under it, a tick when it is the one in use. */
+/**
+ * What moves behind the player. Every tile is drawn by the backdrop's own code in the playing
+ * song's colours, so the choice is made on the thing itself rather than on a description of it.
+ */
+@Composable
+private fun PlayerBackgroundTiles(
+    selected: PlayerBackgroundAnimationStyle,
+    onSelect: (PlayerBackgroundAnimationStyle) -> Unit
+) {
+    val palette = LocalArtworkPalette.current
+    val styles = PlayerBackgroundAnimationStyle.entries
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        styles.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { style ->
+                    ChoiceTile(
+                        label = style.label,
+                        selected = style == selected,
+                        testTag = "player_background_${style.name}",
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onSelect(style) }
+                    ) {
+                        BackdropPreview(
+                            style = style,
+                            palette = palette,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(13.dp))
+                        )
+                    }
+                }
+                // A short last row keeps its tiles the same width as the ones above.
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ChoiceTile(
     label: String,
@@ -502,7 +544,8 @@ fun AppearanceSettingsContent(
     onResetHomeSections: () -> Unit,
     onSetDockStyle: (DockStyle) -> Unit,
     onSetHideMiniPlayerOnScroll: (Boolean) -> Unit,
-    onSetCornerStylePreset: (CornerStylePreset) -> Unit
+    onSetCornerStylePreset: (CornerStylePreset) -> Unit,
+    onSetPlayerBackgroundStyle: (PlayerBackgroundAnimationStyle) -> Unit = {}
 ) {
     val defaults = LocalStyleSpec.current.defaultHome
     val shownCount = settings.homeSections.ifEmpty { defaults }.size
@@ -546,6 +589,22 @@ fun AppearanceSettingsContent(
                 color = MaterialTheme.colorScheme.primary
             )
             FontPicker("Songs & text", settings.bodyFont, display = false, onSelect = onSetBodyFont, tag = "font_body")
+        }
+
+        CompactSettingsGroup(
+            title = "Player background",
+            summary = settings.playerBackgroundStyle.label,
+            testTag = "group_player_background"
+        ) {
+            PlayerBackgroundTiles(
+                selected = settings.playerBackgroundStyle,
+                onSelect = onSetPlayerBackgroundStyle
+            )
+            Text(
+                text = settings.playerBackgroundStyle.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         CompactSettingsGroup(
