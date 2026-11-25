@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +58,7 @@ fun SoundProfilesSheet(
     onForget: (SavedSound) -> Unit,
     onPlaySound: (PlayedSound) -> Unit,
     onClearHistory: () -> Unit,
+    onOpenListeningStats: () -> Unit,
     onClose: () -> Unit
 ) {
     BackHandler(onBack = onClose)
@@ -124,6 +126,39 @@ fun SoundProfilesSheet(
                             onCheckedChange = onSetKeepHistory,
                             testTag = "toggle_keep_sound_history"
                         )
+                    }
+                }
+            }
+
+            item {
+                SpringPressableSurface(
+                    onClick = onOpenListeningStats,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    cornerRadius = 26.dp,
+                    modifier = Modifier.fillMaxWidth().testTag("open_listening_stats")
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Insights,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Your listening",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "What you played, for how long, and when",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.76f)
+                            )
+                        }
                     }
                 }
             }

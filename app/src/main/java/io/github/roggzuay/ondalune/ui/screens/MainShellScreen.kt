@@ -370,6 +370,11 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
     val castState by viewModel.cast.state.collectAsStateWithLifecycle()
     val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
+    val listeningStatsOpen by viewModel.isListeningStatsOpen.collectAsStateWithLifecycle()
+    val listeningStats by viewModel.listeningStats.collectAsStateWithLifecycle()
+    val libraryTotals by viewModel.libraryTotals.collectAsStateWithLifecycle()
+    val statsWindow by viewModel.statsWindow.collectAsStateWithLifecycle()
+    val countingSince by viewModel.countingSince.collectAsStateWithLifecycle()
     val savedSounds by viewModel.savedSounds.collectAsStateWithLifecycle()
     val soundPlaysAll by viewModel.soundPlaysAll.collectAsStateWithLifecycle()
     val savedEqCurves by viewModel.sound.savedEqCurves.collectAsStateWithLifecycle()
@@ -1475,7 +1480,30 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onForget = { viewModel.forgetSoundProfile(it.profile) },
                         onPlaySound = viewModel::playWithSound,
                         onClearHistory = viewModel::clearSoundHistory,
+                        onOpenListeningStats = { viewModel.setListeningStatsOpen(true) },
                         onClose = { viewModel.setSoundProfilesOpen(false) }
+                    )
+                }
+
+                // Your listening: worked out here, sent nowhere.
+                AnimatedVisibility(
+                    visible = listeningStatsOpen,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { it },
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                    ) + fadeOut()
+                ) {
+                    ListeningStatsSheet(
+                        stats = listeningStats,
+                        totals = libraryTotals,
+                        window = statsWindow,
+                        countingSince = countingSince,
+                        onSelectWindow = viewModel::setStatsWindow,
+                        onClose = { viewModel.setListeningStatsOpen(false) }
                     )
                 }
 

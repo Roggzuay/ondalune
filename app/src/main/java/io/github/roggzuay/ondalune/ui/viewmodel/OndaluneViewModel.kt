@@ -561,6 +561,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     private val _isSoundProfilesOpen = MutableStateFlow(false)
     val isSoundProfilesOpen: StateFlow<Boolean> = _isSoundProfilesOpen.asStateFlow()
 
+    private val _isListeningStatsOpen = MutableStateFlow(false)
+    val isListeningStatsOpen: StateFlow<Boolean> = _isListeningStatsOpen.asStateFlow()
+
+    private val _statsWindow = MutableStateFlow(io.github.roggzuay.ondalune.data.model.StatsWindow.THIS_YEAR)
+    val statsWindow: StateFlow<io.github.roggzuay.ondalune.data.model.StatsWindow> = _statsWindow.asStateFlow()
+
     private val _isSpeedPitchSheetOpen = MutableStateFlow(false)
     val isSpeedPitchSheetOpen: StateFlow<Boolean> = _isSpeedPitchSheetOpen.asStateFlow()
 
@@ -636,6 +642,30 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     ) { trackList, listType ->
         repository.deriveAlbums(trackList, listType)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** What a window of listening comes to, worked out here and sent nowhere. */
+    val listeningStats: StateFlow<io.github.roggzuay.ondalune.data.model.ListeningStats> = combine(
+        soundProfiles.history,
+        allServerTracks,
+        _statsWindow
+    ) { history, library, window ->
+        io.github.roggzuay.ondalune.data.model.listeningStats(
+            history = history,
+            tracks = library,
+            window = window,
+            nowMs = System.currentTimeMillis()
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        io.github.roggzuay.ondalune.data.model.ListeningStats(io.github.roggzuay.ondalune.data.model.StatsWindow.THIS_YEAR)
+    )
+
+    /** What the library itself knows, which goes back further than Ondalune's own record. */
+    val libraryTotals: StateFlow<io.github.roggzuay.ondalune.data.model.LibraryTotals> =
+        allServerTracks
+            .map { io.github.roggzuay.ondalune.data.model.libraryTotals(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), io.github.roggzuay.ondalune.data.model.LibraryTotals())
 
     /** Saved sounds matched to the songs and albums they belong to. */
     val savedSounds: StateFlow<List<io.github.roggzuay.ondalune.data.model.SavedSound>> = combine(
@@ -1563,6 +1593,19 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun setSoundProfilesOpen(open: Boolean) {
         _isSoundProfilesOpen.value = open
     }
+
+    fun setListeningStatsOpen(open: Boolean) {
+        _isListeningStatsOpen.value = open
+    }
+
+    fun setStatsWindow(window: io.github.roggzuay.ondalune.data.model.StatsWindow) {
+        _statsWindow.value = window
+    }
+
+    /** The first play Ondalune wrote down on this phone; 0 before there is one. */
+    val countingSince: StateFlow<Long> = soundProfiles.history
+        .map { history -> history.minOfOrNull { it.playedAt } ?: 0L }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     /** Saves the sound as it stands, for the playing song or for its album. */
     fun saveSoundProfile(profileScope: io.github.roggzuay.ondalune.data.model.SoundProfileScope) {
