@@ -21,6 +21,7 @@ class NoCastGatewayTest {
     fun `casting is simply not supported here`() {
         val gateway = createCastGateway(ApplicationProvider.getApplicationContext())
         assertFalse(gateway.supported)
+        assertFalse(gateway.enabled)
         assertFalse(gateway.state.value.connected)
         assertEquals(0L, gateway.positionMs())
         assertEquals(0L, gateway.durationMs())

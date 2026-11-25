@@ -525,6 +525,7 @@ fun NowPlayingStudioOverlay(
     onWantAudioLevels: (Boolean) -> Unit = {},
     /** This build can cast, and where the music is coming out if it is. */
     castSupported: Boolean = false,
+    castOn: Boolean = false,
     castState: io.github.roggzuay.ondalune.cast.CastState = io.github.roggzuay.ondalune.cast.CastState(),
     /** The saved sound for this song, offered above the title. */
     soundOffer: SoundOffer? = null,
@@ -740,6 +741,7 @@ fun NowPlayingStudioOverlay(
                         speedShaped = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing,
                         showSpeedResetHint = showSpeedResetHint,
                         castSupported = castSupported,
+                        castOn = castOn,
                         onCollapse = onCollapse,
                         onOpenSonicLab = onOpenSonicLab,
                         onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
@@ -1324,6 +1326,8 @@ private fun PlayerTopBar(
     showSpeedResetHint: Boolean,
     /** This build can cast: the route button goes in the top bar beside the sound tools. */
     castSupported: Boolean,
+    /** Casting has been switched on in Settings; until then nothing looks for a device. */
+    castOn: Boolean,
     onCollapse: () -> Unit,
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -1350,7 +1354,7 @@ private fun PlayerTopBar(
         Spacer(Modifier.weight(1f))
 
         // Google's own route button: it draws nothing until there is a device on the network.
-        if (castSupported) CastButton(
+        if (castSupported && castOn) CastButton(
             modifier = Modifier
                 .size(44.dp)
                 .padding(end = 2.dp)

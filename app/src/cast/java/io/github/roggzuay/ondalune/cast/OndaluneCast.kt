@@ -61,6 +61,13 @@ class GoogleCastGateway(context: Context) : CastGateway {
     private val _state = MutableStateFlow(CastState())
     override val state: StateFlow<CastState> = _state.asStateFlow()
 
+    /**
+     * Set from Settings. Off, Ondalune never starts the Cast framework and never looks for a
+     * device, so nothing goes out onto your network until you have asked for it.
+     */
+    @Volatile
+    override var enabled: Boolean = false
+
     private var castContext: CastContext? = null
     private var session: CastSession? = null
     private var endedCallback: (() -> Unit)? = null
@@ -94,8 +101,8 @@ class GoogleCastGateway(context: Context) : CastGateway {
             _state.value = _state.value.copy(connecting = true)
         }
 
-        override fun onSessionStartFailed(s: CastSession, error: Int) = detachSession()
-        override fun onSessionResumeFailed(s: CastSession, error: Int) = detachSession()
+        override fun onSessionStartFailed(s: CastSession, error: Int) = failed("couldn't connect", error)
+        override fun onSessionResumeFailed(s: CastSession, error: Int) = failed("lost the connection", error)
         override fun onSessionSuspended(s: CastSession, reason: Int) = detachSession()
         override fun onSessionEnding(s: CastSession) = Unit
         override fun onSessionEnded(s: CastSession, error: Int) = detachSession()
@@ -113,6 +120,21 @@ class GoogleCastGateway(context: Context) : CastGateway {
         )
     }
 
+    /**
+     * A connection that did not happen says so. Without this the device picker sits there with a
+     * spinner for ever and there is nothing to go on.
+     */
+    private fun failed(what: String, code: Int) {
+        detachSession()
+        onFailure?.invoke("Cast $what (error $code)")
+    }
+
+    private var onFailure: ((String) -> Unit)? = null
+
+    override fun onFailure(callback: (String) -> Unit) {
+        onFailure = callback
+    }
+
     private fun detachSession() {
         session?.remoteMediaClient?.unregisterCallback(mediaCallback)
         session = null
@@ -123,6 +145,9 @@ class GoogleCastGateway(context: Context) : CastGateway {
 
     override fun attach(activity: Activity) {
         if (castContext != null) return
+        // Nothing here runs until casting has been switched on in Settings: no Cast framework, no
+        // discovery, no traffic on your network.
+        if (!enabled) return
         // Play Services can be missing or too old on a perfectly ordinary phone. That is not a
         // failure worth crashing over: the app simply has no Cast button.
         val ctx = runCatching { CastContext.getSharedInstance(appContext) }.getOrNull() ?: return
@@ -252,12 +277,16 @@ private fun castSelector(): MediaRouteSelector = MediaRouteSelector.Builder()
  * is on screen.
  */
 @Composable
-fun CastButton(modifier: Modifier = Modifier) {
+fun CastButton(modifier: Modifier = Modifier, enabled: Boolean = true) {
     val context = LocalContext.current
     var available by remember { mutableStateOf(false) }
     var connected by remember { mutableStateOf(false) }
 
-    DisposableEffect(context) {
+    DisposableEffect(context, enabled) {
+        if (!enabled) {
+            available = false
+            return@DisposableEffect onDispose { }
+        }
         val router = runCatching { MediaRouter.getInstance(context) }.getOrNull()
             ?: return@DisposableEffect onDispose { }
         val selector = castSelector()

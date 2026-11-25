@@ -806,7 +806,13 @@ data class PlayerCustomizationSettings(
     /** Headphone crossfeed; off by default (see [CrossfeedLevel]). */
     val crossfeed: CrossfeedLevel = CrossfeedLevel.OFF,
     /** Vinyl mode; off by default (see [VinylMode]). */
-    val vinylMode: VinylMode = VinylMode.OFF
+    val vinylMode: VinylMode = VinylMode.OFF,
+    /**
+     * Looking for Cast devices on your network. Off until you ask for it: until then Ondalune
+     * starts no discovery at all and the Cast button is not drawn. Only the GitHub build has
+     * casting; elsewhere this does nothing.
+     */
+    val castEnabled: Boolean = false
 )
 
 /** A streaming quality: what the server converts songs to, and the bitrate cap (RAW/0 = the original file). */

@@ -462,6 +462,9 @@ fun SettingsCustomizationScreen(
     onPlaySavedSound: (io.github.roggzuay.ondalune.data.model.SavedSound) -> Unit = {},
     onForgetSavedSound: (io.github.roggzuay.ondalune.data.model.SavedSound) -> Unit = {},
     onOpenSoundProfiles: () -> Unit = {},
+    /** This build has the Cast SDK, and whether casting has been switched on. */
+    castSupported: Boolean = false,
+    onSetCastEnabled: (Boolean) -> Unit = {},
     onListenBrainzSignIn: (String) -> Unit = {},
     onListenBrainzSignOut: () -> Unit = {},
     onSetListenBrainzEnabled: (Boolean) -> Unit = {},
@@ -1617,6 +1620,10 @@ fun SettingsCustomizationScreen(
                 testTag = "settings_section_server"
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (castSupported) CastSettingsCard(
+                        enabled = settings.castEnabled,
+                        onSetEnabled = onSetCastEnabled
+                    )
                     ListenBrainzCard(
                         state = listenBrainz,
                         onSignIn = onListenBrainzSignIn,
@@ -3263,6 +3270,60 @@ private fun VinylCard(mode: VinylMode, onSetMode: (VinylMode) -> Unit) {
                     "nor the last of the top survives the cut.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Casting, in Settings. Off until you ask for it.
+ *
+ * Looking for a Cast device means Google Play services sending messages around your network to
+ * see what is on it. Ondalune will not do that behind your back on a phone whose owner chose this
+ * app partly because it keeps to itself, so the switch is off until you turn it on, and the card
+ * says what turning it on does.
+ */
+@Composable
+private fun CastSettingsCard(enabled: Boolean, onSetEnabled: (Boolean) -> Unit) {
+    Surface(
+        shape = cornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().testTag("cast_settings_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Play on another device", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Chromecast, a speaker or a TV on your network",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onSetEnabled,
+                    modifier = Modifier.testTag("toggle_cast")
+                )
+            }
+            Text(
+                text = "On, Google Play services looks around your network for devices, and a Cast " +
+                    "button appears in the player. Off, none of that happens at all.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "A device plays the song from your server itself, so the speed, pitch, " +
+                    "reverb and equalizer stay on this phone while it does. Music stored on this " +
+                    "phone cannot be cast at all.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "New, and not yet tried on every kind of device. If a device never finishes " +
+                    "connecting, turning this off costs you nothing else.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary
             )
         }
     }

@@ -22,6 +22,15 @@ interface CastGateway {
     /** False in a build without the Cast SDK. Nothing else here does anything when it is false. */
     val supported: Boolean
 
+    /**
+     * Switched on in Settings, and off by default.
+     *
+     * Looking for a Cast device means Google Play services sending messages around your network,
+     * and Ondalune does not do that behind your back: until this is on, the framework is never
+     * started, nothing is discovered and the Cast button is not drawn.
+     */
+    var enabled: Boolean
+
     val state: StateFlow<CastState>
 
     /** Starts the Cast framework. Called once, from the activity, and only when [supported]. */
@@ -58,6 +67,9 @@ interface CastGateway {
 
     /** Called on the main thread when the device finishes a song, so the queue can move on. */
     fun onTrackEnded(callback: () -> Unit)
+
+    /** Told when a connection fails, so it can be said out loud rather than spun on for ever. */
+    fun onFailure(callback: (String) -> Unit)
 }
 
 /** What the Cast session is doing, as the rest of the app needs to know it. */

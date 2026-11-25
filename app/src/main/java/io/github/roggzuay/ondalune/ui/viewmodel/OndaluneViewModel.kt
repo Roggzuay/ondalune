@@ -1154,7 +1154,9 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         sound.applyToEngine()
 
         // A device joining or leaving moves the music, and says where it went.
+        cast.enabled = settings.customization.value.castEnabled
         cast.onTrackEnded { playback.onTrackEnded() }
+        cast.onFailure { _statusBanner.value = it }
         viewModelScope.launch {
             var wasConnected = false
             cast.state.collect { state ->
@@ -1580,6 +1582,16 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     fun setCrossfeed(level: io.github.roggzuay.ondalune.data.model.CrossfeedLevel) {
         settings.setCrossfeed(level)
         audioEngine.crossfeed = level
+    }
+
+    /**
+     * Casting: off until it is asked for. Switching it on starts the Cast framework; switching it
+     * off stops the session and nothing looks for a device again.
+     */
+    fun setCastEnabled(enabled: Boolean) {
+        settings.setCastEnabled(enabled)
+        cast.enabled = enabled
+        if (!enabled) cast.stop() else _statusBanner.value = "Looking for devices on your network"
     }
 
     /** Vinyl mode: kept in settings, handed to the engine. */

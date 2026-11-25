@@ -52,6 +52,7 @@ class CastRoutingTest {
 
     private class FakeCast : CastGateway {
         override val supported = true
+        override var enabled = true
         val mutable = MutableStateFlow(CastState())
         override val state: StateFlow<CastState> = mutable
         val loaded = mutableListOf<Pair<String, String>>()
@@ -74,6 +75,7 @@ class CastRoutingTest {
         override fun positionMs() = position
         override fun durationMs() = 0L
         override fun onTrackEnded(callback: () -> Unit) = Unit
+        override fun onFailure(callback: (String) -> Unit) = Unit
 
         fun connect(name: String = "Living room", playing: Boolean = true) {
             mutable.value = CastState(connected = true, deviceName = name, playing = playing)

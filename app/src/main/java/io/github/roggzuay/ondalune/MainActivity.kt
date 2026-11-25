@@ -155,8 +155,10 @@ class MainActivity : ComponentActivity() {
 
             // Casting, in the builds that have it. Starting the framework needs an activity, and
             // it is cheap enough to ask for once here rather than threading it through.
-            LaunchedEffect(Unit) {
-                if (ondaluneViewModel.cast.supported) ondaluneViewModel.cast.attach(this@MainActivity)
+            LaunchedEffect(settings.castEnabled) {
+                if (ondaluneViewModel.cast.supported && settings.castEnabled) {
+                    ondaluneViewModel.cast.attach(this@MainActivity)
+                }
             }
 
             val lyricsRequest = openLyricsRequests.intValue

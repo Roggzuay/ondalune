@@ -156,6 +156,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(vinylMode = mode) }
     }
 
+    fun setCastEnabled(enabled: Boolean) {
+        update { it.copy(castEnabled = enabled) }
+    }
+
     fun setRescanFoldersOnLaunch(enabled: Boolean) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }
@@ -265,6 +269,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             vinylMode = runCatching {
                 VinylMode.valueOf(prefs.getString("cfg_vinyl", defaults.vinylMode.name)!!)
             }.getOrDefault(defaults.vinylMode),
+            castEnabled = prefs.getBoolean("cfg_cast_enabled", defaults.castEnabled),
             rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
             librarySyncHours = prefs.getInt(LibrarySyncWorker.PREF_HOURS, defaults.librarySyncHours),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
@@ -324,6 +329,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_keep_sound_history", s.keepSoundHistory)
             .putString("cfg_crossfeed", s.crossfeed.name)
             .putString("cfg_vinyl", s.vinylMode.name)
+            .putBoolean("cfg_cast_enabled", s.castEnabled)
             .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
             .putInt(LibrarySyncWorker.PREF_HOURS, s.librarySyncHours)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)

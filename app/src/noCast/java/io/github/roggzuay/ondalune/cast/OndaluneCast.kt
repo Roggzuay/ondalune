@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class NoCastGateway : CastGateway {
     override val supported: Boolean = false
+    override var enabled: Boolean = false
     override val state: StateFlow<CastState> = MutableStateFlow(CastState())
     override fun attach(activity: Activity) = Unit
     override fun load(
@@ -32,13 +33,14 @@ class NoCastGateway : CastGateway {
     override fun positionMs(): Long = 0L
     override fun durationMs(): Long = 0L
     override fun onTrackEnded(callback: () -> Unit) = Unit
+    override fun onFailure(callback: (String) -> Unit) = Unit
 }
 
 fun createCastGateway(context: Context): CastGateway = NoCastGateway()
 
 /** No Cast SDK, so no button: the top bar simply has one fewer thing in it. */
 @Composable
-fun CastButton(modifier: Modifier = Modifier) = Unit
+fun CastButton(modifier: Modifier = Modifier, enabled: Boolean = true) = Unit
 
 /**
  * Named in the manifest so the entry points at a class that exists in both builds. Nothing reads
