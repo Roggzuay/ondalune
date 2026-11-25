@@ -371,6 +371,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
     val savedSounds by viewModel.savedSounds.collectAsStateWithLifecycle()
     val soundPlaysAll by viewModel.soundPlaysAll.collectAsStateWithLifecycle()
+    val savedEqCurves by viewModel.sound.savedEqCurves.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel.activeServer().id) { viewModel.refreshHomeShelves() }
 
     val activeServer = viewModel.activeServer()
@@ -1425,6 +1426,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                         onSetStreamQuality = { viewModel.setStreamQuality(onMobileData, it) },
                         onSelectPreset = viewModel.sound::selectEqualizerPreset,
                         onUpdateBand = viewModel.sound::updateCustomEqBand,
+                        savedEqCurves = savedEqCurves,
+                        onSaveEqCurve = viewModel.sound::saveEqCurve,
+                        onApplyEqCurve = viewModel.sound::applyEqCurve,
+                        onDeleteEqCurve = viewModel.sound::deleteEqCurve,
+                        crossfeed = customizationSettings.crossfeed,
+                        onSetCrossfeed = viewModel::setCrossfeed,
                         onPlayMix = viewModel::playMix,
                         onEnableSongAnalysis = { viewModel.setSongAnalysis(true) },
                         onClose = { viewModel.setSonicLabSheetOpen(false) }

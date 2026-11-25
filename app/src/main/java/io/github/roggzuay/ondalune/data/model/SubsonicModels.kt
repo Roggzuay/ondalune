@@ -802,7 +802,9 @@ data class PlayerCustomizationSettings(
      */
     val autoApplySoundProfiles: Boolean = false,
     /** Write down each play with the speed, pitch and reverb that were on; feeds the Home card. */
-    val keepSoundHistory: Boolean = true
+    val keepSoundHistory: Boolean = true,
+    /** Headphone crossfeed; off by default (see [CrossfeedLevel]). */
+    val crossfeed: CrossfeedLevel = CrossfeedLevel.OFF
 )
 
 /** A streaming quality: what the server converts songs to, and the bitrate cap (RAW/0 = the original file). */
@@ -833,6 +835,29 @@ fun PlayerCustomizationSettings.streamQuality(mobile: Boolean): StreamQuality {
  */
 fun PlayerCustomizationSettings.streamQualityFor(track: SubsonicTrack, mobile: Boolean): StreamQuality =
     if (dolbyPassthrough && track.mayHoldDolby()) StreamQualities.first() else streamQuality(mobile)
+
+/**
+ * Headphone crossfeed. On headphones a hard-panned mix arrives at one ear only, which the head
+ * never does in a room; crossfeed sends a little of each side to the other ear, quietly, slightly
+ * late and with the top rolled off, the way the far side of your head would hear it.
+ *
+ * It is off by default and does nothing on speakers worth hearing, so it is a choice, not a fix.
+ */
+enum class CrossfeedLevel(
+    val label: String,
+    val description: String,
+    /** How loud the crossed-over side is, in dB below the direct side. */
+    val feedDb: Float,
+    /** Above this the crossed-over side is rolled off, as a head would roll it off. */
+    val cutoffHz: Float,
+    /** How much later the far ear hears it, in millionths of a second. */
+    val delayUs: Float
+) {
+    OFF("Off", "Headphones get the mix exactly as it was mastered", 0f, 0f, 0f),
+    GENTLE("Gentle", "Just takes the edge off hard-panned records", -6.5f, 900f, 260f),
+    NATURAL("Natural", "A pair of speakers in a small room", -4.5f, 700f, 300f),
+    WIDE("Wide room", "Speakers further apart, in a bigger room", -3.0f, 600f, 340f)
+}
 
 enum class EqualizerPreset(
     val label: String,

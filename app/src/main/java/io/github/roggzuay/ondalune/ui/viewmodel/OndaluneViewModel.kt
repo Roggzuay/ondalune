@@ -1018,6 +1018,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             }
         }
         audioEngine.pauseOnHeadphoneDisconnect = settings.customization.value.pauseOnHeadphoneDisconnect
+        audioEngine.crossfeed = settings.customization.value.crossfeed
         sound.applyToEngine()
 
         audioEngine.onTrackEnded = { playback.onTrackEnded() }
@@ -1420,6 +1421,12 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
 
     fun setSonicLabSheetOpen(open: Boolean) {
         _isSonicLabSheetOpen.value = open
+    }
+
+    /** Headphone crossfeed: kept in settings, handed to the engine. */
+    fun setCrossfeed(level: io.github.roggzuay.ondalune.data.model.CrossfeedLevel) {
+        settings.setCrossfeed(level)
+        audioEngine.crossfeed = level
     }
 
     /** The three bands of what is playing, for the Reactive backdrop. */

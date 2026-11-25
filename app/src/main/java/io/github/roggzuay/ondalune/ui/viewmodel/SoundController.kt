@@ -44,8 +44,63 @@ class SoundController(
     )
     val equalizerPreset: StateFlow<EqualizerPreset> = _equalizerPreset.asStateFlow()
 
-    private val _customEqBands = MutableStateFlow(_equalizerPreset.value.bandsDb)
+    private val _customEqBands = MutableStateFlow(loadPersistedBands(_equalizerPreset.value))
     val customEqBands: StateFlow<List<Float>> = _customEqBands.asStateFlow()
+
+    // =========================================================================
+    // Your own equalizer curves
+    // =========================================================================
+
+    private val _savedEqCurves = MutableStateFlow(loadSavedCurves())
+
+    /** Curves you shaped and named yourself, newest last, at most [MaxSavedCurves]. */
+    val savedEqCurves: StateFlow<List<EqCurve>> = _savedEqCurves.asStateFlow()
+
+    /** Keeps the bands as they stand under a name of your choosing. */
+    fun saveEqCurve(name: String) {
+        val clean = EqCurve.cleanName(name)
+        if (clean.isEmpty()) return
+        val bands = _customEqBands.value.map { it.coerceIn(-10f, 10f) }
+        val kept = _savedEqCurves.value.filterNot { it.name.equals(clean, ignoreCase = true) }
+        _savedEqCurves.value = (kept + EqCurve(clean, bands)).takeLast(MaxSavedCurves)
+        persistSavedCurves()
+        showBanner("Saved the \"$clean\" curve")
+    }
+
+    fun applyEqCurve(curve: EqCurve) {
+        _customEqBands.value = curve.bandsDb
+        engine.setEqualizerBandsDb(curve.bandsDb)
+        persistBands(curve.bandsDb)
+        refreshPendingSave()
+    }
+
+    fun deleteEqCurve(name: String) {
+        _savedEqCurves.value = _savedEqCurves.value.filterNot { it.name == name }
+        persistSavedCurves()
+    }
+
+    private fun loadSavedCurves(): List<EqCurve> =
+        prefs.getString("eq_curves", "").orEmpty()
+            .split('|')
+            .mapNotNull { EqCurve.parse(it) }
+            .takeLast(MaxSavedCurves)
+
+    private fun persistSavedCurves() {
+        prefs.edit()
+            .putString("eq_curves", _savedEqCurves.value.joinToString("|") { it.serialized() })
+            .apply()
+    }
+
+    private fun loadPersistedBands(preset: EqualizerPreset): List<Float> {
+        val stored = prefs.getString("eq_bands", "").orEmpty()
+            .split(',')
+            .mapNotNull { it.trim().toFloatOrNull()?.coerceIn(-10f, 10f) }
+        return if (stored.size == preset.bandsDb.size) stored else preset.bandsDb
+    }
+
+    private fun persistBands(bands: List<Float>) {
+        prefs.edit().putString("eq_bands", bands.joinToString(",")).apply()
+    }
 
     // =========================================================================
     // Sound profiles: this song, the way you like to hear it
@@ -93,6 +148,7 @@ class SoundController(
         _equalizerPreset.value = snapshot.eqPreset
         _customEqBands.value = snapshot.eqBandsDb
         prefs.edit().putString("eq_preset", snapshot.eqPreset.name).apply()
+        persistBands(snapshot.eqBandsDb)
         engine.setSpeedAndPitch(snapshot.speedPitch.speed, snapshot.speedPitch.effectivePitch)
         engine.setReverbState(reverb)
         engine.setEqualizerBandsDb(snapshot.eqBandsDb)
@@ -337,6 +393,7 @@ class SoundController(
         _equalizerPreset.value = preset
         _customEqBands.value = preset.bandsDb
         prefs.edit().putString("eq_preset", preset.name).apply()
+        persistBands(preset.bandsDb)
         engine.setEqualizerBandsDb(preset.bandsDb)
         refreshPendingSave()
     }
@@ -347,6 +404,7 @@ class SoundController(
             currentList[bandIndex] = gainDb.coerceIn(-10f, 10f)
             _customEqBands.value = currentList
             engine.setEqualizerBandsDb(currentList)
+            persistBands(currentList)
             refreshPendingSave()
         }
     }
@@ -355,5 +413,30 @@ class SoundController(
     fun applyToEngine() {
         engine.setSpeedAndPitch(_speedPitchState.value.speed, _speedPitchState.value.effectivePitch)
         engine.setReverbState(_reverbState.value)
+        engine.setEqualizerBandsDb(_customEqBands.value)
+    }
+}
+
+/** How many of your own curves are kept. */
+private const val MaxSavedCurves = 12
+
+/** An equalizer curve you shaped and named: five bands, -10 dB to +10 dB. */
+data class EqCurve(val name: String, val bandsDb: List<Float>) {
+    fun serialized(): String = name + ":" + bandsDb.joinToString(",")
+
+    companion object {
+        /** Keeps the separators out of a name, so a curve called "Bass : heavy" still reads back. */
+        fun cleanName(raw: String): String =
+            raw.trim().replace('|', ' ').replace(':', ' ').trim().take(28)
+
+        fun parse(raw: String): EqCurve? {
+            val at = raw.indexOf(':')
+            if (at <= 0) return null
+            val name = raw.substring(0, at)
+            val bands = raw.substring(at + 1)
+                .split(',')
+                .mapNotNull { it.trim().toFloatOrNull()?.coerceIn(-10f, 10f) }
+            return if (bands.size == 5) EqCurve(name, bands) else null
+        }
     }
 }

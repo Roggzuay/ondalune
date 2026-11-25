@@ -143,4 +143,84 @@ class SoundControllerTest {
         assertEquals(0.90f, next.speedPitchState.value.speed, 0.001f)
         assertEquals(EqualizerPreset.VOCAL_PRISM, next.equalizerPreset.value)
     }
+
+    // ---- Your own equalizer curves ----
+
+    @Test
+    fun `a curve you shape and name comes back after a restart`() {
+        prefs.edit().clear().commit()
+        controller().apply {
+            updateCustomEqBand(0, 4.5f)
+            updateCustomEqBand(4, -3f)
+            saveEqCurve("Late night")
+        }
+        val next = controller()
+        val curve = next.savedEqCurves.value.single()
+        assertEquals("Late night", curve.name)
+        assertEquals(4.5f, curve.bandsDb[0], 0.001f)
+        assertEquals(-3f, curve.bandsDb[4], 0.001f)
+    }
+
+    @Test
+    fun `applying a curve sets the bands`() {
+        prefs.edit().clear().commit()
+        val sound = controller()
+        sound.updateCustomEqBand(2, 6f)
+        sound.saveEqCurve("Vocals up")
+        sound.selectEqualizerPreset(EqualizerPreset.FLAT_STUDIO)
+        assertEquals(0f, sound.customEqBands.value[2], 0.001f)
+        sound.applyEqCurve(sound.savedEqCurves.value.single())
+        assertEquals(6f, sound.customEqBands.value[2], 0.001f)
+    }
+
+    @Test
+    fun `saving the same name twice replaces it instead of piling up`() {
+        prefs.edit().clear().commit()
+        val sound = controller()
+        sound.updateCustomEqBand(0, 2f)
+        sound.saveEqCurve("Mine")
+        sound.updateCustomEqBand(0, 7f)
+        sound.saveEqCurve("Mine")
+        assertEquals(1, sound.savedEqCurves.value.size)
+        assertEquals(7f, sound.savedEqCurves.value.single().bandsDb[0], 0.001f)
+    }
+
+    @Test
+    fun `a curve named with the separators still reads back`() {
+        prefs.edit().clear().commit()
+        controller().apply {
+            updateCustomEqBand(1, 3f)
+            saveEqCurve("Bass|heavy:night")
+        }
+        val curve = controller().savedEqCurves.value.single()
+        assertEquals("Bass heavy night", curve.name)
+        assertEquals(3f, curve.bandsDb[1], 0.001f)
+    }
+
+    @Test
+    fun `an empty name saves nothing`() {
+        prefs.edit().clear().commit()
+        val sound = controller()
+        sound.updateCustomEqBand(0, 2f)
+        sound.saveEqCurve("   ")
+        assertTrue(sound.savedEqCurves.value.isEmpty())
+    }
+
+    @Test
+    fun `a deleted curve is gone for good`() {
+        prefs.edit().clear().commit()
+        val sound = controller()
+        sound.updateCustomEqBand(0, 2f)
+        sound.saveEqCurve("Gone")
+        sound.deleteEqCurve("Gone")
+        assertTrue(sound.savedEqCurves.value.isEmpty())
+        assertTrue(controller().savedEqCurves.value.isEmpty())
+    }
+
+    @Test
+    fun `the bands themselves survive a restart`() {
+        prefs.edit().clear().commit()
+        controller().updateCustomEqBand(3, -5.5f)
+        assertEquals(-5.5f, controller().customEqBands.value[3], 0.001f)
+    }
 }

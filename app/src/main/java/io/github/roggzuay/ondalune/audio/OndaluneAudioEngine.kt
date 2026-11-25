@@ -21,6 +21,7 @@ import android.media.audiofx.EnvironmentalReverb
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.os.Build
+import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.codecName
@@ -978,6 +979,78 @@ class OndaluneAudioEngine(
     private var eqHighCoeff = 0f
 
     // =========================================================================
+    // Headphone crossfeed
+    // =========================================================================
+
+    /** Off by default; set from Settings. Read on the audio thread, written from the UI thread. */
+    @Volatile
+    var crossfeed: CrossfeedLevel = CrossfeedLevel.OFF
+
+    private var cfMode = CrossfeedLevel.OFF
+    private var cfRate = 0
+    private var cfCoef = 0f
+    private var cfGain = 0f
+    private var cfNorm = 1f
+    private var cfDelay = 0
+    private val cfLineL = FloatArray(CrossfeedLineFrames)
+    private val cfLineR = FloatArray(CrossfeedLineFrames)
+    private var cfWrite = 0
+    private var cfLpL = 0f
+    private var cfLpR = 0f
+
+    /**
+     * Sends a little of each side to the other ear: quieter, a fraction of a millisecond later,
+     * and with the top rolled off, which is what the far side of a head hears in a room.
+     *
+     * One delay line read, two one-pole filters and four multiply-adds per frame. Off, it returns
+     * on the first line.
+     */
+    private fun applyCrossfeed(samples: FloatArray, frameCount: Int, sampleRate: Int) {
+        val mode = crossfeed
+        if (mode == CrossfeedLevel.OFF) {
+            if (cfMode != CrossfeedLevel.OFF) resetCrossfeed()
+            return
+        }
+        if (mode != cfMode || sampleRate != cfRate) {
+            cfMode = mode
+            cfRate = sampleRate
+            cfCoef = (1.0 - exp(-2.0 * Math.PI * mode.cutoffHz / sampleRate)).toFloat().coerceIn(0f, 1f)
+            cfGain = Math.pow(10.0, mode.feedDb / 20.0).toFloat()
+            // Both ears gain the other side's signal, so pull the whole thing back to where it was.
+            cfNorm = 1f / (1f + cfGain)
+            cfDelay = ((mode.delayUs / 1_000_000f) * sampleRate)
+                .toInt()
+                .coerceIn(1, CrossfeedLineFrames - 1)
+        }
+        val size = CrossfeedLineFrames
+        for (i in 0 until frameCount) {
+            val left = samples[i * 2]
+            val right = samples[i * 2 + 1]
+            cfLineL[cfWrite] = left
+            cfLineR[cfWrite] = right
+            var read = cfWrite - cfDelay
+            if (read < 0) read += size
+            cfLpL += cfCoef * (cfLineL[read] - cfLpL)
+            cfLpR += cfCoef * (cfLineR[read] - cfLpR)
+            samples[i * 2] = (left + cfLpR * cfGain) * cfNorm
+            samples[i * 2 + 1] = (right + cfLpL * cfGain) * cfNorm
+            cfWrite++
+            if (cfWrite >= size) cfWrite = 0
+        }
+    }
+
+    /** Empties the delay line, so switching it off never leaves a tail of the last song behind. */
+    internal fun resetCrossfeed() {
+        cfMode = CrossfeedLevel.OFF
+        cfRate = 0
+        cfWrite = 0
+        cfLpL = 0f
+        cfLpR = 0f
+        java.util.Arrays.fill(cfLineL, 0f)
+        java.util.Arrays.fill(cfLineR, 0f)
+    }
+
+    // =========================================================================
     // Audio levels for the reactive backdrop
     // =========================================================================
 
@@ -1123,6 +1196,10 @@ class OndaluneAudioEngine(
 
         // Run through the custom stereo Freeverb/Schroeder DSP engine in real time
         dsp.processStereoInterleavedFloat(samples, safeFrames)
+
+        // Crossfeed sits last in the chain, over the finished stereo picture, where a pair of
+        // speakers in a room would sit.
+        applyCrossfeed(samples, safeFrames, sampleRate)
 
         val gain = masterVolumeGain.coerceIn(0f, 1f)
         for (i in 0 until safeFrames * 2) {
@@ -1642,6 +1719,9 @@ private const val LevelGainMid = 5.0f
 private const val LevelGainHigh = 7.5f
 private const val LevelAttack = 0.45f
 private const val LevelRelease = 0.08f
+
+/** Long enough for any crossfeed delay at 192 kHz, and small enough to stay in cache. */
+private const val CrossfeedLineFrames = 128
 
 /** Songs coming up that are on the phone already ([ready] of [total]); [active] while more are being saved. */
 data class SongsAhead(val ready: Int = 0, val total: Int = 0, val active: Boolean = false)

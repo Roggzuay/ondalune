@@ -169,6 +169,7 @@ import io.github.roggzuay.ondalune.data.model.AppThemeMode
 import io.github.roggzuay.ondalune.data.model.CornerStylePreset
 import io.github.roggzuay.ondalune.data.model.DockStyle
 import io.github.roggzuay.ondalune.data.model.DownloadSpeedLimit
+import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
 import io.github.roggzuay.ondalune.data.model.EqualizerPreset
 import io.github.roggzuay.ondalune.data.model.PingDiagnosticResult
 import io.github.roggzuay.ondalune.data.model.PitchCorrectionMode
@@ -3035,6 +3036,125 @@ fun SleepTimerModal(
 }
 
 /**
+ * Your own equalizer curves: shape the five bands, give the shape a name, and it waits here.
+ */
+@Composable
+private fun SavedCurvesCard(
+    curves: List<io.github.roggzuay.ondalune.ui.viewmodel.EqCurve>,
+    bands: List<Float>,
+    onSaveCurve: (String) -> Unit,
+    onApplyCurve: (io.github.roggzuay.ondalune.ui.viewmodel.EqCurve) -> Unit,
+    onDeleteCurve: (String) -> Unit
+) {
+    var naming by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    val flat = bands.all { kotlin.math.abs(it) < 0.05f }
+
+    Surface(
+        shape = cornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().testTag("saved_curves_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Your curves", style = MaterialTheme.typography.titleMedium)
+            if (curves.isEmpty() && !naming) Text(
+                text = "Move the bands above into a shape you like, then keep it here under a name.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (curves.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(curves) { curve ->
+                    FilterChip(
+                        selected = curve.bandsDb == bands,
+                        onClick = { onApplyCurve(curve) },
+                        label = { Text(curve.name) },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Delete ${curve.name}",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable { onDeleteCurve(curve.name) }
+                            )
+                        },
+                        modifier = Modifier.testTag("eq_curve_${curve.name}")
+                    )
+                }
+            }
+            if (naming) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(28) },
+                    label = { Text("Name this curve") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("eq_curve_name")
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            onSaveCurve(name)
+                            name = ""
+                            naming = false
+                        },
+                        enabled = name.isNotBlank(),
+                        shapes = ButtonDefaults.shapes(),
+                        modifier = Modifier.testTag("eq_curve_confirm")
+                    ) { Text("Keep it") }
+                    TextButton(
+                        onClick = { naming = false; name = "" },
+                        shapes = ButtonDefaults.shapes()
+                    ) { Text("Cancel") }
+                }
+            } else {
+                FilledTonalButton(
+                    onClick = { naming = true },
+                    enabled = !flat,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = Modifier.testTag("eq_curve_save")
+                ) { Text(if (flat) "Move a band first" else "Save this curve") }
+            }
+        }
+    }
+}
+
+/**
+ * Headphone crossfeed: a little of each side sent to the other ear, so hard-panned records stop
+ * splitting your head in two.
+ */
+@Composable
+private fun CrossfeedCard(crossfeed: CrossfeedLevel, onSetCrossfeed: (CrossfeedLevel) -> Unit) {
+    Surface(
+        shape = cornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().testTag("crossfeed_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Headphone crossfeed", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = crossfeed.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(CrossfeedLevel.entries) { level ->
+                    FilterChip(
+                        selected = level == crossfeed,
+                        onClick = { onSetCrossfeed(level) },
+                        label = { Text(level.label) },
+                        modifier = Modifier.testTag("crossfeed_${level.name}")
+                    )
+                }
+            }
+            Text(
+                text = "For headphones. On speakers it does nothing worth hearing, so leave it off there.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
  * Full-screen Opaque Sonic Lab Modal Sheet.
  */
 @Composable
@@ -3043,6 +3163,13 @@ fun SonicLabModalOverlay(
     songAnalysisOn: Boolean,
     activePreset: EqualizerPreset,
     customBandsDb: List<Float>,
+    /** Curves you shaped and named yourself. */
+    savedEqCurves: List<io.github.roggzuay.ondalune.ui.viewmodel.EqCurve> = emptyList(),
+    onSaveEqCurve: (String) -> Unit = {},
+    onApplyEqCurve: (io.github.roggzuay.ondalune.ui.viewmodel.EqCurve) -> Unit = {},
+    onDeleteEqCurve: (String) -> Unit = {},
+    crossfeed: CrossfeedLevel = CrossfeedLevel.OFF,
+    onSetCrossfeed: (CrossfeedLevel) -> Unit = {},
     /** The quality set for the network the phone is on now ([onMobileData]). */
     streamQuality: StreamQuality,
     onMobileData: Boolean,
@@ -3252,6 +3379,21 @@ fun SonicLabModalOverlay(
                             }
                         }
                     }
+                }
+
+                // Your own curves, and the crossfeed, under the bands they belong with.
+                item {
+                    SavedCurvesCard(
+                        curves = savedEqCurves,
+                        bands = customBandsDb,
+                        onSaveCurve = onSaveEqCurve,
+                        onApplyCurve = onApplyEqCurve,
+                        onDeleteCurve = onDeleteEqCurve
+                    )
+                }
+
+                item {
+                    CrossfeedCard(crossfeed = crossfeed, onSetCrossfeed = onSetCrossfeed)
                 }
 
                 item {

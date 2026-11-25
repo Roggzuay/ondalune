@@ -13,6 +13,7 @@ import io.github.roggzuay.ondalune.data.model.LibrarySortOption
 import io.github.roggzuay.ondalune.data.model.LibraryViewMode
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
 import io.github.roggzuay.ondalune.data.model.PlayerCustomizationSettings
+import io.github.roggzuay.ondalune.data.model.CrossfeedLevel
 import io.github.roggzuay.ondalune.data.model.ReplayGainMode
 import io.github.roggzuay.ondalune.data.model.SeekBarStyle
 import io.github.roggzuay.ondalune.data.model.SmartShuffleProfile
@@ -137,6 +138,10 @@ class SettingsStore(private val prefs: SharedPreferences) {
         update { it.copy(keepSoundHistory = enabled) }
     }
 
+    fun setCrossfeed(level: CrossfeedLevel) {
+        update { it.copy(crossfeed = level) }
+    }
+
     fun setRescanFoldersOnLaunch(enabled: Boolean) {
         update { it.copy(rescanFoldersOnLaunch = enabled) }
     }
@@ -240,6 +245,9 @@ class SettingsStore(private val prefs: SharedPreferences) {
             autoScrobble = prefs.getBoolean("cfg_auto_scrobble", defaults.autoScrobble),
             autoApplySoundProfiles = prefs.getBoolean("cfg_auto_sound_profiles", defaults.autoApplySoundProfiles),
             keepSoundHistory = prefs.getBoolean("cfg_keep_sound_history", defaults.keepSoundHistory),
+            crossfeed = runCatching {
+                CrossfeedLevel.valueOf(prefs.getString("cfg_crossfeed", defaults.crossfeed.name)!!)
+            }.getOrDefault(defaults.crossfeed),
             rescanFoldersOnLaunch = prefs.getBoolean("cfg_rescan_folders", defaults.rescanFoldersOnLaunch),
             librarySyncHours = prefs.getInt(LibrarySyncWorker.PREF_HOURS, defaults.librarySyncHours),
             resumePlaybackOnLaunch = prefs.getBoolean("cfg_resume_on_launch", defaults.resumePlaybackOnLaunch),
@@ -297,6 +305,7 @@ class SettingsStore(private val prefs: SharedPreferences) {
             .putBoolean("cfg_auto_scrobble", s.autoScrobble)
             .putBoolean("cfg_auto_sound_profiles", s.autoApplySoundProfiles)
             .putBoolean("cfg_keep_sound_history", s.keepSoundHistory)
+            .putString("cfg_crossfeed", s.crossfeed.name)
             .putBoolean("cfg_rescan_folders", s.rescanFoldersOnLaunch)
             .putInt(LibrarySyncWorker.PREF_HOURS, s.librarySyncHours)
             .putBoolean("cfg_resume_on_launch", s.resumePlaybackOnLaunch)
