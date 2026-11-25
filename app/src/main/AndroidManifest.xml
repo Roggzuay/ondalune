@@ -310,6 +310,15 @@
             android:name=".auto.OndaluneArtProvider"
             android:authorities="${applicationId}.art"
             android:exported="true" />
+
+        <!--
+            Where the Cast framework looks for its options. The class exists in both builds: the
+            real one in src/cast, an empty one in src/noCast that nothing ever reads, since
+            without Play Services there is nothing there to read it.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="io.github.roggzuay.ondalune.cast.OndaluneCastOptions" />
     </application>
 
 </manifest>

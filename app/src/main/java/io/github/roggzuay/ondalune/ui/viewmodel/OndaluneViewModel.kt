@@ -59,6 +59,8 @@ import io.github.roggzuay.ondalune.data.source.LocalMusicSource
 import kotlinx.coroutines.flow.drop
 import io.github.roggzuay.ondalune.playback.PlaybackEngine
 import io.github.roggzuay.ondalune.playback.PlaybackHost
+import io.github.roggzuay.ondalune.cast.createCastGateway
+import io.github.roggzuay.ondalune.playback.RoutedPlaybackEngine
 import io.github.roggzuay.ondalune.data.model.LibraryMix
 import io.github.roggzuay.ondalune.data.model.localEpochDay
 import io.github.roggzuay.ondalune.data.model.SongFeatures
@@ -960,19 +962,39 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         LibraryQueries.searchFolders(folderList, query)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** This phone's own engine, under whatever is routing the music (see [routedEngine]). */
+    private val localEngine = object : PlaybackEngine {
+        override val isPlaying get() = audioEngine.isPlaying
+        override val positionMs get() = audioEngine.positionMs
+        override fun play(track: SubsonicTrack, server: SubsonicServerConfig, eq: EqualizerPreset) =
+            audioEngine.playTrack(track, server, eq)
+        override fun togglePlayPause() = audioEngine.togglePlayPause()
+        override fun pause() = audioEngine.pausePlayback()
+        override fun seekTo(positionMs: Long) = audioEngine.seekTo(positionMs)
+        override fun setOutputVolume(volume: Float) = audioEngine.setOutputVolume(volume)
+        override fun expectNextTrack(trackId: String?) = audioEngine.expectNextTrack(trackId)
+    }
+
+    /** Casting, in the builds that have it; a plain no in the ones that don't. */
+    val cast = createCastGateway(application)
+
+    /** Decides whether a song plays here or somewhere else (see [RoutedPlaybackEngine]). */
+    private val routedEngine = RoutedPlaybackEngine(
+        local = localEngine,
+        cast = cast,
+        streamUrlFor = { track, server ->
+            io.github.roggzuay.ondalune.data.source.MusicSources
+                .forServer(application, client, server)
+                .playablePath(server, track)
+        },
+        coverUrlFor = { it.coverArtUrl },
+        scope = viewModelScope,
+        showBanner = { _statusBanner.value = it }
+    )
+
     /** The queue and what plays next. Declared after the library flows it reads. */
     val playback = PlaybackCoordinator(
-        engine = object : PlaybackEngine {
-            override val isPlaying get() = audioEngine.isPlaying
-            override val positionMs get() = audioEngine.positionMs
-            override fun play(track: SubsonicTrack, server: SubsonicServerConfig, eq: EqualizerPreset) =
-                audioEngine.playTrack(track, server, eq)
-            override fun togglePlayPause() = audioEngine.togglePlayPause()
-            override fun pause() = audioEngine.pausePlayback()
-            override fun seekTo(positionMs: Long) = audioEngine.seekTo(positionMs)
-            override fun setOutputVolume(volume: Float) = audioEngine.setOutputVolume(volume)
-            override fun expectNextTrack(trackId: String?) = audioEngine.expectNextTrack(trackId)
-        },
+        engine = routedEngine,
         host = object : PlaybackHost {
             override val library get() = tracks.value
             override val allTracks get() = allServerTracks.value
@@ -1082,6 +1104,27 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
         audioEngine.vinylMode = settings.customization.value.vinylMode
         sound.applyToEngine()
 
+        // A device joining or leaving moves the music, and says where it went.
+        cast.onTrackEnded { playback.onTrackEnded() }
+        viewModelScope.launch {
+            var wasConnected = false
+            cast.state.collect { state ->
+                if (state.connected && !wasConnected) {
+                    routedEngine.onCastConnected(
+                        current = playback.currentTrack.value,
+                        server = playback.currentTrack.value?.let { streamServerFor(it) },
+                        positionMs = audioEngine.positionMs.value,
+                        wasPlaying = audioEngine.isPlaying.value
+                    )
+                } else if (!state.connected && wasConnected) {
+                    routedEngine.onCastDisconnected { track, server, at ->
+                        _statusBanner.value = "Back on this phone"
+                        audioEngine.playTrack(track, server, sound.equalizerPreset.value, startMs = at)
+                    }
+                }
+                wasConnected = state.connected
+            }
+        }
         audioEngine.onTrackEnded = { playback.onTrackEnded() }
         audioEngine.onTrackUnplayable = { track, message -> playback.onTrackUnplayable(track, message) }
         // Gapless and crossfade: the engine lines up whatever plays next and moves on by itself.

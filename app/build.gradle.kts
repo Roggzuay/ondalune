@@ -8,6 +8,13 @@ val playStore: Boolean = providers.gradleProperty("ondalune.playStore").orNull?.
 val selfUpdate: Boolean = !playStore &&
   (providers.gradleProperty("ondalune.selfUpdate").orNull?.toBoolean() ?: true)
 
+// Google Cast needs Google's own Cast SDK and Play Services, neither of which a reproducible
+// F-Droid build can carry. Cast rides with the GitHub build, which is the same build that carries
+// the updater, so -Pondalune.selfUpdate=false turns both off together. -Pondalune.cast= overrides
+// that either way. Everything behind it is guarded by BuildConfig.CAST and lives in src/cast or
+// src/noCast, so the app is whole with or without it.
+val cast: Boolean = providers.gradleProperty("ondalune.cast").orNull?.toBoolean() ?: selfUpdate
+
 /**
  * Release signing, never committed. Locally it comes from `keystore.properties` in the project
  * root (git-ignored); in CI from the ONDALUNE_KEYSTORE_* environment variables. Without either,
@@ -49,6 +56,7 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     buildConfigField("boolean", "SELF_UPDATE", selfUpdate.toString())
     buildConfigField("boolean", "PLAY_STORE", playStore.toString())
+    buildConfigField("boolean", "CAST", cast.toString())
   }
 
   signingConfigs {
@@ -94,6 +102,9 @@ android {
   // version of the database. Debug builds only; release builds never carry them.
   sourceSets {
     getByName("debug").assets.srcDir("$projectDir/schemas")
+    // One of these two is always compiled in, and they define the same names, so the rest of the
+    // app never asks whether this build can cast.
+    getByName("main").kotlin.srcDir(if (cast) "src/cast/java" else "src/noCast/java")
     when {
       playStore -> getByName("release").manifest.srcFile("src/playStore/AndroidManifest.xml")
       !selfUpdate -> getByName("release").manifest.srcFile("src/noSelfUpdate/AndroidManifest.xml")
@@ -111,6 +122,10 @@ ksp {
 }
 
 dependencies {
+  if (cast) {
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.androidx.mediarouter)
+  }
   implementation(libs.androidx.work.runtime.ktx)
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)

@@ -368,6 +368,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundPlays by viewModel.soundPlays.collectAsStateWithLifecycle()
     val pendingSoundSave by viewModel.sound.pendingSave.collectAsStateWithLifecycle()
     val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
+    val castState by viewModel.cast.state.collectAsStateWithLifecycle()
     val soundProfilesOpen by viewModel.isSoundProfilesOpen.collectAsStateWithLifecycle()
     val savedSounds by viewModel.savedSounds.collectAsStateWithLifecycle()
     val soundPlaysAll by viewModel.soundPlaysAll.collectAsStateWithLifecycle()
@@ -1320,6 +1321,8 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 onOpenSleepTimerSheet = { viewModel.setSleepTimerSheetOpen(true) },
                                 readAudioLevels = viewModel::readAudioLevels,
                                 onWantAudioLevels = viewModel::setAudioLevelsWanted,
+                                castSupported = viewModel.cast.supported,
+                                castState = castState,
                                 soundOffer = soundOffer,
                                 onApplySoundOffer = viewModel.soundProfiles::applyOffer,
                                 onDismissSoundOffer = viewModel.soundProfiles::dismissOffer,

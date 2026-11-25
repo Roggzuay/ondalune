@@ -62,7 +62,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.GraphicEq
+import io.github.roggzuay.ondalune.cast.CastButton
 import io.github.roggzuay.ondalune.ui.viewmodel.SoundOffer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -518,6 +520,9 @@ fun NowPlayingStudioOverlay(
     /** Reads the three bands of what is playing, for the Reactive backdrop. */
     readAudioLevels: (FloatArray) -> Unit = {},
     onWantAudioLevels: (Boolean) -> Unit = {},
+    /** This build can cast, and where the music is coming out if it is. */
+    castSupported: Boolean = false,
+    castState: io.github.roggzuay.ondalune.cast.CastState = io.github.roggzuay.ondalune.cast.CastState(),
     /** The saved sound for this song, offered above the title. */
     soundOffer: SoundOffer? = null,
     onApplySoundOffer: () -> Unit = {},
@@ -731,6 +736,7 @@ fun NowPlayingStudioOverlay(
                         soundShaped = eqPreset != EqualizerPreset.FLAT_STUDIO,
                         speedShaped = speedPitchState.speed != 1.0f || speedPitchState.effectivePitch != 1.0f || reverbState.isActivelyProcessing,
                         showSpeedResetHint = showSpeedResetHint,
+                        castSupported = castSupported,
                         onCollapse = onCollapse,
                         onOpenSonicLab = onOpenSonicLab,
                         onOpenSpeedPitchSheet = onOpenSpeedPitchSheet,
@@ -794,6 +800,7 @@ fun NowPlayingStudioOverlay(
                         onCycleRepeat = onCycleRepeat,
                         onToggleStar = onToggleStar,
                         onOpenSleepTimerSheet = onOpenSleepTimerSheet,
+                        castState = castState,
                         soundOffer = soundOffer,
                         onApplySoundOffer = onApplySoundOffer,
                         onDismissSoundOffer = onDismissSoundOffer,
@@ -1311,6 +1318,8 @@ private fun PlayerTopBar(
     /** White over the picture; the theme's text colour over the lyrics' dimmed backdrop. */
     iconColor: Color,
     showSpeedResetHint: Boolean,
+    /** This build can cast: the route button goes in the top bar beside the sound tools. */
+    castSupported: Boolean,
     onCollapse: () -> Unit,
     onOpenSonicLab: () -> Unit,
     onOpenSpeedPitchSheet: () -> Unit,
@@ -1335,6 +1344,14 @@ private fun PlayerTopBar(
         }
 
         Spacer(Modifier.weight(1f))
+
+        // Google's own route button: it draws nothing until there is a device on the network.
+        if (castSupported) CastButton(
+            modifier = Modifier
+                .size(44.dp)
+                .padding(end = 2.dp)
+                .testTag("cast_button")
+        )
 
         // One-time "Hold to reset" bubble, for new installs and upgrades alike. It counts as
         // seen only once it has been on screen, so closing the player early shows it again.
@@ -1443,6 +1460,56 @@ private fun SavedSoundStrip(
     }
 }
 
+/**
+ * Where the music is coming out, when it is not this phone, and what that costs.
+ *
+ * The device fetches the song from your server and plays it itself, so Ondalune's sound engine is
+ * not in the path at all. Saying so here is the difference between a feature and a bug report.
+ */
+@Composable
+private fun CastingStrip(state: io.github.roggzuay.ondalune.cast.CastState) {
+    AnimatedVisibility(
+        visible = state.connected || state.connecting,
+        enter = fadeIn(tween(300)) + expandVertically(tween(260, easing = FastOutSlowInEasing)),
+        exit = fadeOut(tween(220)) + shrinkVertically(tween(200))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+                .testTag("casting_strip"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Cast,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+            Column {
+                Text(
+                    text = if (state.connecting && !state.connected) {
+                        "Connecting to ${state.deviceName.ifBlank { "the other device" }}…"
+                    } else {
+                        "Playing on ${state.deviceName.ifBlank { "another device" }}"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                if (state.connected) Text(
+                    text = "Speed, pitch, reverb and the equalizer stay on this phone",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PlayerControls(
     track: SubsonicTrack,
@@ -1472,6 +1539,8 @@ private fun PlayerControls(
     onOpenArtist: () -> Unit,
     onOpenAudioDetails: () -> Unit,
     onTitleRowBottom: (Int) -> Unit,
+    /** Where the music is coming out, when it is not this phone. */
+    castState: io.github.roggzuay.ondalune.cast.CastState = io.github.roggzuay.ondalune.cast.CastState(),
     /** The saved sound for this song, waiting above the title; null when there is none. */
     soundOffer: SoundOffer? = null,
     onApplySoundOffer: () -> Unit = {},
@@ -1504,6 +1573,7 @@ private fun PlayerControls(
                 exit = shrinkVertically(tween(320, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(200))
             ) {
             Column {
+            CastingStrip(castState)
             SavedSoundStrip(
                 offer = soundOffer?.takeIf { it.trackId == track.id },
                 onApply = onApplySoundOffer,
