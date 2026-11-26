@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import io.github.roggzuay.ondalune.data.model.PlayerBackgroundAnimationStyle
+import io.github.roggzuay.ondalune.ui.screens.SettingsExpandableSection
 import io.github.roggzuay.ondalune.ui.viewmodel.SettingsStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,5 +71,29 @@ class PlayerBackgroundTest {
             PlayerBackgroundAnimationStyle.ARTWORK_GLOW,
             store().customization.value.playerBackgroundStyle
         )
+    }
+
+
+    /**
+     * The settings block takes its rounded ends from the first and last entries of this enum, so
+     * the declaration order has to be the order the rows are emitted in. Nothing enforced that,
+     * and when it last drifted the Backup row carried the block's bottom corner in mid-list while
+     * Music sources, actually last on screen, was left square.
+     */
+    @Test
+    fun `the settings sections are declared in the order they are drawn`() {
+        val onScreen = listOf(
+            SettingsExpandableSection.APP_ICON,
+            SettingsExpandableSection.EQ_BITRATE,
+            SettingsExpandableSection.APPEARANCE_THEME,
+            SettingsExpandableSection.PLAYBACK_DSP,
+            SettingsExpandableSection.LYRICS,
+            SettingsExpandableSection.MOTION_ARTWORK,
+            SettingsExpandableSection.WIDGET_NOTIFICATION,
+            SettingsExpandableSection.SOUND_PROFILES,
+            SettingsExpandableSection.BACKUP,
+            SettingsExpandableSection.SERVER_HUB
+        )
+        assertEquals(onScreen, SettingsExpandableSection.entries.toList())
     }
 }

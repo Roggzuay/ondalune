@@ -124,8 +124,11 @@ class ExampleUnitTest {
         assertTrue(LibraryQueries.searchAlbums(albums, missingQuery).isEmpty())
         assertTrue(LibraryQueries.searchArtists(artists, missingQuery).isEmpty())
 
-        // Theme animation labels do not mention official third-party app names
-        assertEquals("Velvet Mesh", PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN.label)
-        assertTrue(PlayerBackgroundAnimationStyle.entries.none { it.label.contains("Apple Music", ignoreCase = true) })
+        // Backdrop names are Ondalune's own, not another app's.
+        assertTrue(
+            PlayerBackgroundAnimationStyle.entries.none {
+                it.label.contains("Apple", ignoreCase = true) || it.label.contains("Spotify", ignoreCase = true)
+            }
+        )
     }
 }

@@ -547,7 +547,7 @@ fun NowPlayingStudioOverlay(
     showPlayerStarButton: Boolean = true,
     shuffleMode: ShuffleMode = if (shuffleEnabled) ShuffleMode.SMART else ShuffleMode.OFF,
     smartShuffleProfile: SmartShuffleProfile = SmartShuffleProfile.BALANCED,
-    backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN,
+    backgroundAnimationStyle: PlayerBackgroundAnimationStyle = PlayerBackgroundAnimationStyle.ARTWORK_GLOW,
     /** Fill the room under the cover with its own colour, giving way to the surface by the title. */
     lyricsSource: LyricsSource = LyricsSource(),
     lyricsSearch: LyricsSearch = LyricsSearch(),

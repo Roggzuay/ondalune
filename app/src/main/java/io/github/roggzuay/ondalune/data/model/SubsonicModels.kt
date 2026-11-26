@@ -683,11 +683,10 @@ data class SleepTimerState(
  */
 enum class PlayerBackgroundAnimationStyle(val label: String, val description: String) {
     ARTWORK_GLOW("Blurred cover", "The cover, zoomed in and blurred behind the whole player"),
-    APPLE_GLITTER_GRAIN("Velvet Mesh", "A flowing mesh of the cover's colours with a soft sheen and film grain"),
-    LIQUID_AURORA("Aurora", "Curtains of the cover's colours rippling across the screen"),
-    VINYL_HALO_PULSE("Halo", "A turning ring of cover colours with pulses radiating outward"),
-    MINIMAL_TONAL("Still", "A calm, motionless gradient of the cover's colours"),
-    ARTWORK_REACTIVE("Reactive", "The blurred cover again, breathing and drifting with the music")
+    MESH_SPIN("Mesh", "Thick textured glass over the cover, its facets shifting as you watch"),
+    COMIC("Comic", "The cover's colours in printed dots, drifting past and surging on the kick"),
+    RIPPLE("Ripple", "A heartbeat in the middle, and a ring wherever the kick lands"),
+    ARTWORK_REACTIVE("Night light", "The blurred cover, breathing and drifting with the music")
 }
 
 /**

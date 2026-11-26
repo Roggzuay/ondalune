@@ -113,7 +113,7 @@ class ExampleRobolectricTest {
 
     @Test
     fun `player background animation styles app icon variants and expandable settings sections are defined`() {
-        assertEquals(6, PlayerBackgroundAnimationStyle.entries.size)
+        assertEquals(5, PlayerBackgroundAnimationStyle.entries.size)
         assertEquals(10, SettingsExpandableSection.entries.size)
         assertTrue(SettingsExpandableSection.MOTION_ARTWORK in SettingsExpandableSection.entries)
         assertEquals(4, io.github.roggzuay.ondalune.data.model.AppIconVariant.entries.size)

@@ -249,11 +249,6 @@ enum class SettingsExpandableSection(
         subtitle = "Home screen widget and media controls",
         icon = Icons.Filled.Widgets
     ),
-    SERVER_HUB(
-        title = "Music sources",
-        subtitle = "Servers, music on this phone, library sync",
-        icon = Icons.Filled.Dns
-    ),
     SOUND_PROFILES(
         title = "Sound Profiles",
         subtitle = "Songs you have saved a sound for, and whether they come on by themselves",
@@ -263,6 +258,18 @@ enum class SettingsExpandableSection(
         title = "Backup",
         subtitle = "Save how Ondalune is set up, and put it back",
         icon = Icons.Filled.Backup
+    ),
+
+    /**
+     * Music sources is last because the list draws it last. The order of this enum IS the order
+     * on screen: the first and last entries get the rounded ends of the block, so an entry added
+     * in the wrong place leaves one row square where the block should close and another rounded
+     * in the middle of it.
+     */
+    SERVER_HUB(
+        title = "Music sources",
+        subtitle = "Servers, music on this phone, library sync",
+        icon = Icons.Filled.Dns
     )
 }
 

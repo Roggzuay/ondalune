@@ -32,15 +32,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
@@ -71,20 +69,23 @@ fun PlayerBackdrop(
     isPlaying: Boolean,
     playbackSpeed: Float,
     modifier: Modifier = Modifier,
-    /** Bass, middle and top of what is playing, each 0..1. Only read by the Reactive style. */
+    /** Bass, middle and top of what is playing, each 0..1. Only the two live scenes read it. */
     readLevels: (FloatArray) -> Unit = {},
-    /** Told while the Reactive style is on screen, so nothing is measured when nobody is looking. */
+    /** Told while a scene that listens is on screen, so nothing is measured for nobody. */
     onWantLevels: (Boolean) -> Unit = {}
 ) {
     val reducedMotion = LocalReducedMotion.current
     val clock = remember { mutableFloatStateOf(0f) }
     val coverBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    // Reactive is the blurred cover again, but it moves: it needs the frame loop even where the
-    // other blurred-cover style holds still.
-    val reactive = style == PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE && !reducedMotion
-    // The blurred cover holds still, like the picture above it.
-    val animate = isPlaying && !reducedMotion &&
-        style != PlayerBackgroundAnimationStyle.MINIMAL_TONAL && (!coverBlur || reactive)
+    // Two scenes listen to the music; the rest move on their own clock. Blurred cover does not
+    // move at all, which is the point of it.
+    val listens = !reducedMotion && (
+        style == PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE ||
+            style == PlayerBackgroundAnimationStyle.RIPPLE ||
+            style == PlayerBackgroundAnimationStyle.COMIC
+        )
+    val moves = style != PlayerBackgroundAnimationStyle.ARTWORK_GLOW
+    val animate = isPlaying && !reducedMotion && (moves || !coverBlur)
 
     // The three bands, smoothed once more for the eye. Written in the frame loop and read in the
     // draw and layer phases, so the picture moves without a single recomposition.
@@ -93,12 +94,27 @@ fun PlayerBackdrop(
     val high = remember { mutableFloatStateOf(0f) }
     val levels = remember { FloatArray(3) }
 
-    DisposableEffect(reactive) {
-        onWantLevels(reactive)
+    /**
+     * How far the comic field has travelled. It is accumulated rather than worked out from the
+     * clock, because the kick speeds it up: multiplying the clock would jump the whole field
+     * forward the instant the bass arrived instead of surging it along.
+     */
+    val comicTravel = remember { mutableFloatStateOf(0f) }
+
+    /** Ripples in flight: x, y, the moment each started, and how hard it was hit. */
+    val ripples = remember { FloatArray(RippleSlots * 4) }
+    val nextRipple = remember { intArrayOf(0) }
+    val lastLow = remember { floatArrayOf(0f) }
+    val lastSpawn = remember { floatArrayOf(-9f) }
+    val wallSeconds = remember { floatArrayOf(0f) }
+    val spawnRandom = remember { kotlin.random.Random(7) }
+
+    DisposableEffect(listens) {
+        onWantLevels(listens)
         onDispose { onWantLevels(false) }
     }
 
-    LaunchedEffect(animate, playbackSpeed, reactive) {
+    LaunchedEffect(animate, playbackSpeed, listens) {
         if (!animate) {
             // Coming to rest over about a third of a second rather than snapping flat, which
             // would read as the picture being switched off. Timed, not counted in frames: the
@@ -124,14 +140,43 @@ fun PlayerBackdrop(
             withFrameNanos { now ->
                 val dt = (now - last) / 1_000_000_000f
                 // Drift carries on with the music; the reactive scene speeds up a little with it.
-                val pace = if (reactive) 1f + mid.floatValue * 0.6f else 1f
+                val pace = if (listens) 1f + mid.floatValue * 0.6f else 1f
                 clock.floatValue += dt * playbackSpeed.coerceIn(0.5f, 2f) * pace
                 last = now
-                if (reactive) {
+                if (listens) {
                     readLevels(levels)
                     low.floatValue += (levels[0] - low.floatValue) * EyeSmoothing
                     mid.floatValue += (levels[1] - mid.floatValue) * EyeSmoothing
                     high.floatValue += (levels[2] - high.floatValue) * EyeSmoothing
+                } else {
+                    // Switching to a scene that does not listen used to leave the bands frozen at
+                    // whatever they held at that instant, so the glass swayed by a stuck amount.
+                    val keep = kotlin.math.exp(-dt / RestingSeconds).toFloat()
+                    low.floatValue *= keep
+                    mid.floatValue *= keep
+                    high.floatValue *= keep
+                }
+                val bass = low.floatValue
+                // The comic field runs at a steady pace and surges on the kick.
+                // Wrapped rather than left to grow: multiplied by the step over a long session
+                // it reached a size where float resolution swallowed the per-frame increment.
+                comicTravel.floatValue = (comicTravel.floatValue +
+                    dt * (ComicDriftSteps + bass * ComicKickSteps)) % 1024f
+                // A kick is the bass climbing quickly, not merely being loud: a sustained bass
+                // note would otherwise spawn a ripple on every frame of itself.
+                val rise = bass - lastLow[0]
+                lastLow[0] = bass
+                // Wall time, not the music clock: at double speed the music clock would let a
+                // kick through twice as often as a listener could tell them apart.
+                wallSeconds[0] += dt
+                if (bass > 0.38f && rise > 0.055f && wallSeconds[0] - lastSpawn[0] > 0.11f) {
+                    lastSpawn[0] = wallSeconds[0]
+                    val slot = nextRipple[0] % RippleSlots
+                    nextRipple[0] = slot + 1
+                    ripples[slot * 4] = 0.12f + spawnRandom.nextFloat() * 0.76f
+                    ripples[slot * 4 + 1] = 0.10f + spawnRandom.nextFloat() * 0.62f
+                    ripples[slot * 4 + 2] = clock.floatValue
+                    ripples[slot * 4 + 3] = bass
                 }
             }
         }
@@ -148,28 +193,60 @@ fun PlayerBackdrop(
     val c3 by animateColorAsState(pick(3), tween(1600), label = "bd3")
     val c4 by animateColorAsState(pick(4), tween(1600), label = "bd4")
     val colors = Colors(c0, c1, c2, c3, c4)
-    val grain = remember { sharedGrain() }
+    // The drawn scenes get colours that stand clear of the page rather than glow under a photo.
+    fun vividPick(i: Int) = vivid(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
+    val v0 by animateColorAsState(vividPick(0), tween(1600), label = "bv0")
+    val v1 by animateColorAsState(vividPick(1), tween(1600), label = "bv1")
+    val v2 by animateColorAsState(vividPick(2), tween(1600), label = "bv2")
+    val v3 by animateColorAsState(vividPick(3), tween(1600), label = "bv3")
+    val v4 by animateColorAsState(vividPick(4), tween(1600), label = "bv4")
+    val drawn = Colors(v0, v1, v2, v3, v4)
 
     BoxWithConstraints(modifier.fillMaxSize().background(base), contentAlignment = Alignment.Center) {
         // The cover itself, zoomed past the screen's edges and blurred: the picture at the top of
         // the player carries on, out of focus, behind everything below it.
         val fill = max(maxWidth / CoverBox, maxHeight / CoverBox) * 1.08f
-        // Reactive breathes the same picture: the cover swells on the bass and drifts on the mids,
-        // read in the layer phase so it costs no recomposition.
-        if (coverBlur) {
-            if (reactive) BlurredCover(track, fill) { 1f + low.floatValue * ReactiveSwell to mid.floatValue }
-            else BlurredCover(track, fill)
+        when (style) {
+            // Comic paints its own ground edge to edge, so blurring a cover under it is work
+            // nobody sees.
+            PlayerBackgroundAnimationStyle.COMIC -> Unit
+            // Mesh turns the cover, so it has to be wide enough that a corner never swings in.
+            PlayerBackgroundAnimationStyle.MESH_SPIN -> if (coverBlur) {
+                BlurredCover(track, fill * 1.42f) {
+                    CoverMotion(scale = 1f, drift = 0f, rotation = clock.floatValue * MeshSpinPerSecond)
+                }
+            }
+            // Night light breathes the same picture: it swells on the bass and drifts on the
+            // mids, read in the layer phase so it costs no recomposition.
+            PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> if (coverBlur) {
+                BlurredCover(track, fill) {
+                    CoverMotion(1f + low.floatValue * ReactiveSwell, mid.floatValue, 0f)
+                }
+            }
+            else -> if (coverBlur) BlurredCover(track, fill)
         }
         Canvas(Modifier.fillMaxSize()) {
             val t = clock.floatValue
             when (style) {
                 // Before Android 12 there is no blur: the cover's colours stand in for it.
-                PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> if (!coverBlur) mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
-                // The cover's own colours, lifted off it by the top of the music. On a phone with
-                // no blur the mesh is the whole scene, so it carries the bass as well.
+                PlayerBackgroundAnimationStyle.ARTWORK_GLOW ->
+                    if (!coverBlur) mesh(colors, t, alpha = 0.55f, amplitude = 0.16f)
+
+                // A mesh of the cover's colours turning against the cover behind it. The two
+                // opposite rotations are what stop it reading as a single drifting blur.
+                PlayerBackgroundAnimationStyle.MESH_SPIN ->
+                    texturedGlass(drawn, base, t, mid.floatValue, overCover = coverBlur)
+
+                // Printed dots in the cover's colours, the whole field drifting steadily past as
+                // though it were outside a window.
+                PlayerBackgroundAnimationStyle.COMIC ->
+                    comicDots(drawn, t, comicTravel.floatValue, low.floatValue)
+
+                // Rings leaving the cover on the bass.
+                PlayerBackgroundAnimationStyle.RIPPLE ->
+                    ripple(drawn, base, t, low.floatValue, ripples, fullBleed = !coverBlur)
+
                 PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> {
-                    // The cover's own colours lifting off it. Wide enough to be seen: a scene
-                    // that only moves a couple of per cent is a scene nobody notices.
                     mesh(
                         colors,
                         t,
@@ -178,29 +255,32 @@ fun PlayerBackdrop(
                     )
                     sheen(t, colors.c4.copy(alpha = 0.3f + mid.floatValue * 0.7f))
                 }
-                PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
-                    mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
-                    sheen(t, colors.c4)
-                    drawRect(ShaderBrush(ImageShader(grain, TileMode.Repeated, TileMode.Repeated)), alpha = 0.10f)
-                }
-                PlayerBackgroundAnimationStyle.LIQUID_AURORA -> aurora(colors, t)
-                PlayerBackgroundAnimationStyle.VINYL_HALO_PULSE -> halo(colors, t, base)
-                PlayerBackgroundAnimationStyle.MINIMAL_TONAL -> drawRect(
-                    Brush.linearGradient(listOf(colors.c0.copy(alpha = 0.55f), colors.c3.copy(alpha = 0.35f), base))
-                )
             }
             // Legibility: the cover lies over the top; from the title down the colour settles.
-            // The blurred cover keeps more of itself, so it reads as the picture, not a tint.
+            // A drawn scene is the picture rather than a wash under one, so it keeps far more of
+            // itself --- scrimming Comic or Ripple as heavily as a photograph is what made the
+            // old backdrops indistinguishable from each other.
+            val drawnScene = style == PlayerBackgroundAnimationStyle.COMIC ||
+                style == PlayerBackgroundAnimationStyle.RIPPLE ||
+                style == PlayerBackgroundAnimationStyle.MESH_SPIN
             drawRect(
-                if (coverBlur) Brush.verticalGradient(
-                    0f to base.copy(alpha = 0.08f),
-                    0.45f to base.copy(alpha = if (dark) 0.3f else 0.4f),
-                    1f to base.copy(alpha = if (dark) 0.5f else 0.6f)
-                ) else Brush.verticalGradient(
-                    0f to base.copy(alpha = 0.30f),
-                    0.45f to base.copy(alpha = 0.56f),
-                    1f to base.copy(alpha = 0.78f)
-                )
+                when {
+                    drawnScene -> Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.5f to base.copy(alpha = 0.10f),
+                        1f to base.copy(alpha = if (dark) 0.34f else 0.40f)
+                    )
+                    coverBlur -> Brush.verticalGradient(
+                        0f to base.copy(alpha = 0.08f),
+                        0.45f to base.copy(alpha = if (dark) 0.3f else 0.4f),
+                        1f to base.copy(alpha = if (dark) 0.5f else 0.6f)
+                    )
+                    else -> Brush.verticalGradient(
+                        0f to base.copy(alpha = 0.30f),
+                        0.45f to base.copy(alpha = 0.56f),
+                        1f to base.copy(alpha = 0.78f)
+                    )
+                }
             )
         }
     }
@@ -220,7 +300,47 @@ private const val ReactiveSwell = 0.16f
 /** The furthest the blurred cover drifts, in density-independent pixels. */
 private const val ReactiveDriftPx = 44f
 
+/** Degrees a second the cover and the mesh turn, in opposite directions. */
+private const val MeshSpinPerSecond = 2.6f
+
+/** How many dot-widths the comic field travels each second at rest, and on a full kick. */
+private const val ComicDriftSteps = 0.38f
+private const val ComicKickSteps = 1.9f
+
+private const val RippleRings = 5
+
+/** How many kick-born ripples can be in the air at once, and how long each lives. */
+private const val RippleSlots = 12
+private const val RippleLifeSeconds = 1.9f
+
+/** Panes across the narrow side of the glass: enough to read as a rough surface, not a window. */
+private const val GlassPanes = 8.5f
+
 private class Colors(val c0: Color, val c1: Color, val c2: Color, val c3: Color, val c4: Color)
+
+/**
+ * Keep the cover's hue but push it clear of the page, so a drawn scene reads against the surface
+ * instead of dissolving into it. On a light theme that means darker; on a dark one, lighter.
+ *
+ * The glow tuning below is right for a wash lying under a photograph. It is wrong for a scene
+ * that is itself the picture --- Comic, Ripple and Mesh were drawing pale shapes onto a pale page
+ * and then having a scrim put over the top of them.
+ */
+private fun vivid(color: Color, dark: Boolean): Color {
+    val hsl = FloatArray(3)
+    androidx.core.graphics.ColorUtils.colorToHSL(color.toArgb(), hsl)
+    // A black-and-white sleeve has nothing to saturate, and squeezing its swatches into a narrow
+    // band left every one of them the same grey, so the scenes drew in a single flat tone. Keep
+    // the lightness spread wide when there is no colour to work with.
+    val grey = hsl[1] < 0.12f
+    hsl[2] = when {
+        grey -> hsl[2].coerceIn(0.14f, 0.86f)
+        dark -> hsl[2].coerceIn(0.44f, 0.72f)
+        else -> hsl[2].coerceIn(0.26f, 0.52f)
+    }
+    hsl[1] = (hsl[1] * 1.35f).coerceAtMost(1f)
+    return Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+}
 
 /** Keep the cover's hue but pull its lightness into a range that glows on the page. */
 private fun tune(color: Color, dark: Boolean): Color {
@@ -277,12 +397,15 @@ fun BlurredCoverHeader(
     }
 }
 
+/** What a live scene does to the blurred cover, read fresh in the layer phase every frame. */
+internal class CoverMotion(val scale: Float, val drift: Float, val rotation: Float)
+
 @Composable
 private fun BlurredCover(
     track: SubsonicTrack,
     fill: Float,
-    /** Reactive only: extra swell and the drift, both read in the layer phase, per frame. */
-    motion: (() -> Pair<Float, Float>)? = null
+    /** Live scenes only: swell, drift and turn, all read in the layer phase, per frame. */
+    motion: (() -> CoverMotion)? = null
 ) {
     // Blurring a small box and scaling the cached result is far cheaper than blurring the screen.
     // The scale wraps the crossfade so the box edge never shows on track change.
@@ -294,12 +417,13 @@ private fun BlurredCover(
                     scaleX = fill
                     scaleY = fill
                 } else {
-                    val (swell, drift) = motion()
-                    scaleX = fill * swell
-                    scaleY = fill * swell
+                    val m = motion()
+                    scaleX = fill * m.scale
+                    scaleY = fill * m.scale
                     // A hand's width of drift at the loudest, and never more than that.
-                    translationX = drift * ReactiveDriftPx * density
-                    translationY = drift * ReactiveDriftPx * 0.6f * density
+                    translationX = m.drift * ReactiveDriftPx * density
+                    translationY = m.drift * ReactiveDriftPx * 0.6f * density
+                    rotationZ = m.rotation
                 }
             }
     ) {
@@ -322,6 +446,210 @@ private fun BlurredCover(
         }
     }
 }
+
+
+/**
+ * Printed dots, the way a comic page is printed: one flat ground in the cover's colours, and a
+ * grid of dots over it whose size and tint follow a slow field, so they read as bands of shade
+ * rather than noise.
+ *
+ * The field travels steadily and surges on the kick. [travel] is accumulated by the caller rather
+ * than taken from the clock, because speeding up a position computed from the clock would jump
+ * the whole field forward the moment the bass arrived instead of pushing it along.
+ */
+private fun DrawScope.comicDots(c: Colors, t: Float, travel: Float, bass: Float) {
+    drawRect(
+        Brush.linearGradient(
+            listOf(c.c0, c.c3, c.c2),
+            start = Offset(0f, 0f),
+            end = Offset(size.width, size.height)
+        )
+    )
+    val step = size.minDimension / 13f
+    val run = travel * step
+    val cols = (size.width / step).toInt() + 1
+    val rows = (size.height / step).toInt() + 1
+    val slideX = run * 0.45f % step
+    val slideY = run % step
+    for (row in -1..rows) {
+        for (col in -1..cols) {
+            val x = col * step + slideX
+            val y = row * step + slideY
+            // Two slow waves crossed: bands of larger and smaller dots, never a random field.
+            val f = (sin(x / size.width * 3.1f + t * 0.30f) * 0.5f + 0.5f) *
+                (cos(y / size.height * 2.3f - t * 0.18f) * 0.5f + 0.5f)
+            val radius = step * (0.11f + 0.40f * f) * (1f + bass * 0.45f)
+            drawCircle(
+                color = lerp(c.c1, c.c4, f),
+                radius = radius,
+                center = Offset(x, y),
+                alpha = 0.62f + 0.33f * f
+            )
+        }
+    }
+}
+
+/**
+ * Rings leaving the cover on the bass.
+ *
+ * One set keeps travelling out of the middle so the scene is alive in a quiet passage, and each
+ * kick drops another ring somewhere else on the screen. The middle set is deliberately short —
+ * it is the heartbeat under the rest, not the whole picture.
+ *
+ * The ring colour is chosen for contrast against the ground rather than taken from the palette as
+ * it comes: a cover whose colours all sit near the surface used to draw rings nobody could see.
+ */
+private fun DrawScope.ripple(
+    c: Colors,
+    base: Color,
+    t: Float,
+    bass: Float,
+    live: FloatArray,
+    fullBleed: Boolean
+) {
+    val centre = Offset(size.width / 2f, size.height * 0.40f)
+    // Without a blurred cover underneath there is nothing at the edges, so the wash covers all.
+    if (fullBleed) drawRect(Brush.linearGradient(listOf(c.c0, c.c3, c.c1)))
+    drawRect(
+        Brush.radialGradient(
+            listOf(c.c0.copy(alpha = 0.55f), c.c3.copy(alpha = 0.26f), Color.Transparent),
+            center = centre,
+            radius = size.maxDimension * 0.75f
+        )
+    )
+    // The rings sit on that wash, not on the bare surface.
+    val ink = againstGround(c, washed(base, c.c0, 0.55f))
+
+    // The heartbeat in the middle, on a short radius.
+    val middleReach = size.minDimension * 0.30f
+    for (i in 0 until RippleRings) {
+        val phase = ((t * (0.22f + bass * 0.30f)) + i.toFloat() / RippleRings) % 1f
+        val fade = 1f - phase
+        drawCircle(
+            color = ink,
+            radius = phase * middleReach,
+            center = centre,
+            // Squared fade put most of a ring's life under 20% alpha, which is why rings were
+            // there but nobody could see them.
+            alpha = fade * (0.42f + bass * 0.40f),
+            style = Stroke(width = (2f + bass * 7f) * (0.4f + fade) * density)
+        )
+    }
+
+    // One ring per kick, wherever it landed, spreading and fading out.
+    val reach = size.minDimension * 0.58f
+    // Walk what the caller actually gave: the picker's tile passes a single ring.
+    for (slot in 0 until minOf(RippleSlots, live.size / 4)) {
+        val born = live[slot * 4 + 2]
+        if (born <= 0f) continue
+        val age = (t - born) / RippleLifeSeconds
+        if (age <= 0f || age >= 1f) continue
+        val strength = live[slot * 4 + 3]
+        val fade = 1f - age
+        drawCircle(
+            color = ink,
+            radius = age * reach * (0.55f + strength * 0.65f),
+            center = Offset(live[slot * 4] * size.width, live[slot * 4 + 1] * size.height),
+            alpha = fade * (0.40f + strength * 0.50f),
+            style = Stroke(width = (2.5f + strength * 9f) * (0.3f + fade) * density)
+        )
+    }
+}
+
+/**
+ * The palette colour that stands furthest from what a scene has actually painted, so a drawn line
+ * is visible whatever the cover happens to be.
+ *
+ * [ground] is the colour the lines will sit on — not the bare surface. Measuring against the
+ * surface was wrong: Ripple paints its own wash over the surface first, and the brightest swatch
+ * it then picked for the rings was often the very colour that wash is made of, so the rings were
+ * drawn in the colour they were drawn onto.
+ */
+private fun againstGround(c: Colors, ground: Color): Color {
+    val groundLight = ground.luminance()
+    var best = c.c4
+    var bestGap = -1f
+    for (candidate in arrayOf(c.c0, c.c1, c.c2, c.c3, c.c4)) {
+        val gap = kotlin.math.abs(candidate.luminance() - groundLight)
+        if (gap > bestGap) { bestGap = gap; best = candidate }
+    }
+    if (bestGap > 0.22f) return best
+    val hsl = FloatArray(3)
+    androidx.core.graphics.ColorUtils.colorToHSL(best.toArgb(), hsl)
+    hsl[2] = if (groundLight < 0.5f) 0.86f else 0.16f
+    return Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+}
+
+/** What a translucent wash of [over] actually leaves on [under], for measuring contrast against. */
+private fun washed(under: Color, over: Color, amount: Float): Color = lerp(under, over, amount)
+
+/**
+ * Thick glass with a texture in it — the kind you cannot see through properly, where the surface
+ * is broken into irregular facets that each bend the light a little differently.
+ *
+ * It is drawn as a jittered lattice: neighbouring panes share their corners, so there are no gaps
+ * between them, and every corner drifts on its own slow wobble. That wobble is the movement —
+ * turning a near-uniform blur a couple of degrees a second, which is what this was before, is a
+ * change nobody can see.
+ */
+private fun DrawScope.texturedGlass(c: Colors, base: Color, t: Float, mids: Float, overCover: Boolean) {
+    if (!overCover) {
+        drawRect(Brush.linearGradient(listOf(c.c0, c.c3, c.c1)))
+    }
+    val cell = size.minDimension / GlassPanes
+    val cols = (size.width / cell).toInt() + 3
+    val rows = (size.height / cell).toInt() + 3
+    val sway = cell * (0.16f + mids * 0.22f)
+    // Over the cover the surface is whatever the photograph is; off it, the wash just painted.
+    val edge = againstGround(c, if (overCover) base else washed(base, c.c3, 0.8f))
+    // One stroke for the whole pass: a fresh Stroke per pane was a few hundred objects a frame.
+    val thinEdge = Stroke(width = 1.2f * density)
+    val thickEdge = Stroke(width = 2.8f * density)
+
+    fun corner(i: Int, j: Int): Offset {
+        // A stable scatter per lattice point, so the glass keeps its shape while it breathes.
+        val h = fract(sin(i * 12.9898f + j * 78.233f) * 43758.547f)
+        val g = fract(sin(i * 39.3468f + j * 11.135f) * 24634.633f)
+        val wob = sin(t * (0.5f + h * 0.7f) + h * 6.283f) * sway
+        val wobY = cos(t * (0.4f + g * 0.6f) + g * 6.283f) * sway
+        return Offset(
+            (i - 1) * cell + (h - 0.5f) * cell * 0.55f + wob,
+            (j - 1) * cell + (g - 0.5f) * cell * 0.55f + wobY
+        )
+    }
+
+    val pane = Path()
+    for (j in 0 until rows) {
+        for (i in 0 until cols) {
+            val a = corner(i, j)
+            val b = corner(i + 1, j)
+            val d = corner(i + 1, j + 1)
+            val e = corner(i, j + 1)
+            pane.reset()
+            pane.moveTo(a.x, a.y)
+            pane.lineTo(b.x, b.y)
+            pane.lineTo(d.x, d.y)
+            pane.lineTo(e.x, e.y)
+            pane.close()
+            val shade = fract(sin(i * 4.1f + j * 7.7f) * 1371.37f)
+            // Each pane sits at its own depth, so the surface reads as thick and uneven.
+            // The fill is never the edge colour, or a pane's outline vanishes into its face.
+            drawPath(
+                pane,
+                color = if (shade > 0.5f) c.c0 else c.c2,
+                alpha = (if (overCover) 0.12f else 0.20f) + shade * 0.18f
+            )
+            drawPath(
+                pane,
+                color = edge,
+                alpha = 0.18f + shade * 0.28f,
+                style = if (shade > 0.5f) thickEdge else thinEdge
+            )
+        }
+    }
+}
+
+private fun fract(v: Float): Float = v - kotlin.math.floor(v)
 
 private fun DrawScope.blob(color: Color, cx: Float, cy: Float, radius: Float, alpha: Float) {
     val center = Offset(cx * size.width, cy * size.height)
@@ -374,86 +702,8 @@ private fun Color.compositeOver(under: Color): Color = Color(
     alpha = alpha + under.alpha * (1 - alpha)
 )
 
-/** Aurora: three translucent curtains of cover colour rippling across the upper screen. */
-private fun DrawScope.aurora(c: Colors, t: Float) {
-    mesh(c, t * 0.6f, alpha = 0.35f, amplitude = 0.1f)
-    val w = size.width
-    val h = size.height
-    listOf(c.c0, c.c4, c.c1).forEachIndexed { i, color ->
-        val baseY = h * (0.16f + i * 0.17f)
-        val thick = h * (0.20f - i * 0.03f)
-        val path = Path()
-        val steps = 28
-        for (s in 0..steps) {
-            val x = s / steps.toFloat() * w
-            val y = baseY + sin(s * 0.42f + t * (0.55f + i * 0.17f) + i * 1.7f) * h * 0.05f +
-                sin(s * 0.17f - t * 0.31f) * h * 0.03f
-            if (s == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        for (s in steps downTo 0) {
-            val x = s / steps.toFloat() * w
-            val y = baseY + thick + sin(s * 0.36f + t * (0.48f + i * 0.13f) + i) * h * 0.06f
-            path.lineTo(x, y)
-        }
-        path.close()
-        drawPath(
-            path,
-            Brush.verticalGradient(
-                0f to color.copy(alpha = 0f),
-                0.35f to color.copy(alpha = 0.55f),
-                1f to color.copy(alpha = 0f),
-                startY = baseY - h * 0.05f,
-                endY = baseY + thick + h * 0.08f
-            )
-        )
-    }
-}
 
-/** Halo: a slowly turning ring of every cover colour behind the artwork, with rings pulsing out. */
-private fun DrawScope.halo(c: Colors, t: Float, base: Color) {
-    val center = Offset(size.width / 2f, size.height * 0.34f)
-    val r = size.minDimension * 0.95f
-    rotate(degrees = t * 14f, pivot = center) {
-        drawCircle(
-            Brush.sweepGradient(listOf(c.c0, c.c1, c.c3, c.c2, c.c4, c.c0), center = center),
-            radius = r,
-            center = center,
-            alpha = 0.55f
-        )
-    }
-    // Fade the ring's outer edge into the page.
-    drawCircle(
-        Brush.radialGradient(
-            0f to base.copy(alpha = 0.25f),
-            0.45f to Color.Transparent,
-            1f to base,
-            center = center,
-            radius = r
-        ),
-        radius = r,
-        center = center
-    )
-    for (i in 0 until 4) {
-        val phase = ((t * 0.28f) + i / 4f) % 1f
-        drawCircle(
-            color = listOf(c.c0, c.c1, c.c2, c.c3)[i].copy(alpha = (1f - phase) * 0.35f),
-            radius = size.minDimension * (0.28f + phase * 0.7f),
-            center = center,
-            style = Stroke(width = (2f + 6f * (1f - phase)) * density)
-        )
-    }
-}
 
-/** 96×96 tile of monochrome noise; drawn tiled at low alpha it reads as film grain. */
-private fun grainTexture(): ImageBitmap {
-    val n = 96
-    val random = java.util.Random(7)
-    val pixels = IntArray(n * n) {
-        val v = random.nextInt(256)
-        android.graphics.Color.argb(random.nextInt(140), v, v, v)
-    }
-    return android.graphics.Bitmap.createBitmap(pixels, n, n, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
-}
 
 /**
  * A still of what a backdrop does, for the picker in Appearance.
@@ -475,41 +725,46 @@ fun BackdropPreview(
     val source = palette.regions.ifEmpty { palette.swatches }
     fun pick(i: Int) = tune(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
     val colors = Colors(pick(0), pick(1), pick(2), pick(3), pick(4))
-    // Only one style draws grain. Building a 96x96 bitmap for all six tiles, every time the
-    // group is expanded, is 200 KB and a hundred thousand random numbers for nothing.
-    val grain = if (style == PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN) sharedGrain() else null
+    fun vividPick(i: Int) = vivid(source.getOrElse(i) { source.getOrElse(i % source.size.coerceAtLeast(1)) { palette.seed } }, dark)
+    val drawn = Colors(vividPick(0), vividPick(1), vividPick(2), vividPick(3), vividPick(4))
 
     Canvas(modifier.background(base)) {
         // A moment part-way through, so every scene is caught mid-movement rather than at rest.
         val t = PreviewMoment
         when (style) {
-            PlayerBackgroundAnimationStyle.ARTWORK_GLOW ->
-                mesh(colors, t, alpha = 0.85f, amplitude = 0.16f)
-            PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> {
-                mesh(colors, t, alpha = 0.85f, amplitude = 0.26f)
-                sheen(t, colors.c4)
-            }
-            PlayerBackgroundAnimationStyle.APPLE_GLITTER_GRAIN -> {
-                mesh(colors, t, alpha = 0.9f, amplitude = 0.22f)
-                sheen(t, colors.c4)
-                grain?.let { drawRect(ShaderBrush(ImageShader(it, TileMode.Repeated, TileMode.Repeated)), alpha = 0.12f) }
-            }
-            PlayerBackgroundAnimationStyle.LIQUID_AURORA -> aurora(colors, t)
-            PlayerBackgroundAnimationStyle.VINYL_HALO_PULSE -> halo(colors, t, base)
-            PlayerBackgroundAnimationStyle.MINIMAL_TONAL -> drawRect(
-                Brush.linearGradient(listOf(colors.c0.copy(alpha = 0.75f), colors.c3.copy(alpha = 0.5f), base))
+            // The plain one: a photograph out of focus, with no structure of its own. Drawing a
+            // mesh here made it look like the two scenes that do have one.
+            PlayerBackgroundAnimationStyle.ARTWORK_GLOW -> drawRect(
+                Brush.linearGradient(
+                    listOf(colors.c0, colors.c2, colors.c3),
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, size.height)
+                )
             )
+            // The glass itself, so the tile shows the facets rather than a wash.
+            PlayerBackgroundAnimationStyle.MESH_SPIN -> {
+                drawRect(Brush.linearGradient(listOf(colors.c0, colors.c3)))
+                texturedGlass(drawn, base, t, mids = 0.5f, overCover = false)
+            }
+            PlayerBackgroundAnimationStyle.COMIC -> comicDots(drawn, t, travel = 1.4f, bass = 0.4f)
+            // One off-centre ring in the tile, so it shows what the beat does.
+            PlayerBackgroundAnimationStyle.RIPPLE -> ripple(
+                drawn,
+                base,
+                t,
+                bass = 0.55f,
+                live = floatArrayOf(0.72f, 0.30f, t - 0.8f, 0.8f),
+                fullBleed = true
+            )
+            // The blurred cover with the music in it: a soft ground, lit where the sound is.
+            PlayerBackgroundAnimationStyle.ARTWORK_REACTIVE -> {
+                drawRect(Brush.verticalGradient(listOf(colors.c0, colors.c3)))
+                mesh(colors, t, alpha = 0.62f, amplitude = 0.30f)
+                sheen(t, colors.c4)
+            }
         }
     }
 }
-
-/**
- * The grain, built once for the whole process. It is a fixed texture, so every caller can share
- * one: the player's backdrop and any number of preview tiles.
- */
-private var grainOnce: ImageBitmap? = null
-
-private fun sharedGrain(): ImageBitmap = grainOnce ?: grainTexture().also { grainOnce = it }
 
 /** Far enough into the scene's clock that nothing is caught at its starting position. */
 private const val PreviewMoment = 2.4f
