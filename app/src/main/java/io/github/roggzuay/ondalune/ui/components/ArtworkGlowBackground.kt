@@ -22,6 +22,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,7 +115,12 @@ fun PlayerBackdrop(
         onDispose { onWantLevels(false) }
     }
 
-    LaunchedEffect(animate, playbackSpeed, listens) {
+    // Read inside the loop instead of keying it. A slide into a saved sound moves the speed every
+    // 50ms for three and a half seconds; keyed on it, this effect was torn down and rebuilt about
+    // seventy times, and each rebuild spends a frame re-reading the clock before it can advance,
+    // so the picture stuttered for exactly as long as "Easing into your sound" was on screen.
+    val speedNow by rememberUpdatedState(playbackSpeed)
+    LaunchedEffect(animate, listens) {
         if (!animate) {
             // Coming to rest over about a third of a second rather than snapping flat, which
             // would read as the picture being switched off. Timed, not counted in frames: the
@@ -141,7 +147,7 @@ fun PlayerBackdrop(
                 val dt = (now - last) / 1_000_000_000f
                 // Drift carries on with the music; the reactive scene speeds up a little with it.
                 val pace = if (listens) 1f + mid.floatValue * 0.6f else 1f
-                clock.floatValue += dt * playbackSpeed.coerceIn(0.5f, 2f) * pace
+                clock.floatValue += dt * speedNow.coerceIn(0.5f, 2f) * pace
                 last = now
                 if (listens) {
                     readLevels(levels)

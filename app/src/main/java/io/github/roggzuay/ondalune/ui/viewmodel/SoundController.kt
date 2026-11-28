@@ -166,6 +166,26 @@ class SoundController(
         _pendingSave.value = null
     }
 
+    /**
+     * One frame of a slide towards a saved sound: straight to the engine and to the controls on
+     * screen, and nowhere else.
+     *
+     * This deliberately does not persist and does not re-baseline. A slide is sixty-odd frames, so
+     * saving each one would be sixty writes to disk for one tap, and treating each as a change by
+     * hand would raise the save card over a sound nobody has touched. The sliders do move, because
+     * watching the song travel is the point. [applySnapshot] lands it and writes once.
+     */
+    fun previewBlend(snapshot: SoundSnapshot) {
+        _speedPitchState.value = snapshot.speedPitch
+        val reverb = snapshot.reverb.sanitized()
+        _reverbState.value = reverb
+        _equalizerPreset.value = snapshot.eqPreset
+        _customEqBands.value = snapshot.eqBandsDb
+        engine.setSpeedAndPitch(snapshot.speedPitch.speed, snapshot.speedPitch.effectivePitch)
+        engine.setReverbState(reverb)
+        engine.setEqualizerBandsDb(snapshot.eqBandsDb)
+    }
+
     /** Keeps the sound, drops the offer to save it, until the next song. */
     fun dismissPendingSave() {
         saveDismissed = true
@@ -173,10 +193,22 @@ class SoundController(
     }
 
     /**
+     * Told whenever the sound is changed by hand, so a slide towards a saved sound can be called
+     * off. A slide writes a frame every 50ms; without this it would go on writing over the
+     * control you are holding, and the slider would crawl away under your thumb.
+     *
+     * [previewBlend] never reaches here, which is exactly what separates a frame of a slide from
+     * a change of yours.
+     */
+    var onChangedByHand: (() -> Unit)? = null
+
+    /**
      * Called after every change to the sound. The card appears once the sound both differs from
      * where this song started and is actually doing something.
      */
     private fun refreshPendingSave() {
+        // Before the dismissed check: a slide has to stop even when no save card is wanted.
+        onChangedByHand?.invoke()
         if (saveDismissed) return
         val now = currentSnapshot()
         _pendingSave.value = if (now.differsFrom(baseline) && !now.isNeutral) now else null

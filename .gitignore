@@ -33,3 +33,11 @@ keystore.properties
 # Launch film: only renders, caches and thumbnails are left here, no sources.
 # The videos are 88 MB and git would keep them forever.
 /marketing/launch-film/
+
+# Hand-copied APKs at the repo root (the build's own live under app/build/).
+/*.apk
+/*.apk.sha256
+
+# Launch video working directory: the mp4, its poster and 600-odd source frames.
+# Reproducible from brag-output/work, and too big to carry in git.
+/brag-output/

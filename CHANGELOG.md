@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 (2026-11-27)
 
 ### New
 - **Sound Profiles.** Slow a song down, drop it a few semitones, give it a long tail, and Ondalune offers to keep that for the song, or for the whole album. A saved sound is never put on behind your back: the player offers it on a quiet strip above the title and waits for a tap.
 - Ondalune writes down every play with the speed, pitch and reverb that were on at the time, saved or not, and a new Home card shows those plays with a tag across the cover saying what was done. Tapping one plays the song that way again, even if it is the song already playing.
 - **Settings → Sound Profiles** keeps every sound you have saved, with the two switches that govern them and a way to forget any of them.
-- **Reactive**, a sixth player background: the same blurred cover, swelling on the bass, drifting on the mids, with the cover's own colours lifting off it on the top end. It reads the music itself, and only while it is on screen.
+- A saved sound is not snapped on. Tap the strip and the song **eases into it** over three and a half seconds, speed, pitch and reverb travelling together, with the strip reading “Easing into your sound” while it moves and “Playing your saved sound” once it arrives. Reset the sound yourself while it is moving and the slide is dropped rather than landing on top of you.
+- **Keep a history of sounds**, in Settings, governs that record on its own. It is worked out and kept on this phone, so it no longer hangs off whether you report plays to your server.
+- **Five player backgrounds worth choosing between**, and a page in Settings that shows what each one does. Blurred cover holds still. **Mesh** lays thick textured glass over the cover, its facets shifting as you watch. **Comic** breaks the cover's colours into printed dots that drift past and surge on the kick. **Ripple** puts a heartbeat in the middle and a ring wherever the kick lands. **Night light** has the blurred cover breathing and drifting with the music. The four that move read the music itself, and only while the player is on screen.
 - **Headphone crossfeed**, in Sonic Lab: a little of each side sent to the other ear, so hard-panned records stop splitting your head in two. Four settings, off by default.
 - **Vinyl**, also in Sonic Lab: a record under the music, with the groove's hiss and crackle, the platter's drift, the roll-off a cut gives both ends, and the needle landing at the start of every song. Three records to choose from.
 - **Your own equalizer curves.** Shape the five bands, give the shape a name, and it waits as a chip under the sliders.
@@ -19,22 +21,6 @@
 
 ### Changed
 - The equalizer bands themselves are now remembered between launches, not just the preset.
-
-## 2.0.0 (2026-11-24)
-
-### New
-- A new look: the app wears your phone's colours, and the player is painted from the cover — the picture, then the same cover blurred behind everything.
-- The whole app can follow the playing cover's colours, or keep one steady palette. Settings → Appearance → Theme.
-- The repeat button now cycles off, repeat all, repeat one. Repeat off plays to the end of the queue and stops; repeat all starts it again.
-- The navigation bar and the mini player blend into the page over a soft blur, and that is the new default. A note on first launch says where to change it back.
-- The player has a volume slider under the transport, which follows the buttons on the side of the phone.
-- Moving album covers: an animated cover on your server, or a cover.mp4, cover.webm, animated cover.webp or cover.gif in a music folder on this phone. Settings explains it, and covers can be pre-loaded so none of them loads while you wait.
-- Open song files from any app with Ondalune, and pick it as your music player.
-
-### Changed
-- Appearance is rebuilt: theme, fonts, Home layout, navigation bar and corner roundness are collapsed groups that each show what they are set to, with previews drawn in the colours and shapes they produce.
-- The Home layout editor separates the rows shown on Home from the hidden ones, with counts and clearer drag handles.
-- Artwork shape is gone; covers use the theme's own shape.
 
 ### Fixes & improvements
 - Repeat is remembered across restarts; it used to reset every launch.

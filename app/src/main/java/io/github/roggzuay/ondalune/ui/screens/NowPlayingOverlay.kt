@@ -217,10 +217,14 @@ import kotlin.math.min
 import android.os.Build
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Slider
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
@@ -529,6 +533,8 @@ fun NowPlayingStudioOverlay(
     castState: io.github.roggzuay.ondalune.cast.CastState = io.github.roggzuay.ondalune.cast.CastState(),
     /** The saved sound for this song, offered above the title. */
     soundOffer: SoundOffer? = null,
+    /** How far a tapped sound has slid into the song, 0 to 1; 0 when none is sliding. */
+    soundGlide: State<Float> = NoGlide,
     onApplySoundOffer: () -> Unit = {},
     onDismissSoundOffer: () -> Unit = {},
     onOpenArtist: () -> Unit = {},
@@ -808,6 +814,7 @@ fun NowPlayingStudioOverlay(
                         onShareSong = onShareSong,
                         castState = castState,
                         soundOffer = soundOffer,
+                        soundGlide = soundGlide,
                         onApplySoundOffer = onApplySoundOffer,
                         onDismissSoundOffer = onDismissSoundOffer,
                         onOpenArtist = onOpenArtist,
@@ -1410,6 +1417,9 @@ private fun PlayerTopBar(
 }
 
 /** Everything under the cover: what is playing, where it is, and the controls. */
+/** No slide running, for callers and previews that have no sound sliding into anything. */
+private val NoGlide: State<Float> = mutableFloatStateOf(0f)
+
 /**
  * The saved sound, offered above the song title: no card, no scrim, just a line over whatever the
  * backdrop is doing. Tapping it puts the sound on; it fades by itself after a few seconds either
@@ -1418,14 +1428,19 @@ private fun PlayerTopBar(
 @Composable
 private fun SavedSoundStrip(
     offer: SoundOffer?,
+    glide: State<Float>,
     onApply: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Both states go away on their own: the question after eight seconds, the confirmation after
-    // three, so the strip never becomes furniture.
-    LaunchedEffect(offer?.trackId, offer?.applied) {
-        if (offer == null) return@LaunchedEffect
-        delay(if (offer.applied) 3_000L else 8_000L)
+    // Read in the draw phase only, so a slide filling the line underneath costs no recomposition.
+    val gliding by remember(glide) { derivedStateOf { glide.value > 0f } }
+    // Both states go away on their own, so the strip never becomes furniture — but the question
+    // waits fifteen seconds, because reaching the player, reading it and deciding takes longer
+    // than a strip that has already gone. A slide in progress is never interrupted; its own
+    // ending restarts this and the confirmation fades a few seconds after the song has arrived.
+    LaunchedEffect(offer?.trackId, offer?.applied, gliding) {
+        if (offer == null || gliding) return@LaunchedEffect
+        delay(if (offer.applied) 4_000L else 15_000L)
         onDismiss()
     }
     AnimatedVisibility(
@@ -1434,12 +1449,42 @@ private fun SavedSoundStrip(
         exit = fadeOut(tween(320)) + shrinkVertically(tween(260))
     ) {
         val applied = offer?.applied == true
+        val line = MaterialTheme.colorScheme.primary
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 6.dp)
                 .clip(cornerShape(12.dp))
-                .then(if (applied) Modifier else Modifier.clickable(onClick = onApply))
+                // Kept in the chain once applied, disabled rather than removed: taking the
+                // clickable away under a finger that is still down cut the press animation off
+                // instead of letting it release.
+                .clickable(
+                    enabled = !applied,
+                    onClickLabel = "Ease this song into your saved sound",
+                    role = Role.Button,
+                    onClick = onApply
+                )
+                // The slide, drawn as it happens: a hairline filling the width of the strip from
+                // the left. Nothing else in the app moves at this speed, which is the point — the
+                // song is being bent, not switched, and this is how long that takes.
+                .drawBehind {
+                    val travelled = glide.value
+                    if (travelled <= 0f) return@drawBehind
+                    val thickness = 1.5.dp.toPx()
+                    drawRect(
+                        color = line.copy(alpha = 0.16f),
+                        topLeft = Offset(0f, size.height - thickness),
+                        size = Size(size.width, thickness)
+                    )
+                    drawRect(
+                        color = line.copy(alpha = 0.70f),
+                        topLeft = Offset(0f, size.height - thickness),
+                        size = Size(size.width * travelled.coerceIn(0f, 1f), thickness)
+                    )
+                }
+                // The only way to apply the sound, so it gets a finger-sized target rather than
+                // the 28dp the text and icon came to on their own.
+                .heightIn(min = 48.dp)
                 .padding(vertical = 4.dp)
                 .testTag("saved_sound_strip"),
             verticalAlignment = Alignment.CenterVertically,
@@ -1452,10 +1497,17 @@ private fun SavedSoundStrip(
                 modifier = Modifier.size(15.dp)
             )
             Text(
-                text = if (applied) "Playing your saved sound" else "Apply last audio profile?",
+                text = when {
+                    gliding -> "Easing into your sound"
+                    applied -> "Playing your saved sound"
+                    else -> "Apply last audio profile?"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
-                maxLines = 1
+                maxLines = 1,
+                // Three and a half seconds of silence is not an answer to a tap. Polite, so it
+                // waits for whatever is being read out rather than talking over it.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
             Text(
                 text = offer?.snapshot?.summary.orEmpty(),
@@ -1553,6 +1605,8 @@ private fun PlayerControls(
     castState: io.github.roggzuay.ondalune.cast.CastState = io.github.roggzuay.ondalune.cast.CastState(),
     /** The saved sound for this song, waiting above the title; null when there is none. */
     soundOffer: SoundOffer? = null,
+    /** How far a tapped sound has slid into the song, 0 to 1; 0 when none is sliding. */
+    soundGlide: State<Float> = NoGlide,
     onApplySoundOffer: () -> Unit = {},
     onDismissSoundOffer: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -1586,6 +1640,7 @@ private fun PlayerControls(
             CastingStrip(castState)
             SavedSoundStrip(
                 offer = soundOffer?.takeIf { it.trackId == track.id },
+                glide = soundGlide,
                 onApply = onApplySoundOffer,
                 onDismiss = onDismissSoundOffer
             )

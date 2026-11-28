@@ -368,6 +368,12 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
     val soundPlays by viewModel.soundPlays.collectAsStateWithLifecycle()
     val pendingSoundSave by viewModel.sound.pendingSave.collectAsStateWithLifecycle()
     val soundOffer by viewModel.soundProfiles.offer.collectAsStateWithLifecycle()
+    // Kept as the State itself, not unwrapped, so this value alone does not invalidate the shell;
+    // the strip reads it where it draws. Worth knowing that it is not the whole story: a slide
+    // writes the speed and reverb state every 50ms too, and those are read with `by` above, so
+    // the shell does recompose about twenty times a second for the length of a slide. Pushing
+    // those four down to the sheets that actually want them is the fix, and is its own job.
+    val soundGlide = viewModel.soundProfiles.glide.collectAsStateWithLifecycle()
     val castState by viewModel.cast.state.collectAsStateWithLifecycle()
     val shareSongOpen by viewModel.isShareSongOpen.collectAsStateWithLifecycle()
     val mixSeedOpen by viewModel.isMixSeedOpen.collectAsStateWithLifecycle()
@@ -1347,6 +1353,7 @@ fun OndaluneMainShell(viewModel: OndaluneViewModel) {
                                 castOn = customizationSettings.castEnabled,
                                 castState = castState,
                                 soundOffer = soundOffer,
+                                soundGlide = soundGlide,
                                 onApplySoundOffer = viewModel.soundProfiles::applyOffer,
                                 onDismissSoundOffer = viewModel.soundProfiles::dismissOffer,
                                 onOpenArtist = { viewModel.openArtistFromTrack(activeTrack) },

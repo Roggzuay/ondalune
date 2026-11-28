@@ -352,17 +352,27 @@ interface OndaluneDao {
     @Query("SELECT * FROM play_history ORDER BY playedAt DESC LIMIT :limit")
     fun observePlayHistory(limit: Int = PlayHistoryLimit): Flow<List<PlayHistoryEntry>>
 
+    /** Returns the new row's id, so the sound on that play can still be corrected later. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPlay(entry: PlayHistoryEntry)
+    suspend fun insertPlay(entry: PlayHistoryEntry): Long
+
+    /**
+     * Rewrites one play. Matching on the primary key means a row that trimming has already
+     * dropped stays dropped instead of being resurrected by a late correction; the returned count
+     * says which happened.
+     */
+    @Update
+    suspend fun updatePlay(entry: PlayHistoryEntry): Int
 
     /** Keeps the newest [PlayHistoryLimit] plays and drops the rest. */
     @Query("DELETE FROM play_history WHERE id NOT IN (SELECT id FROM play_history ORDER BY playedAt DESC LIMIT :limit)")
     suspend fun trimPlayHistory(limit: Int = PlayHistoryLimit)
 
     @Transaction
-    suspend fun recordPlay(entry: PlayHistoryEntry) {
-        insertPlay(entry)
+    suspend fun recordPlay(entry: PlayHistoryEntry): Long {
+        val id = insertPlay(entry)
         trimPlayHistory(PlayHistoryLimit)
+        return id
     }
 
     @Query("DELETE FROM play_history")

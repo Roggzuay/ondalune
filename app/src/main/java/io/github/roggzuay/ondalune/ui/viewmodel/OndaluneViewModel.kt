@@ -373,7 +373,18 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** Saved sounds and the play history that records them (see SoundProfileController). */
-    val soundProfiles = SoundProfileController(database.dao(), sound, viewModelScope)
+    val soundProfiles = SoundProfileController(
+        database.dao(),
+        sound,
+        viewModelScope,
+        keepHistory = { settings.customization.value.keepSoundHistory }
+    )
+
+    init {
+        // A hand on any sound control calls off a slide towards a saved sound. Wired here because
+        // the engine knows when it is touched and the profiles know what is sliding.
+        sound.onChangedByHand = soundProfiles::onSoundChangedByHand
+    }
 
     /** Plays a song again with the sound it had that time, saved or not. */
     fun playWithSound(played: io.github.roggzuay.ondalune.data.model.PlayedSound) {
@@ -950,10 +961,18 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
             if (playback.currentTrack.value?.id != track.id) return
             if (isPlaying.value && !isBuffering.value) heardMs += 500L
         }
-        repository.recordPlay(server, track)
-        listenBrainz.submit(track)
-        if (settings.customization.value.keepSoundHistory) {
-            runCatching { soundProfiles.recordPlay(track) }
+        // Written down before the server is told anything. A scrobble can hang on the network for
+        // seconds, and the sound this play is remembered by has to be the one it actually had, not
+        // whatever the next song is being played with by the time the request comes back.
+        // The controller answers to "Keep a history of sounds" itself, so there is no second
+        // check here deciding the same thing.
+        runCatching { soundProfiles.recordPlay(track) }
+        // "Report plays to your server" is about the server, so only the server's two scrobbles
+        // hang off it. The history of sounds and the listening figures are this phone's own, and
+        // used to vanish along with them.
+        if (settings.customization.value.autoScrobble) {
+            repository.recordPlay(server, track)
+            listenBrainz.submit(track)
         }
     }
 
@@ -1063,7 +1082,7 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
                 // equal value, so that replay would never reach the saved sound.
                 soundProfiles.onTrackStarted(track, this@OndaluneViewModel.settings.customization.value.autoApplySoundProfiles)
                 playCountJob?.cancel()
-                if (settings.autoScrobble) playCountJob = viewModelScope.launch { countPlayOnceHeard(track, server) }
+                playCountJob = viewModelScope.launch { countPlayOnceHeard(track, server) }
             }
             override fun showBanner(message: String) { _statusBanner.value = message }
             override fun saveLastPlayed(trackId: String) = prefs.edit().putString("last_played_track_id", trackId).apply()
@@ -1662,9 +1681,11 @@ class OndaluneViewModel(application: Application) : AndroidViewModel(application
      * sound that was in force before a saved one went on: you have just said what you want.
      */
     fun resetSoundByHand() {
+        // Called off first: a slide still running would otherwise write a frame over the reset and
+        // leave the sound somewhere between where it was and where it was going.
+        soundProfiles.onSoundResetByHand()
         sound.resetSpeedAndPitch()
         sound.resetReverbToDry()
-        soundProfiles.onSoundResetByHand()
     }
 
     /** Says something on the status banner, for parts of the UI that have no other way to. */
